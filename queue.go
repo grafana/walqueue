@@ -2,9 +2,10 @@ package walqueue
 
 import (
 	"context"
-	snappy "github.com/eapache/go-xerial-snappy"
 	"strconv"
 	"time"
+
+	snappy "github.com/eapache/go-xerial-snappy"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -19,6 +20,13 @@ import (
 var _ storage.Appendable = (*queue)(nil)
 var _ Queue = (*queue)(nil)
 
+// Queue is the interface for a queue. The queue is an append only interface.
+//
+// Start will start the queue.
+//
+// Stop will stop the queue.
+//
+// Appender returns an Appender that writes to the queue.
 type Queue interface {
 	Start()
 	Stop()
@@ -39,6 +47,26 @@ type queue struct {
 	buf        []byte
 }
 
+// NewQueue creates and returns a new Queue instance, initializing its components
+// such as network client, file storage queue, and serializer. It configures the
+// queue with the given connection settings, directory for file storage, batching
+// parameters, and logging. The function also sets up the statistics callback functions
+// for network and serialization metrics.
+//
+// Parameters:
+// - cc: ConnectionConfig for setting up the network client.
+// - directory: Directory path for storing queue files.
+// - maxSignalsToBatch: Maximum number of signals to batch before flushing to file storage.
+// - flushInterval: Duration for how often to flush the data to file storage.
+// - ttl: Time-to-live for data in the queue, this is checked in both writing to file storage and sending to the network.
+// - logger: Logger for logging internal operations and errors.
+// - stats: Callback function for reporting network statistics.
+// - metaStats: Callback function for reporting metadata-related statistics.
+// - serialStats: Callback function for reporting serializer statistics.
+//
+// Returns:
+// - Queue: An initialized Queue instance.
+// - error: An error if any of the components fail to initialize.
 func NewQueue(cc types.ConnectionConfig, directory string, maxSignalsToBatch uint32, flushInterval time.Duration, ttl time.Duration, logger log.Logger, stats, metaStats func(stats types.NetworkStats), serialStats func(stats types.SerializerStats)) (Queue, error) {
 	network, err := network.New(cc, logger, stats, metaStats)
 	if err != nil {

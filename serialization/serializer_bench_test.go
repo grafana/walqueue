@@ -43,19 +43,6 @@ func BenchmarkSerializer(b *testing.B) {
 	serial.Stop()
 }
 
-func getTimeSeries(b *testing.B) []*types.TimeSeriesBinary {
-	b.Helper()
-	series := make([]*types.TimeSeriesBinary, 0)
-	for j := 0; j < 10_000; j++ {
-		timeseries := types.GetTimeSeriesFromPool()
-		timeseries.TS = time.Now().Unix()
-		timeseries.Value = rand.Float64()
-		timeseries.Labels = getLabels()
-		series = append(series, timeseries)
-	}
-	return series
-}
-
 func getSingleTimeSeries(b *testing.B) *types.TimeSeriesBinary {
 	b.Helper()
 	timeseries := types.GetTimeSeriesFromPool()

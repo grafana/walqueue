@@ -1,4 +1,4 @@
-package walqueue
+package prometheus
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 var _ storage.Appendable = (*queue)(nil)
 var _ Queue = (*queue)(nil)
 
-// Queue is the interface for a queue. The queue is an append only interface.
+// Queue is the interface for a prometheus compatible queue. The queue is an append only interface.
 //
 // Start will start the queue.
 //
@@ -68,7 +68,7 @@ type queue struct {
 // - Queue: An initialized Queue instance.
 // - error: An error if any of the components fail to initialize.
 func NewQueue(cc types.ConnectionConfig, directory string, maxSignalsToBatch uint32, flushInterval time.Duration, ttl time.Duration, logger log.Logger, stats, metaStats func(stats types.NetworkStats), serialStats func(stats types.SerializerStats)) (Queue, error) {
-	network, err := network.New(cc, logger, stats, metaStats)
+	networkClient, err := network.New(cc, logger, stats, metaStats)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func NewQueue(cc types.ConnectionConfig, directory string, maxSignalsToBatch uin
 		incoming:  actor.NewMailbox[types.DataHandle](),
 		stats:     stats,
 		metaStats: metaStats,
-		network:   network,
+		network:   networkClient,
 		logger:    logger,
 		ttl:       ttl,
 	}

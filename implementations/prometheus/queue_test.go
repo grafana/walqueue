@@ -1,4 +1,4 @@
-package walqueue
+package prometheus
 
 import (
 	"context"

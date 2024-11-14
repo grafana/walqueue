@@ -1,4 +1,4 @@
-module github.com/grafana/walqueue/v2
+module github.com/grafana/walqueue
 
 go 1.22.7
 

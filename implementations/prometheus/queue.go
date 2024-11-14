@@ -10,10 +10,10 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/grafana/walqueue/v2/filequeue"
-	"github.com/grafana/walqueue/v2/network"
-	"github.com/grafana/walqueue/v2/serialization"
-	"github.com/grafana/walqueue/v2/types"
+	"github.com/grafana/walqueue/filequeue"
+	"github.com/grafana/walqueue/network"
+	"github.com/grafana/walqueue/serialization"
+	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/vladopajic/go-actor/actor"
 )

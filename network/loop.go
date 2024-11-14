@@ -15,7 +15,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/snappy"
-	"github.com/grafana/walqueue/v2/types"
+	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/vladopajic/go-actor/actor"
 	"go.uber.org/atomic"

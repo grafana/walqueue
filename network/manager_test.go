@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/golang/snappy"
-	"github.com/grafana/walqueue/v2/types"
+	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"

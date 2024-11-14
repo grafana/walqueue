@@ -8,7 +8,7 @@ import (
 
 	snappy "github.com/eapache/go-xerial-snappy"
 	"github.com/go-kit/log"
-	"github.com/grafana/walqueue/v2/types"
+	"github.com/grafana/walqueue/types"
 	"github.com/vladopajic/go-actor/actor"
 )
 

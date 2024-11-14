@@ -1,7 +1,7 @@
 package prometheus
 
 import (
-	"github.com/grafana/walqueue/v2/types"
+	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

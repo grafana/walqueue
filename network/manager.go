@@ -5,7 +5,7 @@ import (
 	"github.com/go-kit/log/level"
 
 	"github.com/go-kit/log"
-	"github.com/grafana/walqueue/v2/types"
+	"github.com/grafana/walqueue/types"
 	"github.com/vladopajic/go-actor/actor"
 )
 

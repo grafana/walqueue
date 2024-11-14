@@ -3,7 +3,7 @@ package network
 import (
 	"net/http"
 
-	"github.com/grafana/walqueue/v2/types"
+	"github.com/grafana/walqueue/types"
 )
 
 // recordStats determines what values to send to the stats function. This allows for any

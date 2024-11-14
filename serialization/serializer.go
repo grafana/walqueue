@@ -52,13 +52,11 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 }
 func (s *serializer) Start() {
 	// All the actors and mailboxes need to start.
-	s.queue.Start()
 	s.self = actor.Combine(actor.New(s), s.inbox, s.metaInbox, s.cfgInbox).Build()
 	s.self.Start()
 }
 
 func (s *serializer) Stop() {
-	s.queue.Stop()
 	s.self.Stop()
 }
 

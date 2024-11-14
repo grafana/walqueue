@@ -3,6 +3,7 @@ package prometheus
 import (
 	"context"
 	"github.com/golang/snappy"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/prompb"
 	"go.uber.org/atomic"
 	"io"
@@ -55,6 +56,7 @@ func TestQueue_Appender(t *testing.T) {
 	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			reg := prometheus.NewRegistry()
 			recordsFound := atomic.NewInt32(0)
 
 			svr := httptest.NewServer(handler(t, http.StatusOK, func(wr *prompb.WriteRequest) {
@@ -63,7 +65,7 @@ func TestQueue_Appender(t *testing.T) {
 			dir := t.TempDir()
 
 			// Create a new queue
-			q, err := NewQueue(
+			q, err := NewQueue("test",
 				types.ConnectionConfig{
 					URL:              svr.URL,
 					Timeout:          1 * time.Second,
@@ -77,10 +79,9 @@ func TestQueue_Appender(t *testing.T) {
 				1,
 				time.Second,
 				1*time.Hour,
+				reg,
+				"test",
 				logger,
-				func(stats types.NetworkStats) {},
-				func(stats types.NetworkStats) {},
-				func(stats types.SerializerStats) {},
 			)
 			require.NoError(t, err)
 			q.Start()
@@ -95,7 +96,30 @@ func TestQueue_Appender(t *testing.T) {
 			}, 10*time.Second, 100*time.Millisecond)
 		})
 	}
+}
 
+func TestStats(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	end, err := NewQueue("test", types.ConnectionConfig{
+		URL: "example.com",
+	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
+	require.NoError(t, err)
+	// This will unregister the metrics
+	end.Start()
+	// This sleep is to give the goroutines time to spin up.
+	time.Sleep(1 * time.Second)
+	end.Stop()
+
+	// This will trigger a panic if duplicate metrics found.
+	end2, err := NewQueue("test", types.ConnectionConfig{
+		URL: "example.com",
+	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
+	require.NoError(t, err)
+
+	end2.Start()
+	// This sleep is to give the goroutines time to spin up.
+	time.Sleep(1 * time.Second)
+	end2.Stop()
 }
 
 func handler(t *testing.T, code int, callback func(wr *prompb.WriteRequest)) http.HandlerFunc {

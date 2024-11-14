@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"github.com/prometheus/client_golang/prometheus"
 	"strconv"
 	"time"
 
@@ -42,8 +43,8 @@ type queue struct {
 	self       actor.Actor
 	ttl        time.Duration
 	incoming   actor.Mailbox[types.DataHandle]
-	stats      func(stats types.NetworkStats)
-	metaStats  func(stats types.NetworkStats)
+	stats      *PrometheusStats
+	metaStats  *PrometheusStats
 	buf        []byte
 }
 
@@ -59,23 +60,27 @@ type queue struct {
 // - maxSignalsToBatch: Maximum number of signals to batch before flushing to file storage.
 // - flushInterval: Duration for how often to flush the data to file storage.
 // - ttl: Time-to-live for data in the queue, this is checked in both writing to file storage and sending to the network.
+// - registry: Prometheus registry to apply metrics to.
+// - namespace: Namespace to use to add to the metric family names. IE `alloy` would make `alloy_queue_series_total_sent`
 // - logger: Logger for logging internal operations and errors.
-// - stats: Callback function for reporting network statistics.
-// - metaStats: Callback function for reporting metadata-related statistics.
-// - serialStats: Callback function for reporting serializer statistics.
 //
 // Returns:
 // - Queue: An initialized Queue instance.
 // - error: An error if any of the components fail to initialize.
-func NewQueue(cc types.ConnectionConfig, directory string, maxSignalsToBatch uint32, flushInterval time.Duration, ttl time.Duration, logger log.Logger, stats, metaStats func(stats types.NetworkStats), serialStats func(stats types.SerializerStats)) (Queue, error) {
-	networkClient, err := network.New(cc, logger, stats, metaStats)
+func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSignalsToBatch uint32, flushInterval time.Duration, ttl time.Duration, registerer prometheus.Registerer, namespace string, logger log.Logger) (Queue, error) {
+	reg := prometheus.WrapRegistererWith(prometheus.Labels{"endpoint": name}, registerer)
+	stats := NewStats(namespace, "queue_series", reg)
+	stats.SeriesBackwardsCompatibility(reg)
+	meta := NewStats("alloy", "queue_metadata", reg)
+	meta.MetaBackwardsCompatibility(reg)
+	networkClient, err := network.New(cc, logger, stats.UpdateNetwork, meta.UpdateNetwork)
 	if err != nil {
 		return nil, err
 	}
 	q := &queue{
 		incoming:  actor.NewMailbox[types.DataHandle](),
 		stats:     stats,
-		metaStats: metaStats,
+		metaStats: meta,
 		network:   networkClient,
 		logger:    logger,
 		ttl:       ttl,
@@ -93,7 +98,7 @@ func NewQueue(cc types.ConnectionConfig, directory string, maxSignalsToBatch uin
 	serial, err := serialization.NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: maxSignalsToBatch,
 		FlushFrequency:    flushInterval,
-	}, q.queue, serialStats, logger)
+	}, q.queue, stats.UpdateSerializer, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +121,9 @@ func (q *queue) Stop() {
 	q.network.Stop()
 	q.queue.Stop()
 	q.serializer.Stop()
+
+	q.stats.Unregister()
+	q.metaStats.Unregister()
 }
 
 func (q *queue) DoWork(ctx actor.Context) actor.WorkerStatus {

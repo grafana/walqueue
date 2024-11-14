@@ -42,7 +42,6 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 
 	q := &queue{
 		directory: directory,
-		maxID:     0,
 		logger:    logger,
 		out:       out,
 		dataQueue: actor.NewMailbox[types.Data](),

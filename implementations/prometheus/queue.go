@@ -55,6 +55,7 @@ type queue struct {
 // for network and serialization metrics.
 //
 // Parameters:
+// - name: identifier for the endpoint, this will add a label to the prometheus metrics named endpoint:<NAME>
 // - cc: ConnectionConfig for setting up the network client.
 // - directory: Directory path for storing queue files.
 // - maxSignalsToBatch: Maximum number of signals to batch before flushing to file storage.

@@ -3,6 +3,7 @@ package filequeue
 import (
 	"context"
 	"fmt"
+	"go.uber.org/atomic"
 	"os"
 	"path/filepath"
 	"sort"
@@ -28,9 +29,8 @@ type queue struct {
 	dataQueue actor.Mailbox[types.Data]
 	// Out is where to send data when pulled from queue, it is assumed that it will
 	// block until ready for another record.
-	out func(ctx context.Context, dh types.DataHandle)
-	// existingFiles is the list of files found initially.
-	existingFiles []string
+	out                        func(ctx context.Context, dh types.DataHandle)
+	alreadyLoadedExistingFiles atomic.Bool
 }
 
 // NewQueue returns a implementation of FileStorage.
@@ -40,9 +40,21 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 		return nil, err
 	}
 
+	q := &queue{
+		directory: directory,
+		maxID:     0,
+		logger:    logger,
+		out:       out,
+		dataQueue: actor.NewMailbox[types.Data](),
+	}
+
+	return q, nil
+}
+
+func (q *queue) getMaxIDAndExistingFiles() (int, []string) {
 	// We dont actually support uncommitted but I think its good to at least have some naming to avoid parsing random files
 	// that get installed into the system.
-	matches, _ := filepath.Glob(filepath.Join(directory, "*.committed"))
+	matches, _ := filepath.Glob(filepath.Join(q.directory, "*.committed"))
 	ids := make([]int, len(matches))
 
 	// Try and grab the id from each file.
@@ -50,7 +62,7 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 	for i, fileName := range matches {
 		id, err := strconv.Atoi(strings.ReplaceAll(filepath.Base(fileName), ".committed", ""))
 		if err != nil {
-			level.Error(logger).Log("msg", "unable to convert numeric prefix for committed file", "err", err, "file", fileName)
+			level.Error(q.logger).Log("msg", "unable to convert numeric prefix for committed file", "err", err, "file", fileName)
 			continue
 		}
 		ids[i] = id
@@ -60,21 +72,13 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 	if len(ids) > 0 {
 		currentMaxID = ids[len(ids)-1]
 	}
-	q := &queue{
-		directory:     directory,
-		maxID:         currentMaxID,
-		logger:        logger,
-		out:           out,
-		dataQueue:     actor.NewMailbox[types.Data](),
-		existingFiles: make([]string, 0),
-	}
-
+	existingFiles := make([]string, 0, len(ids))
 	// Save the existing files in `q.existingFiles`, which will have their data pushed to `out` when actor starts.
 	for _, id := range ids {
-		name := filepath.Join(directory, fmt.Sprintf("%d.committed", id))
-		q.existingFiles = append(q.existingFiles, name)
+		name := filepath.Join(q.directory, fmt.Sprintf("%d.committed", id))
+		existingFiles = append(existingFiles, name)
 	}
-	return q, nil
+	return currentMaxID, existingFiles
 }
 
 func (q *queue) Start() {
@@ -114,17 +118,21 @@ func get(logger log.Logger, name string) (map[string]string, []byte, error) {
 
 // DoWork allows most of the queue to be single threaded with work only coming in and going out via mailboxes(channels).
 func (q *queue) DoWork(ctx actor.Context) actor.WorkerStatus {
-	// Queue up our existing items.
-	for _, name := range q.existingFiles {
-		q.out(ctx, types.DataHandle{
-			Name: name,
-			Pop: func() (map[string]string, []byte, error) {
-				return get(q.logger, name)
-			},
-		})
-	}
 	// We only want to process existing files once.
-	q.existingFiles = nil
+	if !q.alreadyLoadedExistingFiles.Load() {
+		maxID, files := q.getMaxIDAndExistingFiles()
+		q.maxID = maxID
+		// Queue up our existing items.
+		for _, name := range files {
+			q.out(ctx, types.DataHandle{
+				Name: name,
+				Pop: func() (map[string]string, []byte, error) {
+					return get(q.logger, name)
+				},
+			})
+		}
+		q.alreadyLoadedExistingFiles.Store(true)
+	}
 	select {
 	case <-ctx.Done():
 		return actor.WorkerEnd

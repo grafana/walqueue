@@ -1,8 +1,8 @@
 module github.com/grafana/walqueue
 
-go 1.22.7
+go 1.23
 
-toolchain go1.22.9
+toolchain go1.23.1
 
 require (
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3
@@ -19,7 +19,7 @@ require (
 )
 
 // This is to handle issues witn synchronous mailbox and closing channels.
-replace github.com/vladopajic/go-actor => github.com/grafana/go-actor v0.0.0-20241113133736-e18c4a5c12f4
+replace github.com/vladopajic/go-actor => github.com/grafana/go-actor v0.0.0-20241115013232-9acfa54eede7
 
 require (
 	cloud.google.com/go/compute/metadata v0.5.2 // indirect

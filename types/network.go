@@ -49,6 +49,14 @@ type ConnectionConfig struct {
 	ExternalLabels map[string]string
 	// Connections is the number of concurrent connections to use for sending data.
 	Connections uint
+	// TLSCert is the PEM-encoded certificate string for TLS client authentication
+	TLSCert string
+	// TLSKey is the PEM-encoded private key string for TLS client authentication
+	TLSKey string
+	// TLSCACert is the PEM-encoded CA certificate string for server verification
+	TLSCACert string
+	// InsecureSkipVerify controls whether the client verifies the server's certificate chain and host name
+	InsecureSkipVerify bool
 }
 
 type BasicAuth struct {

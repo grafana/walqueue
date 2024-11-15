@@ -80,10 +80,11 @@ func (s *serializer) DoWork(ctx actor.Context) actor.WorkerStatus {
 	case <-ctx.Done():
 		return actor.WorkerEnd
 	case cfg, ok := <-s.cfgInbox.ReceiveC():
+		defer cfg.Notify(nil)
 		if !ok {
 			return actor.WorkerEnd
 		}
-		defer cfg.Notify()
+
 		s.maxItemsBeforeFlush = int(cfg.Value.MaxSignalsInBatch)
 		s.flushFrequency = cfg.Value.FlushFrequency
 		return actor.WorkerContinue

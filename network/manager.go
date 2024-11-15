@@ -88,12 +88,13 @@ func (s *manager) DoWork(ctx actor.Context) actor.WorkerStatus {
 	// This acts as a priority queue, always check for configuration changes first.
 	select {
 	case cfg, ok := <-s.configInbox.ReceiveC():
-		defer cfg.Notify()
 		if !ok {
 			level.Debug(s.logger).Log("msg", "config inbox closed")
 			return actor.WorkerEnd
 		}
-		s.updateConfig(cfg.Value)
+		var err error
+		defer cfg.Notify(err)
+		err = s.updateConfig(cfg.Value)
 		return actor.WorkerContinue
 	default:
 	}
@@ -120,21 +121,22 @@ func (s *manager) DoWork(ctx actor.Context) actor.WorkerStatus {
 		}
 		return actor.WorkerContinue
 	case cfg, ok := <-s.configInbox.ReceiveC():
-		// We need to also check the config here, else its possible this will deadlock.
 		if !ok {
 			level.Debug(s.logger).Log("msg", "config inbox closed")
 			return actor.WorkerEnd
 		}
-		defer cfg.Notify()
-		s.updateConfig(cfg.Value)
+		var err error
+		defer cfg.Notify(err)
+
+		err = s.updateConfig(cfg.Value)
 		return actor.WorkerContinue
 	}
 }
 
-func (s *manager) updateConfig(cc types.ConnectionConfig) {
+func (s *manager) updateConfig(cc types.ConnectionConfig) error {
 	// No need to do anything if the configuration is the same.
 	if s.cfg.Equals(cc) {
-		return
+		return nil
 	}
 	s.cfg = cc
 	// TODO @mattdurham make this smarter, at the moment any samples in the loops are lost.
@@ -148,7 +150,7 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) {
 		l, err := newLoop(cc, false, s.logger, s.stats)
 		if err != nil {
 			level.Error(s.logger).Log("msg", "failed to create series loop during config update", "err", err)
-			continue
+			return err
 		}
 		l.self = actor.New(l)
 		s.loops = append(s.loops, l)
@@ -157,13 +159,14 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) {
 	metadata, err := newLoop(cc, true, s.logger, s.metaStats)
 	if err != nil {
 		level.Error(s.logger).Log("msg", "failed to create metadata loop during config update", "err", err)
-		return
+		return err
 	}
 	s.metadata = metadata
 	s.metadata.self = actor.New(s.metadata)
 	level.Debug(s.logger).Log("msg", "starting loops")
 	s.startLoops()
 	level.Debug(s.logger).Log("msg", "loops started")
+	return nil
 }
 
 func (s *manager) Stop() {

@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,13 +46,42 @@ type loop struct {
 	sendBuffer     []byte
 }
 
-func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) *loop {
-	// TODO @mattdurham add TLS support afer the initial push.
+func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop, error) {
+	transport := &http.Transport{}
+
+	// Configure TLS if certificate and key are provided
+	if cc.TLSCert != "" && cc.TLSKey != "" {
+		cert, err := tls.X509KeyPair([]byte(cc.TLSCert), []byte(cc.TLSKey))
+		if err != nil {
+			return nil, fmt.Errorf("failed to load TLS certificate and key: %w", err)
+		}
+
+		tlsConfig := &tls.Config{
+			Certificates:       []tls.Certificate{cert},
+			InsecureSkipVerify: cc.InsecureSkipVerify,
+		}
+
+		// Add CA cert to the cert pool if provided
+		if cc.TLSCACert != "" {
+			caCertPool := x509.NewCertPool()
+			if !caCertPool.AppendCertsFromPEM([]byte(cc.TLSCACert)) {
+				return nil, fmt.Errorf("failed to append CA certificate")
+			}
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		transport.TLSClientConfig = tlsConfig
+	}
+
+	client := &http.Client{
+		Transport: transport,
+	}
+
 	return &loop{
 		isMeta: isMetaData,
 		// In general we want a healthy queue of items, in this case we want to have 2x our maximum send sized ready.
 		seriesMbx:      actor.NewMailbox[*types.TimeSeriesBinary](actor.OptCapacity(2*cc.BatchCount), actor.OptAsChan()),
-		client:         &http.Client{},
+		client:         client,
 		cfg:            cc,
 		log:            log.With(l, "name", "loop", "url", cc.URL),
 		statsFunc:      stats,
@@ -62,7 +93,7 @@ func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats fun
 			// We know BatchCount is the most we will ever send.
 			Timeseries: make([]prompb.TimeSeries, 0, cc.BatchCount),
 		},
-	}
+	}, nil
 }
 
 func (l *loop) Start() {

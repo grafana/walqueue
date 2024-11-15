@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-kit/log/level"
 
 	"github.com/go-kit/log"
@@ -43,12 +44,21 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.cfg.Connections; i++ {
-		l := newLoop(cc, false, logger, seriesStats)
+		l, err := newLoop(cc, false, logger, seriesStats)
+		if err != nil {
+			level.Error(logger).Log("msg", "failed to create series loop", "err", err)
+			return nil, fmt.Errorf("failed to create series loop: %w", err)
+		}
 		l.self = actor.New(l)
 		s.loops = append(s.loops, l)
 	}
 
-	s.metadata = newLoop(cc, true, logger, metadataStats)
+	metadata, err := newLoop(cc, true, logger, metadataStats)
+	if err != nil {
+		level.Error(logger).Log("msg", "failed to create metadata loop", "err", err)
+		return nil, fmt.Errorf("failed to create metadata loop: %w", err)
+	}
+	s.metadata = metadata
 	s.metadata.self = actor.New(s.metadata)
 	return s, nil
 }
@@ -135,12 +145,21 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) {
 	s.stopLoops()
 	s.loops = make([]*loop, 0, s.cfg.Connections)
 	for i := uint(0); i < s.cfg.Connections; i++ {
-		l := newLoop(cc, false, s.logger, s.stats)
+		l, err := newLoop(cc, false, s.logger, s.stats)
+		if err != nil {
+			level.Error(s.logger).Log("msg", "failed to create series loop during config update", "err", err)
+			continue
+		}
 		l.self = actor.New(l)
 		s.loops = append(s.loops, l)
 	}
 
-	s.metadata = newLoop(cc, true, s.logger, s.metaStats)
+	metadata, err := newLoop(cc, true, s.logger, s.metaStats)
+	if err != nil {
+		level.Error(s.logger).Log("msg", "failed to create metadata loop during config update", "err", err)
+		return
+	}
+	s.metadata = metadata
 	s.metadata.self = actor.New(s.metadata)
 	level.Debug(s.logger).Log("msg", "starting loops")
 	s.startLoops()

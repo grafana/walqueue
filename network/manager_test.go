@@ -84,8 +84,9 @@ func TestUpdatingConfig(t *testing.T) {
 		Connections:   1,
 	}
 	ctx := context.Background()
-	err = wr.UpdateConfig(ctx, cc2)
+	success, err := wr.UpdateConfig(ctx, cc2)
 	require.NoError(t, err)
+	require.True(t, success)
 	time.Sleep(1 * time.Second)
 	for i := 0; i < 100; i++ {
 		send(t, wr, ctx)

@@ -3,15 +3,16 @@ package filequeue
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
-	"github.com/grafana/walqueue/types"
-	"github.com/vladopajic/go-actor/actor"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+	"github.com/grafana/walqueue/types"
+	"github.com/vladopajic/go-actor/actor"
 )
 
 var _ actor.Worker = (*queue)(nil)

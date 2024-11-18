@@ -2,6 +2,7 @@ package serialization
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-kit/log/level"
 	"strconv"
 	"time"
@@ -17,7 +18,7 @@ import (
 type serializer struct {
 	inbox               actor.Mailbox[*types.TimeSeriesBinary]
 	metaInbox           actor.Mailbox[*types.TimeSeriesBinary]
-	cfgInbox            *actor.SyncMailbox[types.SerializerConfig]
+	cfgInbox            *types.SyncMailbox[types.SerializerConfig, bool]
 	maxItemsBeforeFlush int
 	flushFrequency      time.Duration
 	queue               types.FileStorage
@@ -41,7 +42,7 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		logger:              l,
 		inbox:               actor.NewMailbox[*types.TimeSeriesBinary](),
 		metaInbox:           actor.NewMailbox[*types.TimeSeriesBinary](),
-		cfgInbox:            actor.NewSyncMailbox[types.SerializerConfig](),
+		cfgInbox:            types.NewSyncMailbox[types.SerializerConfig, bool](),
 		flushTestTimer:      time.NewTicker(1 * time.Second),
 		msgpBuffer:          make([]byte, 0),
 		lastFlush:           time.Now(),
@@ -68,7 +69,7 @@ func (s *serializer) SendMetadata(ctx context.Context, data *types.TimeSeriesBin
 	return s.metaInbox.Send(ctx, data)
 }
 
-func (s *serializer) UpdateConfig(ctx context.Context, cfg types.SerializerConfig) error {
+func (s *serializer) UpdateConfig(ctx context.Context, cfg types.SerializerConfig) (bool, error) {
 	return s.cfgInbox.Send(ctx, cfg)
 }
 
@@ -80,11 +81,18 @@ func (s *serializer) DoWork(ctx actor.Context) actor.WorkerStatus {
 	case <-ctx.Done():
 		return actor.WorkerEnd
 	case cfg, ok := <-s.cfgInbox.ReceiveC():
-		defer cfg.Notify(nil)
+		var err error
+		var successful bool
+		defer func() {
+			cfg.Notify(successful, err)
+		}()
+
 		if !ok {
+			err = fmt.Errorf("failed to receive configuration")
+			successful = false
 			return actor.WorkerEnd
 		}
-
+		successful = true
 		s.maxItemsBeforeFlush = int(cfg.Value.MaxSignalsInBatch)
 		s.flushFrequency = cfg.Value.FlushFrequency
 		return actor.WorkerContinue

@@ -20,5 +20,5 @@ type Serializer interface {
 	Stop()
 	SendSeries(ctx context.Context, data *TimeSeriesBinary) error
 	SendMetadata(ctx context.Context, data *TimeSeriesBinary) error
-	UpdateConfig(ctx context.Context, cfg SerializerConfig) error
+	UpdateConfig(ctx context.Context, cfg SerializerConfig) (bool, error)
 }

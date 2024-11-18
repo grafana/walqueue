@@ -67,11 +67,12 @@ func TestUpdateConfig(t *testing.T) {
 	require.NoError(t, err)
 	s.Start()
 	defer s.Stop()
-	err = s.UpdateConfig(context.Background(), types.SerializerConfig{
+	success, err := s.UpdateConfig(context.Background(), types.SerializerConfig{
 		MaxSignalsInBatch: 1,
 		FlushFrequency:    1 * time.Second,
 	})
 	require.NoError(t, err)
+	require.True(t, success)
 	require.Eventually(t, func() bool {
 		return s.(*serializer).maxItemsBeforeFlush == 1 && s.(*serializer).flushFrequency == 1*time.Second
 	}, 5*time.Second, 100*time.Millisecond)

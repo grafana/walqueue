@@ -15,7 +15,7 @@ type NetworkClient interface {
 	SendMetadata(ctx context.Context, d *TimeSeriesBinary) error
 	// UpdateConfig is a synchronous call and will only return once the config
 	// is applied or an error occurs.
-	UpdateConfig(ctx context.Context, cfg ConnectionConfig) error
+	UpdateConfig(ctx context.Context, cfg ConnectionConfig) (bool, error)
 }
 
 // ConnectionConfig holds configuration details for network connections.

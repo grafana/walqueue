@@ -97,8 +97,7 @@ func (s *manager) DoWork(ctx actor.Context) actor.WorkerStatus {
 		defer func() {
 			cfg.Notify(successful, err)
 		}()
-		err = s.updateConfig(cfg.Value)
-		if err == nil {
+		if err = s.updateConfig(cfg.Value); err == nil {
 			successful = true
 		}
 		return actor.WorkerContinue
@@ -136,8 +135,7 @@ func (s *manager) DoWork(ctx actor.Context) actor.WorkerStatus {
 		defer func() {
 			cfg.Notify(successful, err)
 		}()
-		err = s.updateConfig(cfg.Value)
-		if err == nil {
+		if err = s.updateConfig(cfg.Value); err == nil {
 			successful = true
 		}
 		return actor.WorkerContinue

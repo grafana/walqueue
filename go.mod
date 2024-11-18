@@ -13,13 +13,10 @@ require (
 	github.com/prometheus/prometheus v0.55.1
 	github.com/stretchr/testify v1.9.0
 	github.com/tinylib/msgp v1.2.4
-	github.com/vladopajic/go-actor v0.9.0
+	github.com/vladopajic/go-actor v0.9.1-0.20241115212052-39d92aec6093
 	go.uber.org/atomic v1.11.0
 	go.uber.org/goleak v1.3.0
 )
-
-// This is to handle issues witn synchronous mailbox and closing channels.
-replace github.com/vladopajic/go-actor => github.com/grafana/go-actor v0.0.0-20241115013232-9acfa54eede7
 
 require (
 	cloud.google.com/go/compute/metadata v0.5.2 // indirect

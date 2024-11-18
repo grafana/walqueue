@@ -69,8 +69,8 @@ var _ types.Serializer = (*fakeSerializer)(nil)
 
 type fakeSerializer struct{}
 
-func (f *fakeSerializer) UpdateConfig(ctx context.Context, cfg types.SerializerConfig) error {
-	return nil
+func (f *fakeSerializer) UpdateConfig(ctx context.Context, cfg types.SerializerConfig) (bool, error) {
+	return true, nil
 }
 
 func (f *fakeSerializer) Start() {}

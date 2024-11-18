@@ -17,7 +17,7 @@ type manager struct {
 	logger      log.Logger
 	inbox       actor.Mailbox[*types.TimeSeriesBinary]
 	metaInbox   actor.Mailbox[*types.TimeSeriesBinary]
-	configInbox *actor.SyncMailbox[types.ConnectionConfig]
+	configInbox *types.SyncMailbox[types.ConnectionConfig, bool]
 	self        actor.Actor
 	cfg         types.ConnectionConfig
 	stats       func(types.NetworkStats)
@@ -36,7 +36,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 		// it will stop the filequeue from feeding more. Without passing true the minimum is actually 64 instead of 1.
 		inbox:       actor.NewMailbox[*types.TimeSeriesBinary](actor.OptCapacity(1), actor.OptAsChan()),
 		metaInbox:   actor.NewMailbox[*types.TimeSeriesBinary](actor.OptCapacity(1), actor.OptAsChan()),
-		configInbox: actor.NewSyncMailbox[types.ConnectionConfig](),
+		configInbox: types.NewSyncMailbox[types.ConnectionConfig, bool](),
 		stats:       seriesStats,
 		metaStats:   metadataStats,
 		cfg:         cc,
@@ -80,7 +80,7 @@ func (s *manager) SendMetadata(ctx context.Context, data *types.TimeSeriesBinary
 	return s.metaInbox.Send(ctx, data)
 }
 
-func (s *manager) UpdateConfig(ctx context.Context, cc types.ConnectionConfig) error {
+func (s *manager) UpdateConfig(ctx context.Context, cc types.ConnectionConfig) (bool, error) {
 	return s.configInbox.Send(ctx, cc)
 }
 
@@ -88,13 +88,19 @@ func (s *manager) DoWork(ctx actor.Context) actor.WorkerStatus {
 	// This acts as a priority queue, always check for configuration changes first.
 	select {
 	case cfg, ok := <-s.configInbox.ReceiveC():
+		var successful bool
 		if !ok {
 			level.Debug(s.logger).Log("msg", "config inbox closed")
 			return actor.WorkerEnd
 		}
 		var err error
-		defer cfg.Notify(err)
+		defer func() {
+			cfg.Notify(successful, err)
+		}()
 		err = s.updateConfig(cfg.Value)
+		if err == nil {
+			successful = true
+		}
 		return actor.WorkerContinue
 	default:
 	}
@@ -121,14 +127,19 @@ func (s *manager) DoWork(ctx actor.Context) actor.WorkerStatus {
 		}
 		return actor.WorkerContinue
 	case cfg, ok := <-s.configInbox.ReceiveC():
+		var successful bool
 		if !ok {
 			level.Debug(s.logger).Log("msg", "config inbox closed")
 			return actor.WorkerEnd
 		}
 		var err error
-		defer cfg.Notify(err)
-
+		defer func() {
+			cfg.Notify(successful, err)
+		}()
 		err = s.updateConfig(cfg.Value)
+		if err == nil {
+			successful = true
+		}
 		return actor.WorkerContinue
 	}
 }

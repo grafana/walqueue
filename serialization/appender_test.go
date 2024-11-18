@@ -51,6 +51,6 @@ func (f *counterSerializer) SendMetadata(ctx context.Context, data *types.TimeSe
 	return nil
 }
 
-func (f *counterSerializer) UpdateConfig(ctx context.Context, data types.SerializerConfig) error {
-	return nil
+func (f *counterSerializer) UpdateConfig(ctx context.Context, data types.SerializerConfig) (bool, error) {
+	return true, nil
 }

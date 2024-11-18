@@ -89,7 +89,6 @@ func (s *serializer) DoWork(ctx actor.Context) actor.WorkerStatus {
 
 		if !ok {
 			err = fmt.Errorf("failed to receive configuration")
-			successful = false
 			return actor.WorkerEnd
 		}
 		successful = true

@@ -293,11 +293,11 @@ func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
 	s.SerializerInSeries.Add(float64(stats.SeriesStored))
 	s.SerializerInSeries.Add(float64(stats.MetadataStored))
 	s.SerializerErrors.Add(float64(stats.Errors))
-	if stats.NewestTimestamp != 0 {
-		s.serializerIn = stats.NewestTimestamp
+	if stats.NewestTimestampSeconds != 0 {
+		s.serializerIn = stats.NewestTimestampSeconds
 		s.TimestampDriftSeconds.Set(float64(s.serializerIn - s.networkOut))
-		s.SerializerNewestInTimeStampSeconds.Set(float64(stats.NewestTimestamp))
-		s.RemoteStorageInTimestamp.Set(float64(stats.NewestTimestamp))
+		s.SerializerNewestInTimeStampSeconds.Set(float64(stats.NewestTimestampSeconds))
+		s.RemoteStorageInTimestamp.Set(float64(stats.NewestTimestampSeconds))
 	}
 
 }

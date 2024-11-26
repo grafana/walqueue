@@ -7,11 +7,11 @@ import (
 // TODO @mattdurham separate this into more manageable chunks, and likely 3 stats series: series, metadata and new ones.
 
 type SerializerStats struct {
-	SeriesStored    int
-	MetadataStored  int
-	Errors          int
-	NewestTimestamp int64
-	TTLDropped      int
+	SeriesStored           int
+	MetadataStored         int
+	Errors                 int
+	NewestTimestampSeconds int64
+	TTLDropped             int
 }
 
 type NetworkStats struct {

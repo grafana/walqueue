@@ -207,9 +207,9 @@ func (s *serializer) storeStats(err error) {
 		}
 	}
 	s.stats(types.SerializerStats{
-		SeriesStored:    len(s.series),
-		MetadataStored:  len(s.meta),
-		Errors:          hasError,
-		NewestTimestamp: time.UnixMilli(newestTS).Unix(),
+		SeriesStored:           len(s.series),
+		MetadataStored:         len(s.meta),
+		Errors:                 hasError,
+		NewestTimestampSeconds: time.UnixMilli(newestTS).Unix(),
 	})
 }

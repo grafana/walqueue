@@ -30,7 +30,7 @@ func TestRoundTripSerialization(t *testing.T) {
 		require.True(t, stats.SeriesStored == 10)
 		require.True(t, stats.Errors == 0)
 		require.True(t, stats.MetadataStored == 0)
-		require.True(t, stats.NewestTimestamp > start)
+		require.True(t, stats.NewestTimestampSeconds > start)
 	}, l)
 	require.NoError(t, err)
 

@@ -210,6 +210,6 @@ func (s *serializer) storeStats(err error) {
 		SeriesStored:    len(s.series),
 		MetadataStored:  len(s.meta),
 		Errors:          hasError,
-		NewestTimestamp: newestTS,
+		NewestTimestamp: time.UnixMilli(newestTS).Unix(),
 	})
 }

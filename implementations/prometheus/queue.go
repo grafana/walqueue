@@ -192,11 +192,11 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	}
 
 	for _, series := range sg.Series {
-		// One last chance to check the TTL. Writing to the filequeue will check it but
-		// in a situation where the network is down and writing backs up we dont want to send
-		// data that will get rejected.
+		// Check that the TTL.
 		seriesAge := time.Since(time.UnixMilli(series.TS))
 		if seriesAge > q.ttl {
+			// Since we arent pushing the TS forward we should put it back into the pool.
+			types.PutTimeSeriesIntoPool(series)
 			q.stats.NetworkTTLDrops.Inc()
 			continue
 		}

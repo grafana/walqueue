@@ -188,32 +188,3 @@ func readFile(name string) ([]byte, error) {
 	}
 	return bb, err
 }
-
-/*
-type existingFiles struct {
-	mut   sync.Mutex
-	files []string
-}
-
-func (e *existingFiles) Add(name string) {
-	e.mut.Lock()
-	defer e.mut.Unlock()
-
-	e.files = append(e.files, name)
-}
-
-func (e *existingFiles) Get() []string {
-	if e == nil {
-		return nil
-	}
-	e.mut.Lock()
-	defer e.mut.Unlock()
-	if len(e.files) == 0 {
-		return nil
-	}
-
-	out := make([]string, len(e.files))
-	copy(out, e.files)
-	return out
-}
-*/

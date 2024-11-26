@@ -6,7 +6,9 @@ import (
 )
 
 type PrometheusStats struct {
-	register prometheus.Registerer
+	serializerIn int64
+	networkOut   int64
+	register     prometheus.Registerer
 	// Network Stats
 	NetworkSeriesSent                prometheus.Counter
 	NetworkFailures                  prometheus.Counter
@@ -16,6 +18,9 @@ type PrometheusStats struct {
 	NetworkSentDuration              prometheus.Histogram
 	NetworkErrors                    prometheus.Counter
 	NetworkNewestOutTimeStampSeconds prometheus.Gauge
+	NetworkTTLDrops                  prometheus.Counter
+	// Drift between serializer input and network output
+	TimestampDriftSeconds prometheus.Gauge
 
 	// Serializer Stats
 	SerializerInSeries                 prometheus.Counter
@@ -68,6 +73,19 @@ func NewStats(namespace, subsystem string, registry prometheus.Registerer) *Prom
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "network_timestamp_seconds",
+		}),
+		NetworkTTLDrops: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "ttl_drops_total",
+			Help:      "Total number of series dropped due to TTL expiration",
+		}),
+
+		TimestampDriftSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "timestamp_drift_seconds",
+			Help:      "Drift between newest serializer input timestamp and newest network output timestamp",
 		}),
 		RemoteStorageDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name: "prometheus_remote_storage_queue_duration_seconds",
@@ -169,9 +187,11 @@ func NewStats(namespace, subsystem string, registry prometheus.Registerer) *Prom
 		s.NetworkSeriesSent,
 		s.NetworkErrors,
 		s.NetworkNewestOutTimeStampSeconds,
+		s.NetworkTTLDrops,
 		s.SerializerInSeries,
 		s.SerializerErrors,
 		s.SerializerNewestInTimeStampSeconds,
+		s.TimestampDriftSeconds,
 	)
 	return s
 }
@@ -200,9 +220,11 @@ func (s *PrometheusStats) Unregister() {
 		s.NetworkSeriesSent,
 		s.NetworkErrors,
 		s.NetworkNewestOutTimeStampSeconds,
+		s.NetworkTTLDrops,
 		s.SerializerInSeries,
 		s.SerializerErrors,
 		s.SerializerNewestInTimeStampSeconds,
+		s.TimestampDriftSeconds,
 	}
 
 	for _, g := range unregistered {
@@ -244,9 +266,11 @@ func (s *PrometheusStats) UpdateNetwork(stats types.NetworkStats) {
 	s.NetworkSentDuration.Observe(stats.SendDuration.Seconds())
 	s.RemoteStorageDuration.Observe(stats.SendDuration.Seconds())
 	// The newest timestamp is no always sent.
-	if stats.NewestTimestamp != 0 {
-		s.RemoteStorageOutTimestamp.Set(float64(stats.NewestTimestamp))
-		s.NetworkNewestOutTimeStampSeconds.Set(float64(stats.NewestTimestamp))
+	if stats.NewestTimestampSeconds != 0 {
+		s.networkOut = stats.NewestTimestampSeconds
+		s.TimestampDriftSeconds.Set(float64(s.serializerIn - s.networkOut))
+		s.RemoteStorageOutTimestamp.Set(float64(stats.NewestTimestampSeconds))
+		s.NetworkNewestOutTimeStampSeconds.Set(float64(stats.NewestTimestampSeconds))
 	}
 
 	s.SamplesTotal.Add(float64(stats.Series.SeriesSent))
@@ -270,6 +294,8 @@ func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
 	s.SerializerInSeries.Add(float64(stats.MetadataStored))
 	s.SerializerErrors.Add(float64(stats.Errors))
 	if stats.NewestTimestamp != 0 {
+		s.serializerIn = stats.NewestTimestamp
+		s.TimestampDriftSeconds.Set(float64(s.serializerIn - s.networkOut))
 		s.SerializerNewestInTimeStampSeconds.Set(float64(stats.NewestTimestamp))
 		s.RemoteStorageInTimestamp.Set(float64(stats.NewestTimestamp))
 	}

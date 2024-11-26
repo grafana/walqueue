@@ -2,6 +2,7 @@ package network
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/grafana/walqueue/types"
 )
@@ -51,9 +52,9 @@ func recordStats(series []*types.TimeSeriesBinary, isMeta bool, stats func(s typ
 			Metadata: types.CategoryStats{
 				SeriesSent: metadataCount,
 			},
-			MetadataBytes:   metaBytesSent,
-			SeriesBytes:     sampleBytesSent,
-			NewestTimestamp: newestTS,
+			MetadataBytes:          metaBytesSent,
+			SeriesBytes:            sampleBytesSent,
+			NewestTimestampSeconds: time.UnixMilli(newestTS).Unix(),
 		})
 	case r.statusCode == http.StatusTooManyRequests:
 		stats(types.NetworkStats{

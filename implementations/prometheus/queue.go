@@ -195,9 +195,9 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		// One last chance to check the TTL. Writing to the filequeue will check it but
 		// in a situation where the network is down and writing backs up we dont want to send
 		// data that will get rejected.
-		seriesAge := time.Since(time.Unix(series.TS, 0))
+		seriesAge := time.Since(time.UnixMilli(series.TS))
 		if seriesAge > q.ttl {
-			// TODO @mattdurham add metric here for ttl expired.
+			q.stats.NetworkTTLDrops.Inc()
 			continue
 		}
 		sendErr := q.network.SendSeries(ctx, series)

@@ -51,6 +51,17 @@ func TestQueue_Appender(t *testing.T) {
 			},
 			metricCount: 2,
 		},
+		{
+			name: "append metric with TTL",
+			testFunc: func(t *testing.T, ctx context.Context, app storage.Appender) {
+				lbls := labels.FromStrings("__name__", "test_metric_ttl", "label1", "value1")
+				ts := time.Now().Add(-2 * time.Hour).UnixMilli() // 2 hours old timestamp
+				_, err := app.Append(0, lbls, ts, 42.0)
+				require.NoError(t, err)
+				require.NoError(t, app.Commit())
+			},
+			metricCount: 0, // Should be 0 since the metric is older than TTL
+		},
 	}
 
 	// Run test cases

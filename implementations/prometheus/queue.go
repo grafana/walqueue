@@ -194,6 +194,8 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	for _, series := range sg.Series {
 		// Check that the TTL.
 		seriesAge := time.Since(time.UnixMilli(series.TS))
+		// For any series that exceeds the time to live (ttl) based on its timestamp we do not want to push it to the networking layer
+		// but instead drop it here by continuing.
 		if seriesAge > q.ttl {
 			// Since we arent pushing the TS forward we should put it back into the pool.
 			types.PutTimeSeriesIntoPool(series)

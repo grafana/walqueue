@@ -32,10 +32,11 @@ type TimeSeriesBinary struct {
 	Labels       labels.Labels `msg:"-"`
 	LabelsNames  []uint32
 	LabelsValues []uint32
-	TS           int64
-	Value        float64
-	Hash         uint64
-	Histograms   Histograms
+	// TS is unix milliseconds.
+	TS         int64
+	Value      float64
+	Hash       uint64
+	Histograms Histograms
 }
 
 type Histograms struct {

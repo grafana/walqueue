@@ -15,10 +15,11 @@ import (
 )
 
 type appender struct {
-	ctx    context.Context
-	ttl    time.Duration
-	s      types.Serializer
-	logger log.Logger
+	ctx          context.Context
+	ttl          time.Duration
+	s            types.Serializer
+	logger       log.Logger
+	incrementTTL func()
 }
 
 func (a *appender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64) (storage.SeriesRef, error) {
@@ -40,11 +41,7 @@ func NewAppender(ctx context.Context, ttl time.Duration, s types.Serializer, log
 
 // Append metric
 func (a *appender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
-	// Check to see if the TTL has expired for this record.
-	endTime := time.Now().Unix() - int64(a.ttl.Seconds())
-	if t < endTime {
-		return ref, nil
-	}
+	
 	ts := types.GetTimeSeriesFromPool()
 	ts.Labels = l
 	ts.TS = t

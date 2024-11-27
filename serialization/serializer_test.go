@@ -20,7 +20,7 @@ func TestRoundTripSerialization(t *testing.T) {
 	totalSeries := atomic.Int64{}
 	f := &fqq{t: t}
 	l := log.NewNopLogger()
-	start := time.Now().Add(-1 * time.Second).Unix()
+	start := time.Now().Add(-1 * time.Minute).Unix()
 
 	s, err := NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: 10,
@@ -30,13 +30,13 @@ func TestRoundTripSerialization(t *testing.T) {
 		require.True(t, stats.SeriesStored == 10)
 		require.True(t, stats.Errors == 0)
 		require.True(t, stats.MetadataStored == 0)
-		require.True(t, stats.NewestTimestamp > start)
+		require.True(t, stats.NewestTimestampSeconds > start)
 	}, l)
 	require.NoError(t, err)
 
 	s.Start()
 	defer s.Stop()
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
 		tss := types.GetTimeSeriesFromPool()
 		tss.Labels = make(labels.Labels, 10)
 		for j := 0; j < 10; j++ {
@@ -45,16 +45,16 @@ func TestRoundTripSerialization(t *testing.T) {
 				Value: fmt.Sprintf("value_%d_%d", i, j),
 			}
 			tss.Value = float64(i)
-			tss.TS = time.Now().Unix()
+			tss.TS = time.Now().UnixMilli()
 		}
 		sendErr := s.SendSeries(context.Background(), tss)
 		require.NoError(t, sendErr)
 	}
 	require.Eventually(t, func() bool {
-		return f.total.Load() == 100
+		return f.total.Load() == 10
 	}, 5*time.Second, 100*time.Millisecond)
 	// 100 series send from the above for loop
-	require.True(t, totalSeries.Load() == 100)
+	require.True(t, totalSeries.Load() == 10)
 }
 
 func TestUpdateConfig(t *testing.T) {

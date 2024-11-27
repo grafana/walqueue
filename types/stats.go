@@ -7,20 +7,21 @@ import (
 // TODO @mattdurham separate this into more manageable chunks, and likely 3 stats series: series, metadata and new ones.
 
 type SerializerStats struct {
-	SeriesStored    int
-	MetadataStored  int
-	Errors          int
-	NewestTimestamp int64
+	SeriesStored           int
+	MetadataStored         int
+	Errors                 int
+	NewestTimestampSeconds int64
+	TTLDropped             int
 }
 
 type NetworkStats struct {
-	Series          CategoryStats
-	Histogram       CategoryStats
-	Metadata        CategoryStats
-	SendDuration    time.Duration
-	NewestTimestamp int64
-	SeriesBytes     int
-	MetadataBytes   int
+	Series                 CategoryStats
+	Histogram              CategoryStats
+	Metadata               CategoryStats
+	SendDuration           time.Duration
+	NewestTimestampSeconds int64
+	SeriesBytes            int
+	MetadataBytes          int
 }
 
 func (ns NetworkStats) TotalSent() int {
@@ -49,5 +50,6 @@ type CategoryStats struct {
 	RetriedSamples5XX    int
 	SeriesSent           int
 	FailedSamples        int
+	TTLDroppedSamples    int
 	NetworkSamplesFailed int
 }

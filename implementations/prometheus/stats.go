@@ -3,11 +3,12 @@ package prometheus
 import (
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/client_golang/prometheus"
+	"sync/atomic"
 )
 
 type PrometheusStats struct {
-	serializerIn int64
-	networkOut   int64
+	serializerIn atomic.Int64
+	networkOut   atomic.Int64
 	register     prometheus.Registerer
 	// Network Stats
 	NetworkSeriesSent                prometheus.Counter
@@ -267,8 +268,8 @@ func (s *PrometheusStats) UpdateNetwork(stats types.NetworkStats) {
 	s.RemoteStorageDuration.Observe(stats.SendDuration.Seconds())
 	// The newest timestamp is no always sent.
 	if stats.NewestTimestampSeconds != 0 {
-		s.networkOut = stats.NewestTimestampSeconds
-		s.TimestampDriftSeconds.Set(float64(s.serializerIn - s.networkOut))
+		s.networkOut.Store(stats.NewestTimestampSeconds)
+		s.TimestampDriftSeconds.Set(float64(s.serializerIn.Load() - s.networkOut.Load()))
 		s.RemoteStorageOutTimestamp.Set(float64(stats.NewestTimestampSeconds))
 		s.NetworkNewestOutTimeStampSeconds.Set(float64(stats.NewestTimestampSeconds))
 	}
@@ -294,8 +295,8 @@ func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
 	s.SerializerInSeries.Add(float64(stats.MetadataStored))
 	s.SerializerErrors.Add(float64(stats.Errors))
 	if stats.NewestTimestampSeconds != 0 {
-		s.serializerIn = stats.NewestTimestampSeconds
-		s.TimestampDriftSeconds.Set(float64(s.serializerIn - s.networkOut))
+		s.serializerIn.Store(stats.NewestTimestampSeconds)
+		s.TimestampDriftSeconds.Set(float64(s.serializerIn.Load() - s.networkOut.Load()))
 		s.SerializerNewestInTimeStampSeconds.Set(float64(stats.NewestTimestampSeconds))
 		s.RemoteStorageInTimestamp.Set(float64(stats.NewestTimestampSeconds))
 	}

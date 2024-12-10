@@ -7,6 +7,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/prometheus/prometheus/prompb"
+	"sync"
+
 	"io"
 	"net/http"
 	"strconv"
@@ -15,10 +18,9 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/golang/protobuf/proto"
 	"github.com/golang/snappy"
+	prometheus "github.com/grafana/walqueue/network/prompb"
 	"github.com/grafana/walqueue/types"
-	"github.com/prometheus/prometheus/prompb"
 	"github.com/vladopajic/go-actor/actor"
 	"go.uber.org/atomic"
 )
@@ -41,9 +43,7 @@ type loop struct {
 	series         []*types.TimeSeriesBinary
 	self           actor.Actor
 	ticker         *time.Ticker
-	req            *prompb.WriteRequest
-	buf            *proto.Buffer
-	sendBuffer     []byte
+	req            *prometheus.WriteRequest
 }
 
 func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop, error) {
@@ -86,12 +86,6 @@ func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats fun
 		statsFunc:      stats,
 		externalLabels: cc.ExternalLabels,
 		ticker:         time.NewTicker(1 * time.Second),
-		buf:            proto.NewBuffer(nil),
-		sendBuffer:     make([]byte, 0),
-		req: &prompb.WriteRequest{
-			// We know BatchCount is the most we will ever send.
-			Timeseries: make([]prompb.TimeSeries, 0, cc.BatchCount),
-		},
 	}, nil
 }
 
@@ -185,7 +179,6 @@ type sendResult struct {
 
 func (l *loop) sendingCleanup() {
 	types.PutTimeSeriesSliceIntoPool(l.series)
-	l.sendBuffer = l.sendBuffer[:0]
 	l.series = make([]*types.TimeSeriesBinary, 0, l.cfg.BatchCount)
 	l.lastSend = time.Now()
 }
@@ -193,26 +186,23 @@ func (l *loop) sendingCleanup() {
 // send is the main work loop of the loop.
 func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 	result := sendResult{}
+	var outData []byte
 	defer func() {
-		recordStats(l.series, l.isMeta, l.statsFunc, result, len(l.sendBuffer))
+		recordStats(l.series, l.isMeta, l.statsFunc, result, len(outData))
 	}()
-	// Check to see if this is a retry and we can reuse the buffer.
-	// I wonder if we should do this, its possible we are sending things that have exceeded the TTL.
-	if len(l.sendBuffer) == 0 {
-		var data []byte
-		var wrErr error
-		if l.isMeta {
-			data, wrErr = createWriteRequestMetadata(l.log, l.req, l.series, l.buf)
-		} else {
-			data, wrErr = createWriteRequest(l.req, l.series, l.externalLabels, l.buf)
-		}
-		if wrErr != nil {
-			result.err = wrErr
-			result.recoverableError = false
-			return result
-		}
-		l.sendBuffer = snappy.Encode(l.sendBuffer, data)
+	var data []byte
+	var wrErr error
+	if l.isMeta {
+		data, wrErr = createWriteRequestMetadata(l.log, l.series)
+	} else {
+		data, wrErr = createWriteRequest(l.series, l.externalLabels)
 	}
+	if wrErr != nil {
+		result.err = wrErr
+		result.recoverableError = false
+		return result
+	}
+	l.sendBuffer = snappy.Encode(l.sendBuffer, data)
 
 	httpReq, err := http.NewRequest("POST", l.cfg.URL, bytes.NewReader(l.sendBuffer))
 	if err != nil {
@@ -269,16 +259,21 @@ func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 	return result
 }
 
-func createWriteRequest(wr *prompb.WriteRequest, series []*types.TimeSeriesBinary, externalLabels map[string]string, data *proto.Buffer) ([]byte, error) {
+var wrPool = sync.Pool{New: func() interface{} {
+	return &prometheus.WriteRequest{}
+}}
+
+func createWriteRequest(series []*types.TimeSeriesBinary, externalLabels map[string]string) ([]byte, error) {
+	wr := wrPool.Get().(*prometheus.WriteRequest)
 	if cap(wr.Timeseries) < len(series) {
-		wr.Timeseries = make([]prompb.TimeSeries, len(series))
+		wr.Timeseries = make([]*prometheus.TimeSeries, len(series))
 	}
 	wr.Timeseries = wr.Timeseries[:len(series)]
 
 	for i, tsBuf := range series {
 		ts := wr.Timeseries[i]
 		if cap(ts.Labels) < len(tsBuf.Labels) {
-			ts.Labels = make([]prompb.Label, 0, len(tsBuf.Labels))
+			ts.Labels = make([]*prometheus.Label, 0, len(tsBuf.Labels))
 		}
 		ts.Labels = ts.Labels[:len(tsBuf.Labels)]
 		for k, v := range tsBuf.Labels {
@@ -288,7 +283,7 @@ func createWriteRequest(wr *prompb.WriteRequest, series []*types.TimeSeriesBinar
 
 		// By default each sample only has a histogram, float histogram or sample.
 		if cap(ts.Histograms) == 0 {
-			ts.Histograms = make([]prompb.Histogram, 1)
+			ts.Histograms = make([]*prometheus.Histogram, 1)
 		} else {
 			ts.Histograms = ts.Histograms[:0]
 		}
@@ -337,15 +332,13 @@ func createWriteRequest(wr *prompb.WriteRequest, series []*types.TimeSeriesBinar
 			wr.Timeseries[i].Exemplars = wr.Timeseries[i].Exemplars[:0]
 		}
 	}()
-	// Reset the buffer for reuse.
-	data.Reset()
-	err := data.Marshal(wr)
-	return data.Bytes(), err
+	return wr.M
 }
 
-func createWriteRequestMetadata(l log.Logger, wr *prompb.WriteRequest, series []*types.TimeSeriesBinary, data *proto.Buffer) ([]byte, error) {
+func createWriteRequestMetadata(l log.Logger, series []*types.TimeSeriesBinary) ([]byte, error) {
 	// Metadata is rarely sent so having this being less than optimal is fine.
-	wr.Metadata = make([]prompb.MetricMetadata, 0)
+	wr := prometheus.WriteRequest{}
+	wr.Metadata = make([]*prometheus.MetricMetadata, 0)
 	for _, ts := range series {
 		mt, valid := toMetadata(ts)
 		if !valid {
@@ -354,9 +347,7 @@ func createWriteRequestMetadata(l log.Logger, wr *prompb.WriteRequest, series []
 		}
 		wr.Metadata = append(wr.Metadata, mt)
 	}
-	data.Reset()
-	err := data.Marshal(wr)
-	return data.Bytes(), err
+	return wr.MarshalVT()
 }
 
 func getMetadataCount(tss []*types.TimeSeriesBinary) int {
@@ -375,12 +366,12 @@ func isMetadata(ts *types.TimeSeriesBinary) bool {
 		ts.Labels.Has(types.MetaHelp)
 }
 
-func toMetadata(ts *types.TimeSeriesBinary) (prompb.MetricMetadata, bool) {
+func toMetadata(ts *types.TimeSeriesBinary) (*prometheus.MetricMetadata, bool) {
 	if !isMetadata(ts) {
-		return prompb.MetricMetadata{}, false
+		return nil, false
 	}
-	return prompb.MetricMetadata{
-		Type:             prompb.MetricMetadata_MetricType(prompb.MetricMetadata_MetricType_value[strings.ToUpper(ts.Labels.Get(types.MetaType))]),
+	return &prometheus.MetricMetadata{
+		Type:             prometheus.MetricMetadata_MetricType(prompb.MetricMetadata_MetricType_value[strings.ToUpper(ts.Labels.Get(types.MetaType))]),
 		Help:             ts.Labels.Get(types.MetaHelp),
 		Unit:             ts.Labels.Get(types.MetaUnit),
 		MetricFamilyName: ts.Labels.Get("__name__"),

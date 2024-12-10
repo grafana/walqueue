@@ -2,11 +2,11 @@
 package types
 
 import (
+	prometheus "github.com/grafana/walqueue/network/prompb"
 	"sync"
 
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/prompb"
 	"go.uber.org/atomic"
 )
 
@@ -98,47 +98,47 @@ func (ts TimeSeriesBinary) IsMetadata() bool {
 	return ts.Labels.Has("__alloy_metadata_type__")
 }
 
-func (h *Histogram) ToPromHistogram() prompb.Histogram {
-	return prompb.Histogram{
-		Count:          &prompb.Histogram_CountInt{CountInt: h.Count.IntValue},
+func (h *Histogram) ToPromHistogram() *prometheus.Histogram {
+	return &prometheus.Histogram{
+		Count:          &prometheus.Histogram_CountInt{CountInt: h.Count.IntValue},
 		Sum:            h.Sum,
 		Schema:         h.Schema,
 		ZeroThreshold:  h.ZeroThreshold,
-		ZeroCount:      &prompb.Histogram_ZeroCountInt{ZeroCountInt: h.ZeroCount.IntValue},
+		ZeroCount:      &prometheus.Histogram_ZeroCountInt{ZeroCountInt: h.ZeroCount.IntValue},
 		NegativeSpans:  ToPromBucketSpans(h.NegativeSpans),
 		NegativeDeltas: h.NegativeBuckets,
 		PositiveSpans:  ToPromBucketSpans(h.PositiveSpans),
 		PositiveDeltas: h.PositiveBuckets,
-		ResetHint:      prompb.Histogram_ResetHint(h.ResetHint),
+		ResetHint:      prometheus.Histogram_ResetHint(h.ResetHint),
 		Timestamp:      h.TimestampMillisecond,
 	}
 }
 
-func (h *FloatHistogram) ToPromFloatHistogram() prompb.Histogram {
-	return prompb.Histogram{
-		Count:          &prompb.Histogram_CountFloat{CountFloat: h.Count.FloatValue},
+func (h *FloatHistogram) ToPromFloatHistogram() prometheus.Histogram {
+	return prometheus.Histogram{
+		Count:          &prometheus.Histogram_CountFloat{CountFloat: h.Count.FloatValue},
 		Sum:            h.Sum,
 		Schema:         h.Schema,
 		ZeroThreshold:  h.ZeroThreshold,
-		ZeroCount:      &prompb.Histogram_ZeroCountFloat{ZeroCountFloat: h.ZeroCount.FloatValue},
+		ZeroCount:      &prometheus.Histogram_ZeroCountFloat{ZeroCountFloat: h.ZeroCount.FloatValue},
 		NegativeSpans:  ToPromBucketSpans(h.NegativeSpans),
 		NegativeCounts: h.NegativeCounts,
 		PositiveSpans:  ToPromBucketSpans(h.PositiveSpans),
 		PositiveCounts: h.PositiveCounts,
-		ResetHint:      prompb.Histogram_ResetHint(h.ResetHint),
+		ResetHint:      prometheus.Histogram_ResetHint(h.ResetHint),
 		Timestamp:      h.TimestampMillisecond,
 	}
 }
-func ToPromBucketSpans(bss []BucketSpan) []prompb.BucketSpan {
-	spans := make([]prompb.BucketSpan, len(bss))
+func ToPromBucketSpans(bss []BucketSpan) []*prometheus.BucketSpan {
+	spans := make([]*prometheus.BucketSpan, len(bss))
 	for i, bs := range bss {
 		spans[i] = bs.ToPromBucketSpan()
 	}
 	return spans
 }
 
-func (bs *BucketSpan) ToPromBucketSpan() prompb.BucketSpan {
-	return prompb.BucketSpan{
+func (bs *BucketSpan) ToPromBucketSpan() *prometheus.BucketSpan {
+	return &prometheus.BucketSpan{
 		Offset: bs.Offset,
 		Length: bs.Length,
 	}

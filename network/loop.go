@@ -41,9 +41,6 @@ type loop struct {
 	series         []*types.TimeSeriesBinary
 	self           actor.Actor
 	ticker         *time.Ticker
-	req            *prompb.WriteRequest
-	buf            *proto.Buffer
-	sendBuffer     []byte
 }
 
 func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop, error) {
@@ -86,12 +83,6 @@ func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats fun
 		statsFunc:      stats,
 		externalLabels: cc.ExternalLabels,
 		ticker:         time.NewTicker(1 * time.Second),
-		buf:            proto.NewBuffer(nil),
-		sendBuffer:     make([]byte, 0),
-		req: &prompb.WriteRequest{
-			// We know BatchCount is the most we will ever send.
-			Timeseries: make([]prompb.TimeSeries, 0, cc.BatchCount),
-		},
 	}, nil
 }
 
@@ -185,7 +176,6 @@ type sendResult struct {
 
 func (l *loop) sendingCleanup() {
 	types.PutTimeSeriesSliceIntoPool(l.series)
-	l.sendBuffer = l.sendBuffer[:0]
 	l.series = make([]*types.TimeSeriesBinary, 0, l.cfg.BatchCount)
 	l.lastSend = time.Now()
 }
@@ -193,28 +183,27 @@ func (l *loop) sendingCleanup() {
 // send is the main work loop of the loop.
 func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 	result := sendResult{}
+	var outData []byte
 	defer func() {
-		recordStats(l.series, l.isMeta, l.statsFunc, result, len(l.sendBuffer))
+		recordStats(l.series, l.isMeta, l.statsFunc, result, len(outData))
 	}()
 	// Check to see if this is a retry and we can reuse the buffer.
 	// I wonder if we should do this, its possible we are sending things that have exceeded the TTL.
-	if len(l.sendBuffer) == 0 {
-		var data []byte
-		var wrErr error
-		if l.isMeta {
-			data, wrErr = createWriteRequestMetadata(l.log, l.req, l.series, l.buf)
-		} else {
-			data, wrErr = createWriteRequest(l.req, l.series, l.externalLabels, l.buf)
-		}
-		if wrErr != nil {
-			result.err = wrErr
-			result.recoverableError = false
-			return result
-		}
-		l.sendBuffer = snappy.Encode(l.sendBuffer, data)
+	var data []byte
+	var wrErr error
+	if l.isMeta {
+		data, wrErr = createWriteRequestMetadata(l.log, l.series)
+	} else {
+		data, wrErr = createWriteRequest(l.series, l.externalLabels)
 	}
+	if wrErr != nil {
+		result.err = wrErr
+		result.recoverableError = false
+		return result
+	}
+	outData = snappy.Encode(outData, data)
 
-	httpReq, err := http.NewRequest("POST", l.cfg.URL, bytes.NewReader(l.sendBuffer))
+	httpReq, err := http.NewRequest("POST", l.cfg.URL, bytes.NewReader(outData))
 	if err != nil {
 		result.err = err
 		result.recoverableError = true
@@ -269,29 +258,20 @@ func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 	return result
 }
 
-func createWriteRequest(wr *prompb.WriteRequest, series []*types.TimeSeriesBinary, externalLabels map[string]string, data *proto.Buffer) ([]byte, error) {
-	if cap(wr.Timeseries) < len(series) {
-		wr.Timeseries = make([]prompb.TimeSeries, len(series))
+func createWriteRequest(series []*types.TimeSeriesBinary, externalLabels map[string]string) ([]byte, error) {
+	wr := &prompb.WriteRequest{
+		// We know BatchCount is the most we will ever send.
+		Timeseries: make([]prompb.TimeSeries, len(series)),
 	}
-	wr.Timeseries = wr.Timeseries[:len(series)]
 
 	for i, tsBuf := range series {
 		ts := wr.Timeseries[i]
-		if cap(ts.Labels) < len(tsBuf.Labels) {
-			ts.Labels = make([]prompb.Label, 0, len(tsBuf.Labels))
-		}
-		ts.Labels = ts.Labels[:len(tsBuf.Labels)]
+		ts.Labels = make([]prompb.Label, len(tsBuf.Labels))
 		for k, v := range tsBuf.Labels {
 			ts.Labels[k].Name = v.Name
 			ts.Labels[k].Value = v.Value
 		}
-
-		// By default each sample only has a histogram, float histogram or sample.
-		if cap(ts.Histograms) == 0 {
-			ts.Histograms = make([]prompb.Histogram, 1)
-		} else {
-			ts.Histograms = ts.Histograms[:0]
-		}
+		ts.Histograms = make([]prompb.Histogram, 1)
 		if tsBuf.Histograms.Histogram != nil {
 			ts.Histograms = ts.Histograms[:1]
 			ts.Histograms[0] = tsBuf.Histograms.Histogram.ToPromHistogram()
@@ -322,28 +302,20 @@ func createWriteRequest(wr *prompb.WriteRequest, series []*types.TimeSeriesBinar
 				})
 			}
 		}
-		// By default each TimeSeries only has one sample.
-		if len(ts.Samples) == 0 {
-			ts.Samples = make([]prompb.Sample, 1)
-		}
+
+		ts.Samples = make([]prompb.Sample, 1)
+
 		ts.Samples[0].Value = tsBuf.Value
 		ts.Samples[0].Timestamp = tsBuf.TS
 		wr.Timeseries[i] = ts
 	}
-	defer func() {
-		for i := 0; i < len(wr.Timeseries); i++ {
-			wr.Timeseries[i].Histograms = wr.Timeseries[i].Histograms[:0]
-			wr.Timeseries[i].Labels = wr.Timeseries[i].Labels[:0]
-			wr.Timeseries[i].Exemplars = wr.Timeseries[i].Exemplars[:0]
-		}
-	}()
-	// Reset the buffer for reuse.
-	data.Reset()
+	data := proto.NewBuffer(nil)
 	err := data.Marshal(wr)
 	return data.Bytes(), err
 }
 
-func createWriteRequestMetadata(l log.Logger, wr *prompb.WriteRequest, series []*types.TimeSeriesBinary, data *proto.Buffer) ([]byte, error) {
+func createWriteRequestMetadata(l log.Logger, series []*types.TimeSeriesBinary) ([]byte, error) {
+	wr := &prompb.WriteRequest{}
 	// Metadata is rarely sent so having this being less than optimal is fine.
 	wr.Metadata = make([]prompb.MetricMetadata, 0)
 	for _, ts := range series {
@@ -354,7 +326,7 @@ func createWriteRequestMetadata(l log.Logger, wr *prompb.WriteRequest, series []
 		}
 		wr.Metadata = append(wr.Metadata, mt)
 	}
-	data.Reset()
+	data := proto.NewBuffer(nil)
 	err := data.Marshal(wr)
 	return data.Bytes(), err
 }

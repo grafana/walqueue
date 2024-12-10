@@ -3,6 +3,7 @@ package types
 
 import (
 	"sync"
+	"unique"
 
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -29,7 +30,7 @@ type SeriesGroup struct {
 // allocations.
 type TimeSeriesBinary struct {
 	// Labels are not serialized to msgp, instead we store separately a dictionary of strings and use `LabelNames` and `LabelValues` to refer to the dictionary by ID.
-	Labels       labels.Labels `msg:"-"`
+	Labels       LabelHandles `msg:"-"`
 	LabelsNames  []uint32
 	LabelsValues []uint32
 	// TS is unix milliseconds.
@@ -37,6 +38,42 @@ type TimeSeriesBinary struct {
 	Value      float64
 	Hash       uint64
 	Histograms Histograms
+}
+
+type LabelHandle struct {
+	Name  unique.Handle[string]
+	Value unique.Handle[string]
+}
+
+type LabelHandles []LabelHandle
+
+func (lh LabelHandles) Has(name string) bool {
+	for _, l := range lh {
+		if l.Name.Value() == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (lh LabelHandles) Get(name string) string {
+	for _, l := range lh {
+		if l.Name.Value() == name {
+			return l.Value.Value()
+		}
+	}
+	return ""
+}
+
+func MakeHandles(lbls labels.Labels) LabelHandles {
+	lhs := make([]LabelHandle, len(lbls))
+	for i, lbl := range lbls {
+		lhs[i] = LabelHandle{
+			Name:  unique.Make(lbl.Name),
+			Value: unique.Make(lbl.Value),
+		}
+	}
+	return lhs
 }
 
 type Histograms struct {
@@ -95,7 +132,12 @@ type BucketSpan struct {
 
 // IsMetadata is used because it's easier to store metadata as a set of labels.
 func (ts TimeSeriesBinary) IsMetadata() bool {
-	return ts.Labels.Has("__alloy_metadata_type__")
+	for _, l := range ts.Labels {
+		if l.Value.Value() == "__alloy_metadata_type__" {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Histogram) ToPromHistogram() prompb.Histogram {
@@ -192,17 +234,17 @@ func (ts *TimeSeriesBinary) FillLabelMapping(strMapToInt map[string]uint32) {
 	// This is where we deduplicate the ts.Labels into uint32 values
 	// that map to a string in the strings slice via the index.
 	for i, v := range ts.Labels {
-		val, found := strMapToInt[v.Name]
+		val, found := strMapToInt[v.Name.Value()]
 		if !found {
 			val = uint32(len(strMapToInt))
-			strMapToInt[v.Name] = val
+			strMapToInt[v.Name.Value()] = val
 		}
 		ts.LabelsNames[i] = val
 
-		val, found = strMapToInt[v.Value]
+		val, found = strMapToInt[v.Value.Value()]
 		if !found {
 			val = uint32(len(strMapToInt))
-			strMapToInt[v.Value] = val
+			strMapToInt[v.Value.Value()] = val
 		}
 		ts.LabelsValues[i] = val
 	}
@@ -242,7 +284,7 @@ func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
 	OutStandingTimeSeriesBinary.Dec()
 	ts.LabelsNames = ts.LabelsNames[:0]
 	ts.LabelsValues = ts.LabelsValues[:0]
-	ts.Labels = nil
+	ts.Labels = ts.Labels[:0]
 	ts.TS = 0
 	ts.Value = 0
 	ts.Hash = 0
@@ -260,16 +302,16 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*SeriesGroup, []byte
 	// Need to fill in the labels.
 	for _, series := range sg.Series {
 		if cap(series.Labels) < len(series.LabelsNames) {
-			series.Labels = make(labels.Labels, len(series.LabelsNames))
+			series.Labels = make([]LabelHandle, len(series.LabelsNames))
 		} else {
 			series.Labels = series.Labels[:len(series.LabelsNames)]
 		}
 		// Since the LabelNames/LabelValues are indexes into the Strings slice we can access it like the below.
 		// 1 Label corresponds to two entries, one in LabelsNames and one in LabelsValues.
 		for i := range series.LabelsNames {
-			series.Labels[i] = labels.Label{
-				Name:  sg.Strings[series.LabelsNames[i]],
-				Value: sg.Strings[series.LabelsValues[i]],
+			series.Labels[i] = LabelHandle{
+				Name:  unique.Make(sg.Strings[series.LabelsNames[i]]),
+				Value: unique.Make(sg.Strings[series.LabelsValues[i]]),
 			}
 		}
 		series.LabelsNames = series.LabelsNames[:0]
@@ -277,14 +319,14 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*SeriesGroup, []byte
 	}
 	for _, series := range sg.Metadata {
 		if cap(series.Labels) < len(series.LabelsNames) {
-			series.Labels = make(labels.Labels, len(series.LabelsNames))
+			series.Labels = make([]LabelHandle, len(series.LabelsNames))
 		} else {
 			series.Labels = series.Labels[:len(series.LabelsNames)]
 		}
 		for i := range series.LabelsNames {
-			series.Labels[i] = labels.Label{
-				Name:  sg.Strings[series.LabelsNames[i]],
-				Value: sg.Strings[series.LabelsValues[i]],
+			series.Labels[i] = LabelHandle{
+				Name:  unique.Make(sg.Strings[series.LabelsNames[i]]),
+				Value: unique.Make(sg.Strings[series.LabelsValues[i]]),
 			}
 		}
 		// Finally ensure we reset the labelnames and labelvalues.

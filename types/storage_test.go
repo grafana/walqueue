@@ -9,7 +9,7 @@ import (
 
 func TestStorage(t *testing.T) {
 	ts := GetTimeSeriesFromPool()
-	ts.Labels = labels.FromStrings("one", "two")
+	ts.Labels = MakeHandles(labels.FromStrings("one", "two"))
 	ts.LabelsValues = make([]uint32, 1)
 	ts.LabelsNames = make([]uint32, 1)
 	ts.LabelsValues[0] = 1

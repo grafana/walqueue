@@ -282,8 +282,8 @@ func createWriteRequest(wr *prompb.WriteRequest, series []*types.TimeSeriesBinar
 		}
 		ts.Labels = ts.Labels[:len(tsBuf.Labels)]
 		for k, v := range tsBuf.Labels {
-			ts.Labels[k].Name = v.Name
-			ts.Labels[k].Value = v.Value
+			ts.Labels[k].Name = v.Name.Value()
+			ts.Labels[k].Value = v.Value.Value()
 		}
 
 		// By default each sample only has a histogram, float histogram or sample.
@@ -349,7 +349,7 @@ func createWriteRequestMetadata(l log.Logger, wr *prompb.WriteRequest, series []
 	for _, ts := range series {
 		mt, valid := toMetadata(ts)
 		if !valid {
-			level.Error(l).Log("msg", "invalid metadata was found", "labels", ts.Labels.String())
+			level.Error(l).Log("msg", "invalid metadata was found")
 			continue
 		}
 		wr.Metadata = append(wr.Metadata, mt)

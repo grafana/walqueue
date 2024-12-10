@@ -8,11 +8,11 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	"unique"
 
 	"github.com/go-kit/log"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
-	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -281,10 +281,10 @@ func createSeries(_ *testing.T) *types.TimeSeriesBinary {
 	ts := &types.TimeSeriesBinary{
 		TS:    time.Now().Unix(),
 		Value: 1,
-		Labels: []labels.Label{
+		Labels: []types.LabelHandle{
 			{
-				Name:  "__name__",
-				Value: randSeq(10),
+				Name:  unique.Make("__name__"),
+				Value: unique.Make(randSeq(10)),
 			},
 		},
 	}

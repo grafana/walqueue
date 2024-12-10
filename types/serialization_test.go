@@ -24,7 +24,7 @@ func TestLabels(t *testing.T) {
 	}
 	sg.Series[0] = GetTimeSeriesFromPool()
 	defer PutTimeSeriesIntoPool(sg.Series[0])
-	sg.Series[0].Labels = labels.FromMap(lblsMap)
+	sg.Series[0].Labels = MakeHandles(labels.FromMap(lblsMap))
 	strMap := make(map[string]uint32)
 
 	sg.Series[0].FillLabelMapping(strMap)

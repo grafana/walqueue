@@ -3,9 +3,10 @@ package serialization
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/log/level"
 	"strconv"
 	"time"
+
+	"github.com/go-kit/log/level"
 
 	snappy "github.com/eapache/go-xerial-snappy"
 	"github.com/go-kit/log"
@@ -161,7 +162,9 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 	}()
 
 	// This maps strings to index position in a slice. This is doing to reduce the file size of the data.
-	strMapToIndex := make(map[string]uint32)
+	// Assume roughly each series has 10 labels, we do this because at very large mappings growing the map took up to 5% of cpu time.
+	// By pre allocating it that disappeared.
+	strMapToIndex := make(map[string]uint32, len(s.series)*10)
 	for i, ts := range s.series {
 		ts.FillLabelMapping(strMapToIndex)
 		group.Series[i] = ts
@@ -171,9 +174,9 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 		group.Metadata[i] = ts
 	}
 
-	stringsSlice := make([]string, len(strMapToIndex))
+	stringsSlice := make([]types.ByteString, len(strMapToIndex))
 	for stringValue, index := range strMapToIndex {
-		stringsSlice[index] = stringValue
+		stringsSlice[index] = types.ByteString(stringValue)
 	}
 	group.Strings = stringsSlice
 

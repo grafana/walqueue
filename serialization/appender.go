@@ -41,7 +41,7 @@ func NewAppender(ctx context.Context, ttl time.Duration, s types.Serializer, log
 
 // Append metric
 func (a *appender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
-	
+
 	ts := types.GetTimeSeriesFromPool()
 	ts.Labels = l
 	ts.TS = t

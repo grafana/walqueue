@@ -176,7 +176,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	sg := &types.SeriesGroup{
 		Series:   make([]*types.TimeSeriesBinary, seriesCount),
 		Metadata: make([]*types.TimeSeriesBinary, metaCount),
-		Strings:  make([]string, stringsCount),
+		Strings:  make([]types.ByteString, stringsCount),
 	}
 	// Prefill our series with items from the pool to limit allocs.
 	for i := 0; i < seriesCount; i++ {

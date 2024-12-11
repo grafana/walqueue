@@ -24,7 +24,7 @@ func TestLabels(t *testing.T) {
 	}
 	sg.Series[0] = GetTimeSeriesFromPool()
 	defer PutTimeSeriesIntoPool(sg.Series[0])
-	sg.Series[0].Labels = MakeHandles(labels.FromMap(lblsMap))
+	sg.Series[0].Labels = labels.FromMap(lblsMap)
 	strMap := make(map[string]uint32)
 
 	sg.Series[0].FillLabelMapping(strMap)
@@ -63,7 +63,7 @@ func BenchmarkFill(b *testing.B) {
 			unique[v] = struct{}{}
 		}
 		ss := GetTimeSeriesFromPool()
-		ss.Labels = MakeHandles(labels.FromMap(lblsMap))
+		ss.Labels = labels.FromMap(lblsMap)
 
 		sg.Series = append(sg.Series, ss)
 	}
@@ -88,7 +88,7 @@ func BenchmarkDeserialize(b *testing.B) {
 			lblsMap[key] = v
 		}
 		ss := GetTimeSeriesFromPool()
-		ss.Labels = MakeHandles(labels.FromMap(lblsMap))
+		ss.Labels = labels.FromMap(lblsMap)
 		sg.Series = append(sg.Series, ss)
 	}
 	strMapToIndex := make(map[string]uint32, 1_000*10)

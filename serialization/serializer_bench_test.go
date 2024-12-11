@@ -48,7 +48,7 @@ func getSingleTimeSeries(b *testing.B) *types.TimeSeriesBinary {
 	timeseries := types.GetTimeSeriesFromPool()
 	timeseries.TS = time.Now().Unix()
 	timeseries.Value = rand.Float64()
-	timeseries.Labels = types.MakeHandles(getLabels())
+	timeseries.Labels = getLabels()
 	return timeseries
 
 }

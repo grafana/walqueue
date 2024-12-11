@@ -43,7 +43,7 @@ func NewAppender(ctx context.Context, ttl time.Duration, s types.Serializer, log
 func (a *appender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
 
 	ts := types.GetTimeSeriesFromPool()
-	ts.Labels = types.MakeHandles(l)
+	ts.Labels = l
 	ts.TS = t
 	ts.Value = v
 	ts.Hash = l.Hash()
@@ -70,7 +70,7 @@ func (a *appender) AppendExemplar(ref storage.SeriesRef, _ labels.Labels, e exem
 	ts := types.GetTimeSeriesFromPool()
 	ts.Hash = e.Labels.Hash()
 	ts.TS = e.Ts
-	ts.Labels = types.MakeHandles(e.Labels)
+	ts.Labels = e.Labels
 	ts.Hash = e.Labels.Hash()
 	err := a.s.SendSeries(a.ctx, ts)
 	return ref, err
@@ -83,7 +83,7 @@ func (a *appender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int
 		return ref, nil
 	}
 	ts := types.GetTimeSeriesFromPool()
-	ts.Labels = types.MakeHandles(l)
+	ts.Labels = l
 	ts.TS = t
 	if h != nil {
 		ts.FromHistogram(t, h)
@@ -121,7 +121,7 @@ func (a *appender) UpdateMetadata(ref storage.SeriesRef, l labels.Labels, m meta
 		Name:  "__name__",
 		Value: l.Get("__name__"),
 	})
-	ts.Labels = types.MakeHandles(combinedLabels)
+	ts.Labels = combinedLabels
 	err := a.s.SendMetadata(a.ctx, ts)
 	return ref, err
 }

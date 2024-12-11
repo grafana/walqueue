@@ -50,12 +50,7 @@ func MakeHandles(lbls labels.Labels) LabelHandles {
 
 // IsMetadata is used because it's easier to store metadata as a set of labels.
 func (ts TimeSeriesBinary) IsMetadata() bool {
-	for _, l := range ts.Labels {
-		if l.Value.Value() == "__alloy_metadata_type__" {
-			return true
-		}
-	}
-	return false
+	return ts.Labels.Has("__alloy_metadata_type__")
 }
 
 func (h *Histogram) ToPromHistogram() prompb.Histogram {
@@ -152,17 +147,17 @@ func (ts *TimeSeriesBinary) FillLabelMapping(strMapToInt map[string]uint32) {
 	// This is where we deduplicate the ts.Labels into uint32 values
 	// that map to a string in the strings slice via the index.
 	for i, v := range ts.Labels {
-		val, found := strMapToInt[v.Name.Value()]
+		val, found := strMapToInt[v.Name]
 		if !found {
 			val = uint32(len(strMapToInt))
-			strMapToInt[v.Name.Value()] = val
+			strMapToInt[v.Name] = val
 		}
 		ts.LabelsNames[i] = val
 
-		val, found = strMapToInt[v.Value.Value()]
+		val, found = strMapToInt[v.Value]
 		if !found {
 			val = uint32(len(strMapToInt))
-			strMapToInt[v.Value.Value()] = val
+			strMapToInt[v.Value] = val
 		}
 		ts.LabelsValues[i] = val
 	}
@@ -214,7 +209,7 @@ func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
 	OutStandingTimeSeriesBinary.Dec()
 	ts.LabelsNames = ts.LabelsNames[:0]
 	ts.LabelsValues = ts.LabelsValues[:0]
-	ts.Labels = ts.Labels[:0]
+	ts.Labels = nil
 	ts.TS = 0
 	ts.Value = 0
 	ts.Hash = 0
@@ -234,16 +229,16 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*SeriesGroup, []byte
 	// Need to fill in the labels.
 	for _, series := range sg.Series {
 		if cap(series.Labels) < len(series.LabelsNames) {
-			series.Labels = make([]LabelHandle, len(series.LabelsNames))
+			series.Labels = make(labels.Labels, len(series.LabelsNames))
 		} else {
 			series.Labels = series.Labels[:len(series.LabelsNames)]
 		}
 		// Since the LabelNames/LabelValues are indexes into the Strings slice we can access it like the below.
 		// 1 Label corresponds to two entries, one in LabelsNames and one in LabelsValues.
 		for i := range series.LabelsNames {
-			series.Labels[i] = LabelHandle{
-				Name:  unique.Make(sg.Strings[series.LabelsNames[i]].String()),
-				Value: unique.Make(sg.Strings[series.LabelsValues[i]].String()),
+			series.Labels[i] = labels.Label{
+				Name:  sg.Strings[series.LabelsNames[i]].String(),
+				Value: sg.Strings[series.LabelsValues[i]].String(),
 			}
 		}
 		series.LabelsNames = series.LabelsNames[:0]
@@ -251,14 +246,14 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*SeriesGroup, []byte
 	}
 	for _, series := range sg.Metadata {
 		if cap(series.Labels) < len(series.LabelsNames) {
-			series.Labels = make([]LabelHandle, len(series.LabelsNames))
+			series.Labels = make([]labels.Label, len(series.LabelsNames))
 		} else {
 			series.Labels = series.Labels[:len(series.LabelsNames)]
 		}
 		for i := range series.LabelsNames {
-			series.Labels[i] = LabelHandle{
-				Name:  unique.Make(sg.Strings[series.LabelsNames[i]].String()),
-				Value: unique.Make(sg.Strings[series.LabelsValues[i]].String()),
+			series.Labels[i] = labels.Label{
+				Name:  sg.Strings[series.LabelsNames[i]].String(),
+				Value: sg.Strings[series.LabelsValues[i]].String(),
 			}
 		}
 		// Finally ensure we reset the labelnames and labelvalues.

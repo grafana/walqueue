@@ -282,8 +282,8 @@ func createWriteRequest(wr *prompb.WriteRequest, series []*types.TimeSeriesBinar
 		}
 		ts.Labels = ts.Labels[:len(tsBuf.Labels)]
 		for k, v := range tsBuf.Labels {
-			ts.Labels[k].Name = v.Name.Value()
-			ts.Labels[k].Value = v.Value.Value()
+			ts.Labels[k].Name = v.Name
+			ts.Labels[k].Value = v.Value
 		}
 
 		// By default each sample only has a histogram, float histogram or sample.

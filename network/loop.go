@@ -329,7 +329,7 @@ func createWriteRequest(series []*types.TimeSeriesBinary, externalLabels map[str
 }
 
 func createWriteRequestMetadata(l log.Logger, series []*types.TimeSeriesBinary, data *proto.Buffer) ([]byte, error) {
-	wr := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, len(series))}
+	wr := &prompb.WriteRequest{}
 
 	// Metadata is rarely sent so having this being less than optimal is fine.
 	wr.Metadata = make([]prompb.MetricMetadata, 0)

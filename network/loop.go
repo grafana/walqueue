@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/golang/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/prompb"
@@ -41,7 +41,6 @@ type loop struct {
 	series         []*types.TimeSeriesBinary
 	self           actor.Actor
 	ticker         *time.Ticker
-	req            *prompb.WriteRequest
 	buf            *proto.Buffer
 	sendBuffer     []byte
 }
@@ -88,10 +87,6 @@ func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats fun
 		ticker:         time.NewTicker(1 * time.Second),
 		buf:            proto.NewBuffer(nil),
 		sendBuffer:     make([]byte, 0),
-		req: &prompb.WriteRequest{
-			// We know BatchCount is the most we will ever send.
-			Timeseries: make([]prompb.TimeSeries, 0, cc.BatchCount),
-		},
 	}, nil
 }
 
@@ -202,9 +197,9 @@ func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 		var data []byte
 		var wrErr error
 		if l.isMeta {
-			data, wrErr = createWriteRequestMetadata(l.log, l.req, l.series, l.buf)
+			data, wrErr = createWriteRequestMetadata(l.log, l.series, l.buf)
 		} else {
-			data, wrErr = createWriteRequest(l.req, l.series, l.externalLabels, l.buf)
+			data, wrErr = createWriteRequest(l.series, l.externalLabels, l.buf)
 		}
 		if wrErr != nil {
 			result.err = wrErr
@@ -269,11 +264,8 @@ func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 	return result
 }
 
-func createWriteRequest(wr *prompb.WriteRequest, series []*types.TimeSeriesBinary, externalLabels map[string]string, data *proto.Buffer) ([]byte, error) {
-	if cap(wr.Timeseries) < len(series) {
-		wr.Timeseries = make([]prompb.TimeSeries, len(series))
-	}
-	wr.Timeseries = wr.Timeseries[:len(series)]
+func createWriteRequest(series []*types.TimeSeriesBinary, externalLabels map[string]string, data *proto.Buffer) ([]byte, error) {
+	wr := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, len(series))}
 
 	for i, tsBuf := range series {
 		ts := wr.Timeseries[i]
@@ -330,20 +322,15 @@ func createWriteRequest(wr *prompb.WriteRequest, series []*types.TimeSeriesBinar
 		ts.Samples[0].Timestamp = tsBuf.TS
 		wr.Timeseries[i] = ts
 	}
-	defer func() {
-		for i := 0; i < len(wr.Timeseries); i++ {
-			wr.Timeseries[i].Histograms = wr.Timeseries[i].Histograms[:0]
-			wr.Timeseries[i].Labels = wr.Timeseries[i].Labels[:0]
-			wr.Timeseries[i].Exemplars = wr.Timeseries[i].Exemplars[:0]
-		}
-	}()
 	// Reset the buffer for reuse.
 	data.Reset()
 	err := data.Marshal(wr)
 	return data.Bytes(), err
 }
 
-func createWriteRequestMetadata(l log.Logger, wr *prompb.WriteRequest, series []*types.TimeSeriesBinary, data *proto.Buffer) ([]byte, error) {
+func createWriteRequestMetadata(l log.Logger, series []*types.TimeSeriesBinary, data *proto.Buffer) ([]byte, error) {
+	wr := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, len(series))}
+
 	// Metadata is rarely sent so having this being less than optimal is fine.
 	wr.Metadata = make([]prompb.MetricMetadata, 0)
 	for _, ts := range series {

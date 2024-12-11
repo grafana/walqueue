@@ -135,6 +135,43 @@ func (z BucketSpan) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
+func (z *ByteString) DecodeMsg(dc *msgp.Reader) (err error) {
+	{
+		var zb0001 []byte
+		zb0001, err = dc.ReadBytes([]byte((*z)))
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		(*z) = ByteString(zb0001)
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z ByteString) EncodeMsg(en *msgp.Writer) (err error) {
+	err = en.WriteBytes([]byte(z))
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	return
+}
+
+// MarshalMsg implements msgp.Marshaler
+func (z ByteString) MarshalMsg(b []byte) (o []byte, err error) {
+	o = msgp.Require(b, z.Msgsize())
+	o = msgp.AppendBytes(o, []byte(z))
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z ByteString) Msgsize() (s int) {
+	s = msgp.BytesPrefixSize + len([]byte(z))
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
 func (z *FloatHistogram) DecodeMsg(dc *msgp.Reader) (err error) {
 	var field []byte
 	_ = field
@@ -2661,26 +2698,30 @@ func (z *SeriesGroup) DecodeMsg(dc *msgp.Reader) (err error) {
 			if cap(z.Strings) >= int(zb0002) {
 				z.Strings = (z.Strings)[:zb0002]
 			} else {
-				z.Strings = make([]string, zb0002)
+				z.Strings = make([]ByteString, zb0002)
 			}
 			for za0001 := range z.Strings {
-				z.Strings[za0001], err = dc.ReadString()
-				if err != nil {
-					err = msgp.WrapError(err, "Strings", za0001)
-					return
+				{
+					var zb0003 []byte
+					zb0003, err = dc.ReadBytes([]byte(z.Strings[za0001]))
+					if err != nil {
+						err = msgp.WrapError(err, "Strings", za0001)
+						return
+					}
+					z.Strings[za0001] = ByteString(zb0003)
 				}
 			}
 		case "Series":
-			var zb0003 uint32
-			zb0003, err = dc.ReadArrayHeader()
+			var zb0004 uint32
+			zb0004, err = dc.ReadArrayHeader()
 			if err != nil {
 				err = msgp.WrapError(err, "Series")
 				return
 			}
-			if cap(z.Series) >= int(zb0003) {
-				z.Series = (z.Series)[:zb0003]
+			if cap(z.Series) >= int(zb0004) {
+				z.Series = (z.Series)[:zb0004]
 			} else {
-				z.Series = make([]*TimeSeriesBinary, zb0003)
+				z.Series = make([]*TimeSeriesBinary, zb0004)
 			}
 			for za0002 := range z.Series {
 				if dc.IsNil() {
@@ -2702,16 +2743,16 @@ func (z *SeriesGroup) DecodeMsg(dc *msgp.Reader) (err error) {
 				}
 			}
 		case "Metadata":
-			var zb0004 uint32
-			zb0004, err = dc.ReadArrayHeader()
+			var zb0005 uint32
+			zb0005, err = dc.ReadArrayHeader()
 			if err != nil {
 				err = msgp.WrapError(err, "Metadata")
 				return
 			}
-			if cap(z.Metadata) >= int(zb0004) {
-				z.Metadata = (z.Metadata)[:zb0004]
+			if cap(z.Metadata) >= int(zb0005) {
+				z.Metadata = (z.Metadata)[:zb0005]
 			} else {
-				z.Metadata = make([]*TimeSeriesBinary, zb0004)
+				z.Metadata = make([]*TimeSeriesBinary, zb0005)
 			}
 			for za0003 := range z.Metadata {
 				if dc.IsNil() {
@@ -2757,7 +2798,7 @@ func (z *SeriesGroup) EncodeMsg(en *msgp.Writer) (err error) {
 		return
 	}
 	for za0001 := range z.Strings {
-		err = en.WriteString(z.Strings[za0001])
+		err = en.WriteBytes([]byte(z.Strings[za0001]))
 		if err != nil {
 			err = msgp.WrapError(err, "Strings", za0001)
 			return
@@ -2822,7 +2863,7 @@ func (z *SeriesGroup) MarshalMsg(b []byte) (o []byte, err error) {
 	o = append(o, 0x83, 0xa7, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.Strings)))
 	for za0001 := range z.Strings {
-		o = msgp.AppendString(o, z.Strings[za0001])
+		o = msgp.AppendBytes(o, []byte(z.Strings[za0001]))
 	}
 	// string "Series"
 	o = append(o, 0xa6, 0x53, 0x65, 0x72, 0x69, 0x65, 0x73)
@@ -2883,26 +2924,30 @@ func (z *SeriesGroup) UnmarshalMsg(bts []byte) (o []byte, err error) {
 			if cap(z.Strings) >= int(zb0002) {
 				z.Strings = (z.Strings)[:zb0002]
 			} else {
-				z.Strings = make([]string, zb0002)
+				z.Strings = make([]ByteString, zb0002)
 			}
 			for za0001 := range z.Strings {
-				z.Strings[za0001], bts, err = msgp.ReadStringBytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "Strings", za0001)
-					return
+				{
+					var zb0003 []byte
+					zb0003, bts, err = msgp.ReadBytesBytes(bts, []byte(z.Strings[za0001]))
+					if err != nil {
+						err = msgp.WrapError(err, "Strings", za0001)
+						return
+					}
+					z.Strings[za0001] = ByteString(zb0003)
 				}
 			}
 		case "Series":
-			var zb0003 uint32
-			zb0003, bts, err = msgp.ReadArrayHeaderBytes(bts)
+			var zb0004 uint32
+			zb0004, bts, err = msgp.ReadArrayHeaderBytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "Series")
 				return
 			}
-			if cap(z.Series) >= int(zb0003) {
-				z.Series = (z.Series)[:zb0003]
+			if cap(z.Series) >= int(zb0004) {
+				z.Series = (z.Series)[:zb0004]
 			} else {
-				z.Series = make([]*TimeSeriesBinary, zb0003)
+				z.Series = make([]*TimeSeriesBinary, zb0004)
 			}
 			for za0002 := range z.Series {
 				if msgp.IsNil(bts) {
@@ -2923,16 +2968,16 @@ func (z *SeriesGroup) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				}
 			}
 		case "Metadata":
-			var zb0004 uint32
-			zb0004, bts, err = msgp.ReadArrayHeaderBytes(bts)
+			var zb0005 uint32
+			zb0005, bts, err = msgp.ReadArrayHeaderBytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "Metadata")
 				return
 			}
-			if cap(z.Metadata) >= int(zb0004) {
-				z.Metadata = (z.Metadata)[:zb0004]
+			if cap(z.Metadata) >= int(zb0005) {
+				z.Metadata = (z.Metadata)[:zb0005]
 			} else {
-				z.Metadata = make([]*TimeSeriesBinary, zb0004)
+				z.Metadata = make([]*TimeSeriesBinary, zb0005)
 			}
 			for za0003 := range z.Metadata {
 				if msgp.IsNil(bts) {
@@ -2968,7 +3013,7 @@ func (z *SeriesGroup) UnmarshalMsg(bts []byte) (o []byte, err error) {
 func (z *SeriesGroup) Msgsize() (s int) {
 	s = 1 + 8 + msgp.ArrayHeaderSize
 	for za0001 := range z.Strings {
-		s += msgp.StringPrefixSize + len(z.Strings[za0001])
+		s += msgp.BytesPrefixSize + len([]byte(z.Strings[za0001]))
 	}
 	s += 7 + msgp.ArrayHeaderSize
 	for za0002 := range z.Series {

@@ -2,16 +2,21 @@ package types
 
 import (
 	"bytes"
+	"sync"
+	"unique"
+	"unsafe"
+
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/tinylib/msgp/msgp"
 	"go.uber.org/atomic"
-	"sync"
-	"unique"
-	"unsafe"
 )
 
+// String returns the underlying bytes as a string without copying.
+// This is a huge performance win with no side effect as long as
+// the underlying byte slice is not reused. In this case
+// it is not.
 func (v ByteString) String() string {
 	if len([]byte(v)) == 0 {
 		return ""

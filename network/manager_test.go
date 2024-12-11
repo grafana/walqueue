@@ -2,6 +2,13 @@ package network
 
 import (
 	"context"
+	"io"
+	"math/rand"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
 	"github.com/go-kit/log"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
@@ -9,12 +16,6 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
-	"io"
-	"math/rand"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-	"time"
 )
 
 func TestSending(t *testing.T) {

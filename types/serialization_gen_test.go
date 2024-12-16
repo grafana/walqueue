@@ -800,6 +800,119 @@ func BenchmarkDecodeSeriesGroup(b *testing.B) {
 	}
 }
 
+func TestMarshalUnmarshalSeriesGroupSingleName(t *testing.T) {
+	v := SeriesGroupSingleName{}
+	bts, err := v.MarshalMsg(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	left, err := v.UnmarshalMsg(bts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) > 0 {
+		t.Errorf("%d bytes left over after UnmarshalMsg(): %q", len(left), left)
+	}
+
+	left, err = msgp.Skip(bts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) > 0 {
+		t.Errorf("%d bytes left over after Skip(): %q", len(left), left)
+	}
+}
+
+func BenchmarkMarshalMsgSeriesGroupSingleName(b *testing.B) {
+	v := SeriesGroupSingleName{}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		v.MarshalMsg(nil)
+	}
+}
+
+func BenchmarkAppendMsgSeriesGroupSingleName(b *testing.B) {
+	v := SeriesGroupSingleName{}
+	bts := make([]byte, 0, v.Msgsize())
+	bts, _ = v.MarshalMsg(bts[0:0])
+	b.SetBytes(int64(len(bts)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		bts, _ = v.MarshalMsg(bts[0:0])
+	}
+}
+
+func BenchmarkUnmarshalSeriesGroupSingleName(b *testing.B) {
+	v := SeriesGroupSingleName{}
+	bts, _ := v.MarshalMsg(nil)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(bts)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := v.UnmarshalMsg(bts)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestEncodeDecodeSeriesGroupSingleName(t *testing.T) {
+	v := SeriesGroupSingleName{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+
+	m := v.Msgsize()
+	if buf.Len() > m {
+		t.Log("WARNING: TestEncodeDecodeSeriesGroupSingleName Msgsize() is inaccurate")
+	}
+
+	vn := SeriesGroupSingleName{}
+	err := msgp.Decode(&buf, &vn)
+	if err != nil {
+		t.Error(err)
+	}
+
+	buf.Reset()
+	msgp.Encode(&buf, &v)
+	err = msgp.NewReader(&buf).Skip()
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func BenchmarkEncodeSeriesGroupSingleName(b *testing.B) {
+	v := SeriesGroupSingleName{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+	b.SetBytes(int64(buf.Len()))
+	en := msgp.NewWriter(msgp.Nowhere)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		v.EncodeMsg(en)
+	}
+	en.Flush()
+}
+
+func BenchmarkDecodeSeriesGroupSingleName(b *testing.B) {
+	v := SeriesGroupSingleName{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+	b.SetBytes(int64(buf.Len()))
+	rd := msgp.NewEndlessReader(buf.Bytes(), b)
+	dc := msgp.NewReader(rd)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := v.DecodeMsg(dc)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func TestMarshalUnmarshalTimeSeriesBinary(t *testing.T) {
 	v := TimeSeriesBinary{}
 	bts, err := v.MarshalMsg(nil)
@@ -898,6 +1011,232 @@ func BenchmarkEncodeTimeSeriesBinary(b *testing.B) {
 
 func BenchmarkDecodeTimeSeriesBinary(b *testing.B) {
 	v := TimeSeriesBinary{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+	b.SetBytes(int64(buf.Len()))
+	rd := msgp.NewEndlessReader(buf.Bytes(), b)
+	dc := msgp.NewReader(rd)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := v.DecodeMsg(dc)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestMarshalUnmarshalTimeSeriesSingleName(t *testing.T) {
+	v := TimeSeriesSingleName{}
+	bts, err := v.MarshalMsg(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	left, err := v.UnmarshalMsg(bts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) > 0 {
+		t.Errorf("%d bytes left over after UnmarshalMsg(): %q", len(left), left)
+	}
+
+	left, err = msgp.Skip(bts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) > 0 {
+		t.Errorf("%d bytes left over after Skip(): %q", len(left), left)
+	}
+}
+
+func BenchmarkMarshalMsgTimeSeriesSingleName(b *testing.B) {
+	v := TimeSeriesSingleName{}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		v.MarshalMsg(nil)
+	}
+}
+
+func BenchmarkAppendMsgTimeSeriesSingleName(b *testing.B) {
+	v := TimeSeriesSingleName{}
+	bts := make([]byte, 0, v.Msgsize())
+	bts, _ = v.MarshalMsg(bts[0:0])
+	b.SetBytes(int64(len(bts)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		bts, _ = v.MarshalMsg(bts[0:0])
+	}
+}
+
+func BenchmarkUnmarshalTimeSeriesSingleName(b *testing.B) {
+	v := TimeSeriesSingleName{}
+	bts, _ := v.MarshalMsg(nil)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(bts)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := v.UnmarshalMsg(bts)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestEncodeDecodeTimeSeriesSingleName(t *testing.T) {
+	v := TimeSeriesSingleName{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+
+	m := v.Msgsize()
+	if buf.Len() > m {
+		t.Log("WARNING: TestEncodeDecodeTimeSeriesSingleName Msgsize() is inaccurate")
+	}
+
+	vn := TimeSeriesSingleName{}
+	err := msgp.Decode(&buf, &vn)
+	if err != nil {
+		t.Error(err)
+	}
+
+	buf.Reset()
+	msgp.Encode(&buf, &v)
+	err = msgp.NewReader(&buf).Skip()
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func BenchmarkEncodeTimeSeriesSingleName(b *testing.B) {
+	v := TimeSeriesSingleName{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+	b.SetBytes(int64(buf.Len()))
+	en := msgp.NewWriter(msgp.Nowhere)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		v.EncodeMsg(en)
+	}
+	en.Flush()
+}
+
+func BenchmarkDecodeTimeSeriesSingleName(b *testing.B) {
+	v := TimeSeriesSingleName{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+	b.SetBytes(int64(buf.Len()))
+	rd := msgp.NewEndlessReader(buf.Bytes(), b)
+	dc := msgp.NewReader(rd)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := v.DecodeMsg(dc)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestMarshalUnmarshalUintArray(t *testing.T) {
+	v := UintArray{}
+	bts, err := v.MarshalMsg(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	left, err := v.UnmarshalMsg(bts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) > 0 {
+		t.Errorf("%d bytes left over after UnmarshalMsg(): %q", len(left), left)
+	}
+
+	left, err = msgp.Skip(bts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) > 0 {
+		t.Errorf("%d bytes left over after Skip(): %q", len(left), left)
+	}
+}
+
+func BenchmarkMarshalMsgUintArray(b *testing.B) {
+	v := UintArray{}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		v.MarshalMsg(nil)
+	}
+}
+
+func BenchmarkAppendMsgUintArray(b *testing.B) {
+	v := UintArray{}
+	bts := make([]byte, 0, v.Msgsize())
+	bts, _ = v.MarshalMsg(bts[0:0])
+	b.SetBytes(int64(len(bts)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		bts, _ = v.MarshalMsg(bts[0:0])
+	}
+}
+
+func BenchmarkUnmarshalUintArray(b *testing.B) {
+	v := UintArray{}
+	bts, _ := v.MarshalMsg(nil)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(bts)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := v.UnmarshalMsg(bts)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestEncodeDecodeUintArray(t *testing.T) {
+	v := UintArray{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+
+	m := v.Msgsize()
+	if buf.Len() > m {
+		t.Log("WARNING: TestEncodeDecodeUintArray Msgsize() is inaccurate")
+	}
+
+	vn := UintArray{}
+	err := msgp.Decode(&buf, &vn)
+	if err != nil {
+		t.Error(err)
+	}
+
+	buf.Reset()
+	msgp.Encode(&buf, &v)
+	err = msgp.NewReader(&buf).Skip()
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func BenchmarkEncodeUintArray(b *testing.B) {
+	v := UintArray{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+	b.SetBytes(int64(buf.Len()))
+	en := msgp.NewWriter(msgp.Nowhere)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		v.EncodeMsg(en)
+	}
+	en.Flush()
+}
+
+func BenchmarkDecodeUintArray(b *testing.B) {
+	v := UintArray{}
 	var buf bytes.Buffer
 	msgp.Encode(&buf, &v)
 	b.SetBytes(int64(buf.Len()))

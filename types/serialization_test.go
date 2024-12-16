@@ -48,6 +48,46 @@ func TestLabels(t *testing.T) {
 	}
 }
 
+func TestLabelsTrie(t *testing.T) {
+	lblsMap := make(map[string]string)
+	unique := make(map[string]struct{})
+	for i := 0; i < 1_000; i++ {
+		k := fmt.Sprintf("key_%d", i)
+		v := randString()
+		lblsMap[k] = v
+		unique[k] = struct{}{}
+		unique[v] = struct{}{}
+	}
+	sg := &SeriesGroupSingleName{
+		Series: make([]*TimeSeriesSingleName, 1),
+	}
+	sg.Series[0] = &TimeSeriesSingleName{}
+	sg.Series[0].Labels = labels.FromMap(lblsMap)
+	strMap := make(map[string]uint32)
+
+	sg.Series[0].FillLabelMapping(strMap)
+	stringsSlice := make([]ByteString, len(strMap))
+	for k, v := range strMap {
+		stringsSlice[v] = ByteString([]byte(k))
+	}
+	sg.Strings = stringsSlice
+	buf, err := sg.MarshalMsg(nil)
+	require.NoError(t, err)
+	newSg := &SeriesGroupSingleName{}
+	cache := make(map[uint32][]string)
+
+	newSg, _, err = DeserializeToSeriesTrieGroup(newSg, buf, cache)
+	require.NoError(t, err)
+	series1 := newSg.Series[0]
+	series2 := sg.Series[0]
+	require.Len(t, series2.Labels, len(series1.Labels))
+	// Ensure we were able to convert back and forth properly.
+	for i, lbl := range series2.Labels {
+		require.Equal(t, lbl.Name, series1.Labels[i].Name)
+		require.Equal(t, lbl.Value, series1.Labels[i].Value)
+	}
+}
+
 func BenchmarkFill(b *testing.B) {
 	sg := &SeriesGroup{
 		Series: make([]*TimeSeriesBinary, 0),
@@ -77,6 +117,8 @@ func BenchmarkFill(b *testing.B) {
 }
 
 func BenchmarkDeserialize(b *testing.B) {
+	// BenchmarkDeserialize-24    	    3466	    308306 ns/op
+	// BenchmarkDeserialize-24    	    3369	    317524 ns/op
 	sg := &SeriesGroup{
 		Series: make([]*TimeSeriesBinary, 0),
 	}
@@ -108,6 +150,46 @@ func BenchmarkDeserialize(b *testing.B) {
 	}
 	for i := 0; i < b.N; i++ {
 		_, _, dErr := DeserializeToSeriesGroup(sg, buf)
+		if dErr != nil {
+			panic(dErr.Error())
+		}
+	}
+}
+
+func BenchmarkDeserializeTrie(b *testing.B) {
+	//BenchmarkDeserializeTrie-24    	    8640	    136555 ns/op
+	sg := &SeriesGroupSingleName{
+		Series: make([]*TimeSeriesSingleName, 0),
+	}
+	for k := 0; k < 1_000; k++ {
+		lblsMap := make(map[string]string)
+		for j := 0; j < 10; j++ {
+			key := fmt.Sprintf("key_%d", j)
+			v := randString()
+			lblsMap[key] = v
+		}
+		ss := &TimeSeriesSingleName{}
+		ss.Labels = labels.FromMap(lblsMap)
+		sg.Series = append(sg.Series, ss)
+	}
+	strMapToIndex := make(map[string]uint32, 1_000*10)
+	for _, ts := range sg.Series {
+		ts.FillLabelMapping(strMapToIndex)
+	}
+	stringsSlice := make([]ByteString, len(strMapToIndex))
+	for stringValue, index := range strMapToIndex {
+		stringsSlice[index] = ByteString(stringValue)
+	}
+	sg.Strings = stringsSlice
+
+	var buf []byte
+	buf, err := sg.MarshalMsg(buf)
+	if err != nil {
+		panic(err)
+	}
+	cache := make(map[uint32][]string)
+	for i := 0; i < b.N; i++ {
+		_, _, dErr := DeserializeToSeriesTrieGroup(sg, buf, cache)
 		if dErr != nil {
 			panic(dErr.Error())
 		}

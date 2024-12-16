@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"strings"
 	"sync"
 	"unique"
 	"unsafe"
@@ -157,21 +158,47 @@ func (ts *TimeSeriesBinary) FillLabelMapping(strMapToInt map[string]uint32) {
 			val = uint32(len(strMapToInt))
 			strMapToInt[v.Name] = val
 		}
-		ts.LabelsNames[i] = val
+		ts.LabelsNames[i] = CheapUint32(val)
 
 		val, found = strMapToInt[v.Value]
 		if !found {
 			val = uint32(len(strMapToInt))
 			strMapToInt[v.Value] = val
 		}
-		ts.LabelsValues[i] = val
+		ts.LabelsValues[i] = CheapUint32(val)
 	}
-
 }
 
-func setSliceLength(lbls []uint32, length int) []uint32 {
+func (tst *TimeSeriesSingleName) FillLabelMapping(strMap map[string]uint32) {
+	// Assume the labels are sorted.
+	sb := strings.Builder{}
+	for _, v := range tst.Labels {
+		sb.WriteString(v.Name)
+		// Field separator
+		sb.WriteByte(0x1C)
+		val, found := strMap[v.Value]
+		if !found {
+			index := uint32(len(strMap))
+			strMap[v.Value] = index
+			tst.LabelValues = append(tst.LabelValues, CheapUint32(index))
+		} else {
+			tst.LabelValues = append(tst.LabelValues, CheapUint32(val))
+		}
+	}
+	str := sb.String()
+	result, found := strMap[str]
+	if !found {
+		index := uint32(len(strMap))
+		strMap[str] = index
+		tst.LabelNameID = CheapUint32(index)
+	} else {
+		tst.LabelNameID = CheapUint32(result)
+	}
+}
+
+func setSliceLength(lbls []CheapUint32, length int) []CheapUint32 {
 	if cap(lbls) <= length {
-		lbls = make([]uint32, length)
+		lbls = make([]CheapUint32, length)
 	} else {
 		lbls = lbls[:length]
 	}
@@ -266,6 +293,43 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*SeriesGroup, []byte
 		series.LabelsValues = series.LabelsValues[:0]
 	}
 
+	sg.Strings = sg.Strings[:0]
+	return sg, buf, err
+}
+
+// DeserializeToSeriesTrieGroup transforms a buffer to a SeriesGroup and converts the stringmap + indexes into actual Labels.
+func DeserializeToSeriesTrieGroup(sg *SeriesGroupSingleName, buf []byte, cache map[uint32][]string) (*SeriesGroupSingleName, []byte, error) {
+
+	_, err := sg.UnmarshalMsg(buf)
+
+	if err != nil {
+		return sg, nil, err
+	}
+	// Need to fill in the labels.
+	for _, series := range sg.Series {
+		if cap(series.Labels) < len(series.LabelValues) {
+			series.Labels = make(labels.Labels, len(series.LabelValues))
+		} else {
+			series.Labels = series.Labels[:len(series.LabelValues)]
+		}
+		// Since the LabelNames/LabelValues are indexes into the Strings slice we can access it like the below.
+		// 1 Label corresponds to two entries, one in LabelsNames and one in LabelsValues.
+		var parts []string
+		parts, found := cache[uint32(series.LabelNameID)]
+		if !found {
+			name := sg.Strings[series.LabelNameID]
+			parts = strings.Split(name.String(), string(rune(0x1C)))
+			cache[uint32(series.LabelNameID)] = parts
+		}
+
+		for i := range series.LabelValues {
+			series.Labels[i] = labels.Label{
+				Name:  parts[i],
+				Value: sg.Strings[series.LabelValues[i]].String(),
+			}
+		}
+		series.LabelValues = series.LabelValues[:0]
+	}
 	sg.Strings = sg.Strings[:0]
 	return sg, buf, err
 }

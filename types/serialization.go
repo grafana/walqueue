@@ -1,7 +1,12 @@
 //go:generate msgp
+//msgp:unmarshal ignore ByteString
+//msgp:marshal ignore ByteString
+
 package types
 
-import "github.com/prometheus/prometheus/model/labels"
+import (
+	"github.com/prometheus/prometheus/model/labels"
+)
 
 const MetaType = "__alloy_metadata_type__"
 const MetaUnit = "__alloy_metadata_unit__"
@@ -17,14 +22,29 @@ type SeriesGroup struct {
 	Metadata []*TimeSeriesBinary
 }
 
+type SeriesGroupSingleName struct {
+	Strings []ByteString
+	Series  []*TimeSeriesSingleName
+}
+
+type TimeSeriesSingleName struct {
+	Labels      labels.Labels `msg:"-"`
+	LabelNameID CheapUint32
+	LabelValues UintArray
+	TS          int64
+	Value       float64
+	Hash        uint64
+	Histograms  Histograms
+}
+
 // TimeSeriesBinary is an optimized format for handling metrics and metadata. It should never be instantiated directly
 // but instead use GetTimeSeriesFromPool and PutTimeSeriesSliceIntoPool. This allows us to reuse these objects and avoid
 // allocations.
 type TimeSeriesBinary struct {
 	// Labels are not serialized to msgp, instead we store separately a dictionary of strings and use `LabelNames` and `LabelValues` to refer to the dictionary by ID.
 	Labels       labels.Labels `msg:"-"`
-	LabelsNames  []uint32
-	LabelsValues []uint32
+	LabelsNames  []CheapUint32
+	LabelsValues []CheapUint32
 	// TS is unix milliseconds.
 	TS         int64
 	Value      float64
@@ -32,6 +52,12 @@ type TimeSeriesBinary struct {
 	Histograms Histograms
 }
 
+type UintArray []CheapUint32
+
+type CheapUint32 uint32
+
+//msgp:ignore marshal
+//msgp:ignore unmarshal
 type ByteString []byte
 
 type Histograms struct {

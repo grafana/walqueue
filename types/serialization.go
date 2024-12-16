@@ -16,49 +16,30 @@ const MetaHelp = "__alloy_metadata_help__"
 // When serialized the Labels Key,Value array will be transformed into
 // LabelNames and LabelsValues that point to the index in Strings.
 // This deduplicates the strings and decreases the size on disk.
+//
+//msgp:tuple SeriesGroup
 type SeriesGroup struct {
-	Strings  []ByteString
+	Strings  []string
 	Series   []*TimeSeriesBinary
 	Metadata []*TimeSeriesBinary
-}
-
-type SeriesGroupSingleName struct {
-	Strings []ByteString
-	Series  []*TimeSeriesSingleName
-}
-
-type TimeSeriesSingleName struct {
-	Labels      labels.Labels `msg:"-"`
-	LabelNameID CheapUint32
-	LabelValues UintArray
-	TS          int64
-	Value       float64
-	Hash        uint64
-	Histograms  Histograms
 }
 
 // TimeSeriesBinary is an optimized format for handling metrics and metadata. It should never be instantiated directly
 // but instead use GetTimeSeriesFromPool and PutTimeSeriesSliceIntoPool. This allows us to reuse these objects and avoid
 // allocations.
+//
+//msgp:tuple TimeSeriesBinary
 type TimeSeriesBinary struct {
 	// Labels are not serialized to msgp, instead we store separately a dictionary of strings and use `LabelNames` and `LabelValues` to refer to the dictionary by ID.
 	Labels       labels.Labels `msg:"-"`
-	LabelsNames  []CheapUint32
-	LabelsValues []CheapUint32
+	LabelsNames  []uint32
+	LabelsValues []uint32
 	// TS is unix milliseconds.
 	TS         int64
 	Value      float64
 	Hash       uint64
-	Histograms Histograms
+	Histograms *Histograms
 }
-
-type UintArray []CheapUint32
-
-type CheapUint32 uint32
-
-//msgp:ignore marshal
-//msgp:ignore unmarshal
-type ByteString []byte
 
 type Histograms struct {
 	Histogram      *Histogram

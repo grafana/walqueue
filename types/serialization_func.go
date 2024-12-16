@@ -2,28 +2,14 @@ package types
 
 import (
 	"bytes"
-	"strings"
-	"sync"
-	"unique"
-	"unsafe"
-
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/tinylib/msgp/msgp"
 	"go.uber.org/atomic"
+	"sync"
+	"unique"
 )
-
-// String returns the underlying bytes as a string without copying.
-// This is a huge performance win with no side effect as long as
-// the underlying byte slice is not reused. In this case
-// it is not.
-func (v ByteString) String() string {
-	if len([]byte(v)) == 0 {
-		return ""
-	}
-	return unsafe.String(&v[0], len([]byte(v)))
-}
 
 func (lh LabelHandles) Has(name string) bool {
 	for _, l := range lh {
@@ -158,47 +144,20 @@ func (ts *TimeSeriesBinary) FillLabelMapping(strMapToInt map[string]uint32) {
 			val = uint32(len(strMapToInt))
 			strMapToInt[v.Name] = val
 		}
-		ts.LabelsNames[i] = CheapUint32(val)
+		ts.LabelsNames[i] = uint32(val)
 
 		val, found = strMapToInt[v.Value]
 		if !found {
 			val = uint32(len(strMapToInt))
 			strMapToInt[v.Value] = val
 		}
-		ts.LabelsValues[i] = CheapUint32(val)
+		ts.LabelsValues[i] = uint32(val)
 	}
 }
 
-func (tst *TimeSeriesSingleName) FillLabelMapping(strMap map[string]uint32) {
-	// Assume the labels are sorted.
-	sb := strings.Builder{}
-	for _, v := range tst.Labels {
-		sb.WriteString(v.Name)
-		// Field separator
-		sb.WriteByte(0x1C)
-		val, found := strMap[v.Value]
-		if !found {
-			index := uint32(len(strMap))
-			strMap[v.Value] = index
-			tst.LabelValues = append(tst.LabelValues, CheapUint32(index))
-		} else {
-			tst.LabelValues = append(tst.LabelValues, CheapUint32(val))
-		}
-	}
-	str := sb.String()
-	result, found := strMap[str]
-	if !found {
-		index := uint32(len(strMap))
-		strMap[str] = index
-		tst.LabelNameID = CheapUint32(index)
-	} else {
-		tst.LabelNameID = CheapUint32(result)
-	}
-}
-
-func setSliceLength(lbls []CheapUint32, length int) []CheapUint32 {
+func setSliceLength(lbls []uint32, length int) []uint32 {
 	if cap(lbls) <= length {
-		lbls = make([]CheapUint32, length)
+		lbls = make([]uint32, length)
 	} else {
 		lbls = lbls[:length]
 	}
@@ -222,11 +181,6 @@ type LabelHandle struct {
 }
 
 type LabelHandles []LabelHandle
-
-func (v *ByteString) UnmarshalMsg(bts []byte) (o []byte, err error) {
-	*v, o, err = msgp.ReadStringZC(bts)
-	return o, err
-}
 
 var OutStandingTimeSeriesBinary = atomic.Int32{}
 
@@ -269,8 +223,8 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*SeriesGroup, []byte
 		// 1 Label corresponds to two entries, one in LabelsNames and one in LabelsValues.
 		for i := range series.LabelsNames {
 			series.Labels[i] = labels.Label{
-				Name:  sg.Strings[series.LabelsNames[i]].String(),
-				Value: sg.Strings[series.LabelsValues[i]].String(),
+				Name:  sg.Strings[series.LabelsNames[i]],
+				Value: sg.Strings[series.LabelsValues[i]],
 			}
 		}
 		series.LabelsNames = series.LabelsNames[:0]
@@ -284,8 +238,8 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*SeriesGroup, []byte
 		}
 		for i := range series.LabelsNames {
 			series.Labels[i] = labels.Label{
-				Name:  sg.Strings[series.LabelsNames[i]].String(),
-				Value: sg.Strings[series.LabelsValues[i]].String(),
+				Name:  sg.Strings[series.LabelsNames[i]],
+				Value: sg.Strings[series.LabelsValues[i]],
 			}
 		}
 		// Finally ensure we reset the labelnames and labelvalues.
@@ -293,43 +247,6 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*SeriesGroup, []byte
 		series.LabelsValues = series.LabelsValues[:0]
 	}
 
-	sg.Strings = sg.Strings[:0]
-	return sg, buf, err
-}
-
-// DeserializeToSeriesTrieGroup transforms a buffer to a SeriesGroup and converts the stringmap + indexes into actual Labels.
-func DeserializeToSeriesTrieGroup(sg *SeriesGroupSingleName, buf []byte, cache map[uint32][]string) (*SeriesGroupSingleName, []byte, error) {
-
-	_, err := sg.UnmarshalMsg(buf)
-
-	if err != nil {
-		return sg, nil, err
-	}
-	// Need to fill in the labels.
-	for _, series := range sg.Series {
-		if cap(series.Labels) < len(series.LabelValues) {
-			series.Labels = make(labels.Labels, len(series.LabelValues))
-		} else {
-			series.Labels = series.Labels[:len(series.LabelValues)]
-		}
-		// Since the LabelNames/LabelValues are indexes into the Strings slice we can access it like the below.
-		// 1 Label corresponds to two entries, one in LabelsNames and one in LabelsValues.
-		var parts []string
-		parts, found := cache[uint32(series.LabelNameID)]
-		if !found {
-			name := sg.Strings[series.LabelNameID]
-			parts = strings.Split(name.String(), string(rune(0x1C)))
-			cache[uint32(series.LabelNameID)] = parts
-		}
-
-		for i := range series.LabelValues {
-			series.Labels[i] = labels.Label{
-				Name:  parts[i],
-				Value: sg.Strings[series.LabelValues[i]].String(),
-			}
-		}
-		series.LabelValues = series.LabelValues[:0]
-	}
 	sg.Strings = sg.Strings[:0]
 	return sg, buf, err
 }

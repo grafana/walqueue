@@ -14,6 +14,11 @@ import (
 	"github.com/vladopajic/go-actor/actor"
 )
 
+type FileFormat string
+
+const V1 = FileFormat("v1")
+const Trie = FileFormat("trie.v1")
+
 // serializer collects data from multiple appenders in-memory and will periodically flush the data to file.Storage.
 // serializer will flush based on configured time duration OR if it hits a certain number of items.
 type serializer struct {
@@ -32,9 +37,10 @@ type serializer struct {
 	meta           []*types.TimeSeriesBinary
 	msgpBuffer     []byte
 	stats          func(stats types.SerializerStats)
+	fileFormat     FileFormat
 }
 
-func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(stats types.SerializerStats), l log.Logger) (types.Serializer, error) {
+func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(stats types.SerializerStats), ff FileFormat, l log.Logger) (types.Serializer, error) {
 	s := &serializer{
 		maxItemsBeforeFlush: int(cfg.MaxSignalsInBatch),
 		flushFrequency:      cfg.FlushFrequency,
@@ -48,6 +54,7 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		msgpBuffer:          make([]byte, 0),
 		lastFlush:           time.Now(),
 		stats:               stats,
+		fileFormat:          ff,
 	}
 
 	return s, nil
@@ -140,7 +147,6 @@ func (s *serializer) DoWork(ctx actor.Context) actor.WorkerStatus {
 }
 
 func (s *serializer) flushToDisk(ctx actor.Context) error {
-	var err error
 	defer func() {
 		s.lastFlush = time.Now()
 	}()
@@ -148,6 +154,18 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 	if len(s.series) == 0 && len(s.meta) == 0 {
 		return nil
 	}
+	switch s.fileFormat {
+	case V1:
+		return s.storeV1(ctx)
+	case Trie:
+		return nil
+	default:
+		return fmt.Errorf("invalid file format %s", s.fileFormat)
+	}
+}
+
+func (s *serializer) storeV1(ctx context.Context) error {
+	var err error
 	group := &types.SeriesGroup{
 		Series:   make([]*types.TimeSeriesBinary, len(s.series)),
 		Metadata: make([]*types.TimeSeriesBinary, len(s.meta)),
@@ -196,6 +214,59 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 	}
 	err = s.queue.Store(ctx, meta, out)
 	return err
+
+}
+
+func (s *serializer) storeTrie(ctx context.Context) error {
+	var err error
+	group := &types.SeriesGroupSingleName{
+		Series: make([]*types.TimeSeriesSingleName, len(s.series)),
+	}
+	defer func() {
+		s.storeStats(err)
+		// Return series to the pool, this is key to reducing allocs.
+		types.PutTimeSeriesSliceIntoPool(s.series)
+		types.PutTimeSeriesSliceIntoPool(s.meta)
+		s.series = s.series[:0]
+		s.meta = s.meta[:0]
+	}()
+
+	// This maps strings to index position in a slice. This is doing to reduce the file size of the data.
+	// Assume roughly each series has 10 labels, we do this because at very large mappings growing the map took up to 5% of cpu time.
+	// By pre allocating it that disappeared.
+
+	strMapToIndex := make(map[string]uint32, len(s.series)*10)
+	var count uint32
+	for i, ts := range s.series {
+		tst := &types.TimeSeriesSingleName{
+			Labels: ts.Labels,
+		}
+		count = tst.FillLabelMapping(tr, strMapToIndex, count)
+		group.Series[i] = tst
+	}
+
+	stringsSlice := make([]types.ByteString, len(strMapToIndex))
+	for stringValue, index := range strMapToIndex {
+		stringsSlice[index] = types.ByteString(stringValue)
+	}
+	group.Strings = stringsSlice
+
+	buf, err := group.MarshalMsg(s.msgpBuffer)
+	if err != nil {
+		return err
+	}
+
+	out := snappy.Encode(buf)
+	meta := map[string]string{
+		// product.signal_type.schema.version
+		"version":       types.AlloyFileVersionTrie,
+		"compression":   "snappy",
+		"series_count":  strconv.Itoa(len(group.Series)),
+		"strings_count": strconv.Itoa(len(group.Strings)),
+	}
+	err = s.queue.Store(ctx, meta, out)
+	return err
+
 }
 
 func (s *serializer) storeStats(err error) {

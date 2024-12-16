@@ -35,12 +35,29 @@ func BenchmarkSerializer(b *testing.B) {
 	serial, _ := NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: 1_000,
 		FlushFrequency:    1 * time.Second,
-	}, &fakeFileQueue{}, func(stats types.SerializerStats) {}, logger)
+	}, &fakeFileQueue{}, func(stats types.SerializerStats) {}, V1, logger)
 	serial.Start()
 	for i := 0; i < b.N; i++ {
 		_ = serial.SendSeries(context.Background(), getSingleTimeSeries(b))
 	}
 	serial.Stop()
+}
+
+func BecnchmarkTrie(b *testing.B) {
+	b.ResetTimer()
+	b.ReportAllocs()
+	// This should be ~11 allocs and 1400-1800 ns/op.
+	logger := log.NewNopLogger()
+	serial, _ := NewSerializer(types.SerializerConfig{
+		MaxSignalsInBatch: 1_000,
+		FlushFrequency:    1 * time.Second,
+	}, &fakeFileQueue{}, func(stats types.SerializerStats) {}, Trie, logger)
+	serial.Start()
+	for i := 0; i < b.N; i++ {
+		_ = serial.SendSeries(context.Background(), getSingleTimeSeries(b))
+	}
+	serial.Stop()
+
 }
 
 func getSingleTimeSeries(b *testing.B) *types.TimeSeriesBinary {

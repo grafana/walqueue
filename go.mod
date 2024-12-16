@@ -5,9 +5,10 @@ go 1.23
 toolchain go1.23.1
 
 require (
+	github.com/dghubble/trie v0.1.0
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3
 	github.com/go-kit/log v0.2.1
-	github.com/golang/protobuf v1.5.4
+	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v0.0.4
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/prometheus v0.55.1
@@ -26,7 +27,6 @@ require (
 	github.com/dennwc/varint v1.0.0 // indirect
 	github.com/gammazero/deque v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/grafana/regexp v0.0.0-20240518133315-a468a5bfb3bc // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect

@@ -5,6 +5,7 @@ package serialization
 import (
 	"context"
 	"fmt"
+	"github.com/grafana/walqueue/types/v2"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestRoundTripSerialization(t *testing.T) {
 	s.Start()
 	defer s.Stop()
 	for i := 0; i < 10; i++ {
-		tss := types.GetTimeSeriesFromPool()
+		tss := v2.GetTimeSeriesFromPool()
 		tss.Labels = make(labels.Labels, 10)
 		for j := 0; j < 10; j++ {
 			tss.Labels[j] = labels.Label{
@@ -96,8 +97,8 @@ func (f *fqq) Stop() {
 
 func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) error {
 	f.buf, _ = snappy.Decode(nil, value)
-	sg := &types.SeriesGroup{}
-	sg, _, err := types.DeserializeToSeriesGroup(sg, f.buf)
+	sg := &v2.SeriesGroup{}
+	sg, _, err := v2.DeserializeToSeriesGroup(sg, f.buf)
 	require.NoError(f.t, err)
 	require.Len(f.t, sg.Series, 10)
 	for _, series := range sg.Series {

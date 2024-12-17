@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"strconv"
 	"time"
@@ -173,19 +174,19 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	seriesCount, _ := strconv.Atoi(meta["series_count"])
 	metaCount, _ := strconv.Atoi(meta["meta_count"])
 	stringsCount, _ := strconv.Atoi(meta["strings_count"])
-	sg := &types.SeriesGroup{
-		Series:   make([]*types.TimeSeriesBinary, seriesCount),
-		Metadata: make([]*types.TimeSeriesBinary, metaCount),
+	sg := &v2.SeriesGroup{
+		Series:   make([]*v2.TimeSeriesBinary, seriesCount),
+		Metadata: make([]*v2.TimeSeriesBinary, metaCount),
 		Strings:  make([]types.ByteString, stringsCount),
 	}
 	// Prefill our series with items from the pool to limit allocs.
 	for i := 0; i < seriesCount; i++ {
-		sg.Series[i] = types.GetTimeSeriesFromPool()
+		sg.Series[i] = v2.GetTimeSeriesFromPool()
 	}
 	for i := 0; i < metaCount; i++ {
-		sg.Metadata[i] = types.GetTimeSeriesFromPool()
+		sg.Metadata[i] = v2.GetTimeSeriesFromPool()
 	}
-	sg, q.buf, err = types.DeserializeToSeriesGroup(sg, q.buf)
+	sg, q.buf, err = v2.DeserializeToSeriesGroup(sg, q.buf)
 	if err != nil {
 		level.Debug(q.logger).Log("msg", "error deserializing", "err", err)
 		return
@@ -198,7 +199,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		// but instead drop it here by continuing.
 		if seriesAge > q.ttl {
 			// Since we arent pushing the TS forward we should put it back into the pool.
-			types.PutTimeSeriesIntoPool(series)
+			v2.PutTimeSeriesIntoPool(series)
 			q.stats.NetworkTTLDrops.Inc()
 			continue
 		}

@@ -1,4 +1,4 @@
-package types
+package v2
 
 import (
 	"bytes"
@@ -206,7 +206,6 @@ func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
 
 // DeserializeToSeriesGroup transforms a buffer to a SeriesGroup and converts the stringmap + indexes into actual Labels.
 func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*SeriesGroup, []byte, error) {
-
 	nr := msgp.NewReader(bytes.NewReader(buf))
 	err := sg.DecodeMsg(nr)
 	if err != nil {

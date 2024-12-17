@@ -1,4 +1,4 @@
-package types
+package v2
 
 import (
 	"fmt"
@@ -82,6 +82,8 @@ func BenchmarkDeserialize(b *testing.B) {
 	// BenchmarkDeserialize-24    	   22902	     52369 ns/op with tuples enabled and histogram a pointer
 	// BenchmarkDeserialize-24    	   22716	     52975 ns/op with tuples enabled and histogram a pointer and no byte string
 	// BenchmarkDeserialize-24    	   21482	     53150 ns/op with tuples enabled and histogram a pointer and no byte string and basic type
+	// BenchmarkDeserialize-24    	   27969	     42653 ns/op same as above but reusing buffer.
+
 	sg := &SeriesGroup{
 		Series: make([]*TimeSeriesBinary, 0),
 	}
@@ -105,16 +107,17 @@ func BenchmarkDeserialize(b *testing.B) {
 		stringsSlice[index] = stringValue
 	}
 	sg.Strings = stringsSlice
-
+	var buf []byte
+	var err error
 	for i := 0; i < b.N; i++ {
-		var buf []byte
-		buf, err := sg.MarshalMsg(buf)
+		buf = buf[:0]
+		buf, err = sg.MarshalMsg(buf)
 		if err != nil {
 			panic(err)
 		}
-		_, _, dErr := DeserializeToSeriesGroup(sg, buf)
-		if dErr != nil {
-			panic(dErr.Error())
+		sg, _, err = DeserializeToSeriesGroup(sg, buf)
+		if err != nil {
+			panic(err.Error())
 		}
 	}
 }

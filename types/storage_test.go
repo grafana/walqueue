@@ -1,6 +1,7 @@
 package types
 
 import (
+	"github.com/grafana/walqueue/types/v2"
 	"testing"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -8,16 +9,16 @@ import (
 )
 
 func TestStorage(t *testing.T) {
-	ts := GetTimeSeriesFromPool()
+	ts := v2.GetTimeSeriesFromPool()
 	ts.Labels = labels.FromStrings("one", "two")
 	ts.LabelsValues = make([]uint32, 1)
 	ts.LabelsNames = make([]uint32, 1)
 	ts.LabelsValues[0] = 1
 	ts.LabelsNames[0] = 2
 
-	PutTimeSeriesIntoPool(ts)
-	ts = GetTimeSeriesFromPool()
-	defer PutTimeSeriesIntoPool(ts)
+	v2.PutTimeSeriesIntoPool(ts)
+	ts = v2.GetTimeSeriesFromPool()
+	defer v2.PutTimeSeriesIntoPool(ts)
 	require.Len(t, ts.Labels, 0)
 	require.Len(t, ts.LabelsValues, 0)
 	require.Len(t, ts.LabelsNames, 0)

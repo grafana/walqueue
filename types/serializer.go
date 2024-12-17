@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"github.com/grafana/walqueue/types/v2"
 	"time"
 )
 
@@ -20,7 +21,7 @@ type SerializerConfig struct {
 type Serializer interface {
 	Start()
 	Stop()
-	SendSeries(ctx context.Context, data *TimeSeriesBinary) error
-	SendMetadata(ctx context.Context, data *TimeSeriesBinary) error
+	SendSeries(ctx context.Context, data *v2.TimeSeriesBinary) error
+	SendMetadata(ctx context.Context, data *v2.TimeSeriesBinary) error
 	UpdateConfig(ctx context.Context, cfg SerializerConfig) (bool, error)
 }

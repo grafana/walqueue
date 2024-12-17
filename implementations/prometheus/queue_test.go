@@ -3,6 +3,7 @@ package prometheus
 import (
 	"context"
 	"github.com/golang/snappy"
+	"github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/prompb"
 	"go.uber.org/atomic"
@@ -105,7 +106,7 @@ func TestQueue_Appender(t *testing.T) {
 			require.Eventually(t, func() bool {
 				return recordsFound.Load() == tt.metricCount
 			}, 10*time.Second, 100*time.Millisecond)
-			require.True(t, types.OutStandingTimeSeriesBinary.Load() == 0)
+			require.True(t, v2.OutStandingTimeSeriesBinary.Load() == 0)
 		})
 	}
 }

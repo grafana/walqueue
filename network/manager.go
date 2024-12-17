@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-kit/log/level"
+	"github.com/grafana/walqueue/types/v2"
 
 	"github.com/go-kit/log"
 	"github.com/grafana/walqueue/types"
@@ -15,8 +16,8 @@ type manager struct {
 	loops       []*loop
 	metadata    *loop
 	logger      log.Logger
-	inbox       actor.Mailbox[*types.TimeSeriesBinary]
-	metaInbox   actor.Mailbox[*types.TimeSeriesBinary]
+	inbox       actor.Mailbox[*v2.TimeSeriesBinary]
+	metaInbox   actor.Mailbox[*v2.TimeSeriesBinary]
 	configInbox *types.SyncMailbox[types.ConnectionConfig, bool]
 	self        actor.Actor
 	cfg         types.ConnectionConfig
@@ -34,8 +35,8 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 		logger: logger,
 		// This provides blocking to only handle one at a time, so that if a queue blocks
 		// it will stop the filequeue from feeding more. Without passing true the minimum is actually 64 instead of 1.
-		inbox:       actor.NewMailbox[*types.TimeSeriesBinary](actor.OptCapacity(1), actor.OptAsChan()),
-		metaInbox:   actor.NewMailbox[*types.TimeSeriesBinary](actor.OptCapacity(1), actor.OptAsChan()),
+		inbox:       actor.NewMailbox[*v2.TimeSeriesBinary](actor.OptCapacity(1), actor.OptAsChan()),
+		metaInbox:   actor.NewMailbox[*v2.TimeSeriesBinary](actor.OptCapacity(1), actor.OptAsChan()),
 		configInbox: types.NewSyncMailbox[types.ConnectionConfig, bool](),
 		stats:       seriesStats,
 		metaStats:   metadataStats,
@@ -72,11 +73,11 @@ func (s *manager) Start() {
 	s.self.Start()
 }
 
-func (s *manager) SendSeries(ctx context.Context, data *types.TimeSeriesBinary) error {
+func (s *manager) SendSeries(ctx context.Context, data *v2.TimeSeriesBinary) error {
 	return s.inbox.Send(ctx, data)
 }
 
-func (s *manager) SendMetadata(ctx context.Context, data *types.TimeSeriesBinary) error {
+func (s *manager) SendMetadata(ctx context.Context, data *v2.TimeSeriesBinary) error {
 	return s.metaInbox.Send(ctx, data)
 }
 
@@ -201,7 +202,7 @@ func (s *manager) startLoops() {
 }
 
 // Queue adds anything thats not metadata to the queue.
-func (s *manager) queue(ctx context.Context, ts *types.TimeSeriesBinary) {
+func (s *manager) queue(ctx context.Context, ts *v2.TimeSeriesBinary) {
 	// Based on a hash which is the label hash add to the queue.
 	queueNum := ts.Hash % uint64(s.cfg.Connections)
 	// This will block if the queue is full.

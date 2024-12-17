@@ -1,6 +1,7 @@
 package network
 
 import (
+	"github.com/grafana/walqueue/types/v2"
 	"net/http"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 
 // recordStats determines what values to send to the stats function. This allows for any
 // number of metrics/signals libraries to be used. Prometheus, OTel, and any other.
-func recordStats(series []*types.TimeSeriesBinary, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
+func recordStats(series []*v2.TimeSeriesBinary, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
 	seriesCount := getSeriesCount(series)
 	histogramCount := getHistogramCount(series)
 	metadataCount := getMetadataCount(series)
@@ -99,7 +100,7 @@ func recordStats(series []*types.TimeSeriesBinary, isMeta bool, stats func(s typ
 
 }
 
-func getSeriesCount(tss []*types.TimeSeriesBinary) int {
+func getSeriesCount(tss []*v2.TimeSeriesBinary) int {
 	cnt := 0
 	for _, ts := range tss {
 		// This is metadata
@@ -113,7 +114,7 @@ func getSeriesCount(tss []*types.TimeSeriesBinary) int {
 	return cnt
 }
 
-func getHistogramCount(tss []*types.TimeSeriesBinary) int {
+func getHistogramCount(tss []*v2.TimeSeriesBinary) int {
 	cnt := 0
 	for _, ts := range tss {
 		if isMetadata(ts) {

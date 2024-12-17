@@ -2,7 +2,7 @@
 //msgp:unmarshal ignore ByteString
 //msgp:marshal ignore ByteString
 
-package types
+package v2
 
 import (
 	"github.com/prometheus/prometheus/model/labels"

@@ -3,6 +3,7 @@ package serialization
 import (
 	"context"
 	"fmt"
+	"github.com/grafana/walqueue/types/v2"
 	"math/rand"
 	"testing"
 	"time"
@@ -60,9 +61,9 @@ func BecnchmarkTrie(b *testing.B) {
 
 }
 
-func getSingleTimeSeries(b *testing.B) *types.TimeSeriesBinary {
+func getSingleTimeSeries(b *testing.B) *v2.TimeSeriesBinary {
 	b.Helper()
-	timeseries := types.GetTimeSeriesFromPool()
+	timeseries := v2.GetTimeSeriesFromPool()
 	timeseries.TS = time.Now().Unix()
 	timeseries.Value = rand.Float64()
 	timeseries.Labels = getLabels()
@@ -94,13 +95,13 @@ func (f *fakeSerializer) Start() {}
 
 func (f *fakeSerializer) Stop() {}
 
-func (f *fakeSerializer) SendSeries(ctx context.Context, data *types.TimeSeriesBinary) error {
-	types.PutTimeSeriesIntoPool(data)
+func (f *fakeSerializer) SendSeries(ctx context.Context, data *v2.TimeSeriesBinary) error {
+	v2.PutTimeSeriesIntoPool(data)
 	return nil
 }
 
-func (f *fakeSerializer) SendMetadata(ctx context.Context, data *types.TimeSeriesBinary) error {
-	types.PutTimeSeriesIntoPool(data)
+func (f *fakeSerializer) SendMetadata(ctx context.Context, data *v2.TimeSeriesBinary) error {
+	v2.PutTimeSeriesIntoPool(data)
 	return nil
 }
 

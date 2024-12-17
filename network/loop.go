@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/grafana/walqueue/types/v2"
 	"io"
 	"net/http"
 	"strconv"
@@ -30,7 +31,7 @@ var _ actor.Worker = (*loop)(nil)
 // loop config cannot be updated, it is easier to recreate. This does mean we lose any signals in the queue.
 type loop struct {
 	isMeta         bool
-	seriesMbx      actor.Mailbox[*types.TimeSeriesBinary]
+	seriesMbx      actor.Mailbox[*v2.TimeSeriesBinary]
 	client         *http.Client
 	cfg            types.ConnectionConfig
 	log            log.Logger
@@ -38,7 +39,7 @@ type loop struct {
 	statsFunc      func(s types.NetworkStats)
 	stopCalled     atomic.Bool
 	externalLabels map[string]string
-	series         []*types.TimeSeriesBinary
+	series         []*v2.TimeSeriesBinary
 	self           actor.Actor
 	ticker         *time.Ticker
 	buf            *proto.Buffer
@@ -78,7 +79,7 @@ func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats fun
 
 	return &loop{
 		isMeta:         isMetaData,
-		seriesMbx:      actor.NewMailbox[*types.TimeSeriesBinary](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
+		seriesMbx:      actor.NewMailbox[*v2.TimeSeriesBinary](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
 		client:         client,
 		cfg:            cc,
 		log:            log.With(l, "name", "loop", "url", cc.URL),
@@ -179,9 +180,9 @@ type sendResult struct {
 }
 
 func (l *loop) sendingCleanup() {
-	types.PutTimeSeriesSliceIntoPool(l.series)
+	v2.PutTimeSeriesSliceIntoPool(l.series)
 	l.sendBuffer = l.sendBuffer[:0]
-	l.series = make([]*types.TimeSeriesBinary, 0, l.cfg.BatchCount)
+	l.series = make([]*v2.TimeSeriesBinary, 0, l.cfg.BatchCount)
 	l.lastSend = time.Now()
 }
 
@@ -264,7 +265,7 @@ func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 	return result
 }
 
-func createWriteRequest(series []*types.TimeSeriesBinary, externalLabels map[string]string, data *proto.Buffer) ([]byte, error) {
+func createWriteRequest(series []*v2.TimeSeriesBinary, externalLabels map[string]string, data *proto.Buffer) ([]byte, error) {
 	wr := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, len(series))}
 
 	for i, tsBuf := range series {
@@ -328,7 +329,7 @@ func createWriteRequest(series []*types.TimeSeriesBinary, externalLabels map[str
 	return data.Bytes(), err
 }
 
-func createWriteRequestMetadata(l log.Logger, series []*types.TimeSeriesBinary, data *proto.Buffer) ([]byte, error) {
+func createWriteRequestMetadata(l log.Logger, series []*v2.TimeSeriesBinary, data *proto.Buffer) ([]byte, error) {
 	wr := &prompb.WriteRequest{}
 
 	// Metadata is rarely sent so having this being less than optimal is fine.
@@ -346,7 +347,7 @@ func createWriteRequestMetadata(l log.Logger, series []*types.TimeSeriesBinary, 
 	return data.Bytes(), err
 }
 
-func getMetadataCount(tss []*types.TimeSeriesBinary) int {
+func getMetadataCount(tss []*v2.TimeSeriesBinary) int {
 	var cnt int
 	for _, ts := range tss {
 		if isMetadata(ts) {
@@ -356,20 +357,20 @@ func getMetadataCount(tss []*types.TimeSeriesBinary) int {
 	return cnt
 }
 
-func isMetadata(ts *types.TimeSeriesBinary) bool {
-	return ts.Labels.Has(types.MetaType) &&
-		ts.Labels.Has(types.MetaUnit) &&
-		ts.Labels.Has(types.MetaHelp)
+func isMetadata(ts *v2.TimeSeriesBinary) bool {
+	return ts.Labels.Has(v2.MetaType) &&
+		ts.Labels.Has(v2.MetaUnit) &&
+		ts.Labels.Has(v2.MetaHelp)
 }
 
-func toMetadata(ts *types.TimeSeriesBinary) (prompb.MetricMetadata, bool) {
+func toMetadata(ts *v2.TimeSeriesBinary) (prompb.MetricMetadata, bool) {
 	if !isMetadata(ts) {
 		return prompb.MetricMetadata{}, false
 	}
 	return prompb.MetricMetadata{
-		Type:             prompb.MetricMetadata_MetricType(prompb.MetricMetadata_MetricType_value[strings.ToUpper(ts.Labels.Get(types.MetaType))]),
-		Help:             ts.Labels.Get(types.MetaHelp),
-		Unit:             ts.Labels.Get(types.MetaUnit),
+		Type:             prompb.MetricMetadata_MetricType(prompb.MetricMetadata_MetricType_value[strings.ToUpper(ts.Labels.Get(v2.MetaType))]),
+		Help:             ts.Labels.Get(v2.MetaHelp),
+		Unit:             ts.Labels.Get(v2.MetaUnit),
 		MetricFamilyName: ts.Labels.Get("__name__"),
 	}, true
 }

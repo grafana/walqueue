@@ -9,7 +9,7 @@ import (
 )
 
 func TestStorage(t *testing.T) {
-	ts := v2.GetTimeSeriesFromPool()
+	ts := v2.getTimeSeriesFromPool()
 	ts.Labels = labels.FromStrings("one", "two")
 	ts.LabelsValues = make([]uint32, 1)
 	ts.LabelsNames = make([]uint32, 1)
@@ -17,7 +17,7 @@ func TestStorage(t *testing.T) {
 	ts.LabelsNames[0] = 2
 
 	v2.PutTimeSeriesIntoPool(ts)
-	ts = v2.GetTimeSeriesFromPool()
+	ts = v2.getTimeSeriesFromPool()
 	defer v2.PutTimeSeriesIntoPool(ts)
 	require.Len(t, ts.Labels, 0)
 	require.Len(t, ts.LabelsValues, 0)

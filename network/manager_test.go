@@ -2,7 +2,6 @@ package network
 
 import (
 	"context"
-	"github.com/grafana/walqueue/types/v2"
 	"io"
 	"math/rand"
 	"net/http"
@@ -278,8 +277,8 @@ func handler(t *testing.T, code int, callback func(wr *prompb.WriteRequest)) htt
 	})
 }
 
-func createSeries(_ *testing.T) *v2.TimeSeriesBinary {
-	ts := &v2.TimeSeriesBinary{
+func createSeries(_ *testing.T) *types.Metric {
+	ts := &types.Metric{
 		TS:    time.Now().Unix(),
 		Value: 1,
 		Labels: []labels.Label{

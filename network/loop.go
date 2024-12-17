@@ -31,7 +31,7 @@ var _ actor.Worker = (*loop)(nil)
 // loop config cannot be updated, it is easier to recreate. This does mean we lose any signals in the queue.
 type loop struct {
 	isMeta         bool
-	seriesMbx      actor.Mailbox[*v2.TimeSeriesBinary]
+	seriesMbx      actor.Mailbox[*types.Metric]
 	client         *http.Client
 	cfg            types.ConnectionConfig
 	log            log.Logger
@@ -39,7 +39,7 @@ type loop struct {
 	statsFunc      func(s types.NetworkStats)
 	stopCalled     atomic.Bool
 	externalLabels map[string]string
-	series         []*v2.TimeSeriesBinary
+	series         []*types.Metric
 	self           actor.Actor
 	ticker         *time.Ticker
 	buf            *proto.Buffer
@@ -79,7 +79,7 @@ func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats fun
 
 	return &loop{
 		isMeta:         isMetaData,
-		seriesMbx:      actor.NewMailbox[*v2.TimeSeriesBinary](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
+		seriesMbx:      actor.NewMailbox[*types.Metric](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
 		client:         client,
 		cfg:            cc,
 		log:            log.With(l, "name", "loop", "url", cc.URL),
@@ -180,9 +180,9 @@ type sendResult struct {
 }
 
 func (l *loop) sendingCleanup() {
-	v2.PutTimeSeriesSliceIntoPool(l.series)
+	types.PutMetricsIntoPool(l.series)
 	l.sendBuffer = l.sendBuffer[:0]
-	l.series = make([]*v2.TimeSeriesBinary, 0, l.cfg.BatchCount)
+	l.series = make([]*types.Metric, 0, l.cfg.BatchCount)
 	l.lastSend = time.Now()
 }
 
@@ -265,7 +265,7 @@ func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 	return result
 }
 
-func createWriteRequest(series []*v2.TimeSeriesBinary, externalLabels map[string]string, data *proto.Buffer) ([]byte, error) {
+func createWriteRequest(series []*types.Metric, externalLabels map[string]string, data *proto.Buffer) ([]byte, error) {
 	wr := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, len(series))}
 
 	for i, tsBuf := range series {
@@ -285,16 +285,17 @@ func createWriteRequest(series []*v2.TimeSeriesBinary, externalLabels map[string
 		} else {
 			ts.Histograms = ts.Histograms[:0]
 		}
-		if tsBuf.Histograms.Histogram != nil {
+		if tsBuf.Histogram != nil {
 			ts.Histograms = ts.Histograms[:1]
-			ts.Histograms[0] = tsBuf.Histograms.Histogram.ToPromHistogram()
+			ts.Histograms[0] = prompb.FromIntHistogram(tsBuf.TS, tsBuf.Histogram)
 		}
-		if tsBuf.Histograms.FloatHistogram != nil {
+		if tsBuf.FloatHistogram != nil {
 			ts.Histograms = ts.Histograms[:1]
-			ts.Histograms[0] = tsBuf.Histograms.FloatHistogram.ToPromFloatHistogram()
+			ts.Histograms[0] = prompb.FromFloatHistogram(tsBuf.TS, tsBuf.FloatHistogram)
+
 		}
 
-		if tsBuf.Histograms.Histogram == nil && tsBuf.Histograms.FloatHistogram == nil {
+		if tsBuf.Histogram == nil && tsBuf.FloatHistogram == nil {
 			ts.Histograms = ts.Histograms[:0]
 		}
 
@@ -329,7 +330,7 @@ func createWriteRequest(series []*v2.TimeSeriesBinary, externalLabels map[string
 	return data.Bytes(), err
 }
 
-func createWriteRequestMetadata(l log.Logger, series []*v2.TimeSeriesBinary, data *proto.Buffer) ([]byte, error) {
+func createWriteRequestMetadata(l log.Logger, series []*types.Metric, data *proto.Buffer) ([]byte, error) {
 	wr := &prompb.WriteRequest{}
 
 	// Metadata is rarely sent so having this being less than optimal is fine.
@@ -347,7 +348,7 @@ func createWriteRequestMetadata(l log.Logger, series []*v2.TimeSeriesBinary, dat
 	return data.Bytes(), err
 }
 
-func getMetadataCount(tss []*v2.TimeSeriesBinary) int {
+func getMetadataCount(tss []*types.Metric) int {
 	var cnt int
 	for _, ts := range tss {
 		if isMetadata(ts) {
@@ -357,13 +358,13 @@ func getMetadataCount(tss []*v2.TimeSeriesBinary) int {
 	return cnt
 }
 
-func isMetadata(ts *v2.TimeSeriesBinary) bool {
+func isMetadata(ts *types.Metric) bool {
 	return ts.Labels.Has(v2.MetaType) &&
 		ts.Labels.Has(v2.MetaUnit) &&
 		ts.Labels.Has(v2.MetaHelp)
 }
 
-func toMetadata(ts *v2.TimeSeriesBinary) (prompb.MetricMetadata, bool) {
+func toMetadata(ts *types.Metric) (prompb.MetricMetadata, bool) {
 	if !isMetadata(ts) {
 		return prompb.MetricMetadata{}, false
 	}

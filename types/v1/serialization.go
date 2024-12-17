@@ -1,19 +1,14 @@
 //go:generate msgp
-package v2
+package v1
 
 const MetaType = "__alloy_metadata_type__"
 const MetaUnit = "__alloy_metadata_unit__"
 const MetaHelp = "__alloy_metadata_help__"
 
-//msgp:ignore marshal ByteString
-type ByteString []byte
-
 // SeriesGroup is the holder for TimeSeries, Metadata, and the strings array.
 // When serialized the Labels Key,Value array will be transformed into
 // LabelNames and LabelsValues that point to the index in Strings.
 // This deduplicates the strings and decreases the size on disk.
-//
-//msgp:tuple SeriesGroup
 type SeriesGroup struct {
 	Strings  []ByteString
 	Series   []*TimeSeriesBinary
@@ -21,26 +16,26 @@ type SeriesGroup struct {
 }
 
 // TimeSeriesBinary is an optimized format for handling metrics and metadata. It should never be instantiated directly
-// but instead use getTimeSeriesFromPool and putTimeSeriesSliceIntoPool. This allows us to reuse these objects and avoid
+// but instead use GetTimeSeriesFromPool and PutTimeSeriesSliceIntoPool. This allows us to reuse these objects and avoid
 // allocations.
-//
-//msgp:tuple TimeSeriesBinary
 type TimeSeriesBinary struct {
+	// Labels are not serialized to msgp, instead we store separately a dictionary of strings and use `LabelNames` and `LabelValues` to refer to the dictionary by ID.
 	LabelsNames  []uint32
 	LabelsValues []uint32
 	// TS is unix milliseconds.
 	TS         int64
 	Value      float64
 	Hash       uint64
-	Histograms *Histograms
+	Histograms Histograms
 }
+
+type ByteString []byte
 
 type Histograms struct {
 	Histogram      *Histogram
 	FloatHistogram *FloatHistogram
 }
 
-//msgp:tuple Histogram
 type Histogram struct {
 	Count                HistogramCount
 	Sum                  float64
@@ -57,7 +52,6 @@ type Histogram struct {
 	TimestampMillisecond int64
 }
 
-//msgp:tuple FloatHistogram
 type FloatHistogram struct {
 	Count                HistogramCount
 	Sum                  float64

@@ -2,13 +2,16 @@ package types
 
 import (
 	"context"
-	"github.com/grafana/walqueue/types/v2"
 	"time"
 )
 
-const AlloyFileVersion = "alloy.metrics.queue.v1"
+type FileFormat string
 
-const AlloyFileVersionTrie = "alloy.metrics.queue.trie.v1"
+const AlloyFileVersionV1 = FileFormat("alloy.metrics.queue.v1")
+
+// AlloyFileVersionV2 uses msgp, but instead of string keys uses field names like tuples and doesn't always
+// save/restore histograms if they are nil. This can have up to 3x increase versus v1.
+const AlloyFileVersionV2 = FileFormat("alloy.metrics.queue.v2")
 
 type SerializerConfig struct {
 	// MaxSignalsInBatch controls what the max batch size is.
@@ -21,7 +24,7 @@ type SerializerConfig struct {
 type Serializer interface {
 	Start()
 	Stop()
-	SendSeries(ctx context.Context, data *v2.TimeSeriesBinary) error
-	SendMetadata(ctx context.Context, data *v2.TimeSeriesBinary) error
+	SendSeries(ctx context.Context, data *Metric) error
+	SendMetadata(ctx context.Context, data *Metric) error
 	UpdateConfig(ctx context.Context, cfg SerializerConfig) (bool, error)
 }

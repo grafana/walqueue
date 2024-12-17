@@ -1,7 +1,6 @@
 package network
 
 import (
-	"github.com/grafana/walqueue/types/v2"
 	"net/http"
 	"time"
 
@@ -10,7 +9,7 @@ import (
 
 // recordStats determines what values to send to the stats function. This allows for any
 // number of metrics/signals libraries to be used. Prometheus, OTel, and any other.
-func recordStats(series []*v2.TimeSeriesBinary, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
+func recordStats(series []*types.Metric, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
 	seriesCount := getSeriesCount(series)
 	histogramCount := getHistogramCount(series)
 	metadataCount := getMetadataCount(series)
@@ -100,27 +99,27 @@ func recordStats(series []*v2.TimeSeriesBinary, isMeta bool, stats func(s types.
 
 }
 
-func getSeriesCount(tss []*v2.TimeSeriesBinary) int {
+func getSeriesCount(tss []*types.Metric) int {
 	cnt := 0
 	for _, ts := range tss {
 		// This is metadata
 		if isMetadata(ts) {
 			continue
 		}
-		if ts.Histograms.Histogram == nil && ts.Histograms.FloatHistogram == nil {
+		if ts.Histogram == nil && ts.FloatHistogram == nil {
 			cnt++
 		}
 	}
 	return cnt
 }
 
-func getHistogramCount(tss []*v2.TimeSeriesBinary) int {
+func getHistogramCount(tss []*types.Metric) int {
 	cnt := 0
 	for _, ts := range tss {
 		if isMetadata(ts) {
 			continue
 		}
-		if ts.Histograms.Histogram != nil || ts.Histograms.FloatHistogram != nil {
+		if ts.Histogram != nil || ts.FloatHistogram != nil {
 			cnt++
 		}
 	}

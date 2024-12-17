@@ -2,7 +2,7 @@ package prometheus
 
 import (
 	"context"
-	"github.com/grafana/walqueue/types/v2"
+	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"strconv"
 	"time"
@@ -100,7 +100,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	serial, err := serialization.NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: maxSignalsToBatch,
 		FlushFrequency:    flushInterval,
-	}, q.queue, stats.UpdateSerializer, logger)
+	}, q.queue, stats.UpdateSerializer, types.AlloyFileVersionV2, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -166,25 +166,32 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		level.Error(q.logger).Log("msg", "version not found for deserialization")
 		return
 	}
-	if version != types.AlloyFileVersion {
+	switch version {
+
+	}
+	if version != types.AlloyFileVersionV2 {
 		level.Error(q.logger).Log("msg", "invalid version found for deserialization", "version", version)
 		return
 	}
+
+}
+
+func (q *queue) serializeV2(ctx context.Context, meta map[string]string, buf []byte) {
 	// Grab the amounts of each type and we can go ahead and alloc the space.
 	seriesCount, _ := strconv.Atoi(meta["series_count"])
 	metaCount, _ := strconv.Atoi(meta["meta_count"])
 	stringsCount, _ := strconv.Atoi(meta["strings_count"])
 	sg := &v2.SeriesGroup{
-		Series:   make([]*v2.TimeSeriesBinary, seriesCount),
-		Metadata: make([]*v2.TimeSeriesBinary, metaCount),
-		Strings:  make([]types.ByteString, stringsCount),
+		Series:   make([]*types.Metric, seriesCount),
+		Metadata: make([]*types.Metric, metaCount),
+		Strings:  make([]string, stringsCount),
 	}
 	// Prefill our series with items from the pool to limit allocs.
 	for i := 0; i < seriesCount; i++ {
-		sg.Series[i] = v2.GetTimeSeriesFromPool()
+		sg.Series[i] = v2.getTimeSeriesFromPool()
 	}
 	for i := 0; i < metaCount; i++ {
-		sg.Metadata[i] = v2.GetTimeSeriesFromPool()
+		sg.Metadata[i] = v2.getTimeSeriesFromPool()
 	}
 	sg, q.buf, err = v2.DeserializeToSeriesGroup(sg, q.buf)
 	if err != nil {

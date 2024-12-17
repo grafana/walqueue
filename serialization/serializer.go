@@ -15,16 +15,11 @@ import (
 	"github.com/vladopajic/go-actor/actor"
 )
 
-type FileFormat string
-
-const V1 = FileFormat("v1")
-const Trie = FileFormat("trie.v1")
-
 // serializer collects data from multiple appenders in-memory and will periodically flush the data to file.Storage.
 // serializer will flush based on configured time duration OR if it hits a certain number of items.
 type serializer struct {
-	inbox               actor.Mailbox[*v2.TimeSeriesBinary]
-	metaInbox           actor.Mailbox[*v2.TimeSeriesBinary]
+	inbox               actor.Mailbox[*types.Metric]
+	metaInbox           actor.Mailbox[*types.Metric]
 	cfgInbox            *types.SyncMailbox[types.SerializerConfig, bool]
 	maxItemsBeforeFlush int
 	flushFrequency      time.Duration
@@ -34,8 +29,8 @@ type serializer struct {
 	self                actor.Actor
 	// Every 1 second we should check if we need to flush.
 	flushTestTimer *time.Ticker
-	series         []*v2.TimeSeriesBinary
-	meta           []*v2.TimeSeriesBinary
+	series         []*types.Metric
+	meta           []*types.Metric
 	msgpBuffer     []byte
 	stats          func(stats types.SerializerStats)
 	fileFormat     FileFormat
@@ -46,10 +41,10 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		maxItemsBeforeFlush: int(cfg.MaxSignalsInBatch),
 		flushFrequency:      cfg.FlushFrequency,
 		queue:               q,
-		series:              make([]*v2.TimeSeriesBinary, 0),
+		series:              make([]*types.Metric, 0),
 		logger:              l,
-		inbox:               actor.NewMailbox[*v2.TimeSeriesBinary](),
-		metaInbox:           actor.NewMailbox[*v2.TimeSeriesBinary](),
+		inbox:               actor.NewMailbox[*types.Metric](),
+		metaInbox:           actor.NewMailbox[*types.Metric](),
 		cfgInbox:            types.NewSyncMailbox[types.SerializerConfig, bool](),
 		flushTestTimer:      time.NewTicker(1 * time.Second),
 		msgpBuffer:          make([]byte, 0),
@@ -70,11 +65,11 @@ func (s *serializer) Stop() {
 	s.self.Stop()
 }
 
-func (s *serializer) SendSeries(ctx context.Context, data *v2.TimeSeriesBinary) error {
+func (s *serializer) SendSeries(ctx context.Context, data *types.Metric) error {
 	return s.inbox.Send(ctx, data)
 }
 
-func (s *serializer) SendMetadata(ctx context.Context, data *v2.TimeSeriesBinary) error {
+func (s *serializer) SendMetadata(ctx context.Context, data *types.Metric) error {
 	return s.metaInbox.Send(ctx, data)
 }
 
@@ -168,14 +163,14 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 func (s *serializer) storeV1(ctx context.Context) error {
 	var err error
 	group := &v2.SeriesGroup{
-		Series:   make([]*v2.TimeSeriesBinary, len(s.series)),
-		Metadata: make([]*v2.TimeSeriesBinary, len(s.meta)),
+		Series:   make([]*types.Metric, len(s.series)),
+		Metadata: make([]*types.Metric, len(s.meta)),
 	}
 	defer func() {
 		s.storeStats(err)
 		// Return series to the pool, this is key to reducing allocs.
-		v2.PutTimeSeriesSliceIntoPool(s.series)
-		v2.PutTimeSeriesSliceIntoPool(s.meta)
+		v2.putTimeSeriesSliceIntoPool(s.series)
+		v2.putTimeSeriesSliceIntoPool(s.meta)
 		s.series = s.series[:0]
 		s.meta = s.meta[:0]
 	}()
@@ -226,8 +221,8 @@ func (s *serializer) storeTrie(ctx context.Context) error {
 	defer func() {
 		s.storeStats(err)
 		// Return series to the pool, this is key to reducing allocs.
-		v2.PutTimeSeriesSliceIntoPool(s.series)
-		v2.PutTimeSeriesSliceIntoPool(s.meta)
+		v2.putTimeSeriesSliceIntoPool(s.series)
+		v2.putTimeSeriesSliceIntoPool(s.meta)
 		s.series = s.series[:0]
 		s.meta = s.meta[:0]
 	}()

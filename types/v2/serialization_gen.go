@@ -2372,10 +2372,10 @@ func (z *SeriesGroup) DecodeMsg(dc *msgp.Reader) (err error) {
 	if cap(z.Strings) >= int(zb0002) {
 		z.Strings = (z.Strings)[:zb0002]
 	} else {
-		z.Strings = make([]string, zb0002)
+		z.Strings = make([]ByteString, zb0002)
 	}
 	for za0001 := range z.Strings {
-		z.Strings[za0001], err = dc.ReadString()
+		err = z.Strings[za0001].DecodeMsg(dc)
 		if err != nil {
 			err = msgp.WrapError(err, "Strings", za0001)
 			return
@@ -2457,7 +2457,7 @@ func (z *SeriesGroup) EncodeMsg(en *msgp.Writer) (err error) {
 		return
 	}
 	for za0001 := range z.Strings {
-		err = en.WriteString(z.Strings[za0001])
+		err = z.Strings[za0001].EncodeMsg(en)
 		if err != nil {
 			err = msgp.WrapError(err, "Strings", za0001)
 			return
@@ -2511,7 +2511,11 @@ func (z *SeriesGroup) MarshalMsg(b []byte) (o []byte, err error) {
 	o = append(o, 0x93)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.Strings)))
 	for za0001 := range z.Strings {
-		o = msgp.AppendString(o, z.Strings[za0001])
+		o, err = z.Strings[za0001].MarshalMsg(o)
+		if err != nil {
+			err = msgp.WrapError(err, "Strings", za0001)
+			return
+		}
 	}
 	o = msgp.AppendArrayHeader(o, uint32(len(z.Series)))
 	for za0002 := range z.Series {
@@ -2561,10 +2565,10 @@ func (z *SeriesGroup) UnmarshalMsg(bts []byte) (o []byte, err error) {
 	if cap(z.Strings) >= int(zb0002) {
 		z.Strings = (z.Strings)[:zb0002]
 	} else {
-		z.Strings = make([]string, zb0002)
+		z.Strings = make([]ByteString, zb0002)
 	}
 	for za0001 := range z.Strings {
-		z.Strings[za0001], bts, err = msgp.ReadStringBytes(bts)
+		bts, err = z.Strings[za0001].UnmarshalMsg(bts)
 		if err != nil {
 			err = msgp.WrapError(err, "Strings", za0001)
 			return
@@ -2636,7 +2640,7 @@ func (z *SeriesGroup) UnmarshalMsg(bts []byte) (o []byte, err error) {
 func (z *SeriesGroup) Msgsize() (s int) {
 	s = 1 + msgp.ArrayHeaderSize
 	for za0001 := range z.Strings {
-		s += msgp.StringPrefixSize + len(z.Strings[za0001])
+		s += z.Strings[za0001].Msgsize()
 	}
 	s += msgp.ArrayHeaderSize
 	for za0002 := range z.Series {

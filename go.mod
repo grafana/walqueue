@@ -5,7 +5,7 @@ go 1.23
 toolchain go1.23.1
 
 require (
-	github.com/dghubble/trie v0.1.0
+	github.com/alphadose/haxmap v1.4.1
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3
 	github.com/go-kit/log v0.2.1
 	github.com/gogo/protobuf v1.3.2

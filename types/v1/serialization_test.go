@@ -1,4 +1,4 @@
-package v2
+package v1
 
 import (
 	"fmt"
@@ -42,7 +42,7 @@ func TestLabels(t *testing.T) {
 }
 
 func BenchmarkDeserialize(b *testing.B) {
-	// 2024-12-17 BenchmarkDeserialize-24    	     909	   1234031 ns/op after some optimization on pools
+	// 2024-12-17 BenchmarkDeserialize-24    	     631	   1806962 ns/op
 	metrics := make([]*types.Metric, 0)
 	for k := 0; k < 1_000; k++ {
 		lblsMap := make(map[string]string)
@@ -63,12 +63,11 @@ func BenchmarkDeserialize(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		newMetrics, newMeta, _, err := sg.Deserialize(buf)
+		newMetrics, _, _, err := sg.Deserialize(buf)
 		if err != nil {
 			panic(err.Error())
 		}
 		types.PutMetricsIntoPool(newMetrics)
-		types.PutMetricsIntoPool(newMeta)
 	}
 }
 

@@ -2,7 +2,6 @@ package types
 
 import (
 	"context"
-	"github.com/grafana/walqueue/types/v2"
 	"reflect"
 	"time"
 )
@@ -11,9 +10,9 @@ type NetworkClient interface {
 	Start()
 	Stop()
 	// SendSeries will block if the network caches are full.
-	SendSeries(ctx context.Context, d *v2.TimeSeriesBinary) error
+	SendSeries(ctx context.Context, d *Metric) error
 	// SendMetadata will block if the network caches are full.
-	SendMetadata(ctx context.Context, d *v2.TimeSeriesBinary) error
+	SendMetadata(ctx context.Context, d *Metric) error
 	// UpdateConfig is a synchronous call and will only return once the config
 	// is applied or an error occurs.
 	UpdateConfig(ctx context.Context, cfg ConnectionConfig) (bool, error)

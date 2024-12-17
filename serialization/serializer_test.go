@@ -32,13 +32,13 @@ func TestRoundTripSerialization(t *testing.T) {
 		require.True(t, stats.Errors == 0)
 		require.True(t, stats.MetadataStored == 0)
 		require.True(t, stats.NewestTimestampSeconds > start)
-	}, l)
+	}, types.AlloyFileVersionV2, l)
 	require.NoError(t, err)
 
 	s.Start()
 	defer s.Stop()
 	for i := 0; i < 10; i++ {
-		tss := v2.GetTimeSeriesFromPool()
+		tss := types.GetMetricFromPool()
 		tss.Labels = make(labels.Labels, 10)
 		for j := 0; j < 10; j++ {
 			tss.Labels[j] = labels.Label{
@@ -64,7 +64,7 @@ func TestUpdateConfig(t *testing.T) {
 	s, err := NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: 10,
 		FlushFrequency:    5 * time.Second,
-	}, f, func(stats types.SerializerStats) {}, l)
+	}, f, func(stats types.SerializerStats) {}, types.AlloyFileVersionV2, l)
 	require.NoError(t, err)
 	s.Start()
 	defer s.Stop()
@@ -98,12 +98,10 @@ func (f *fqq) Stop() {
 func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) error {
 	f.buf, _ = snappy.Decode(nil, value)
 	sg := &v2.SeriesGroup{}
-	sg, _, err := v2.DeserializeToSeriesGroup(sg, f.buf)
+	metrics, _, _, err := v2.DeserializeToSeriesGroup(sg, f.buf)
 	require.NoError(f.t, err)
 	require.Len(f.t, sg.Series, 10)
-	for _, series := range sg.Series {
-		require.Len(f.t, series.LabelsNames, 0)
-		require.Len(f.t, series.LabelsValues, 0)
+	for _, series := range metrics {
 		require.Len(f.t, series.Labels, 10)
 		for j := 0; j < 10; j++ {
 			series.Labels[j].Name = fmt.Sprintf("name_%d_%d", int(series.Value), j)

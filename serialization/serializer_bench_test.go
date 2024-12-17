@@ -61,9 +61,9 @@ func BecnchmarkTrie(b *testing.B) {
 
 }
 
-func getSingleTimeSeries(b *testing.B) *v2.TimeSeriesBinary {
+func getSingleTimeSeries(b *testing.B) *types.Metric {
 	b.Helper()
-	timeseries := v2.GetTimeSeriesFromPool()
+	timeseries := v2.getTimeSeriesFromPool()
 	timeseries.TS = time.Now().Unix()
 	timeseries.Value = rand.Float64()
 	timeseries.Labels = getLabels()
@@ -95,12 +95,12 @@ func (f *fakeSerializer) Start() {}
 
 func (f *fakeSerializer) Stop() {}
 
-func (f *fakeSerializer) SendSeries(ctx context.Context, data *v2.TimeSeriesBinary) error {
+func (f *fakeSerializer) SendSeries(ctx context.Context, data *types.Metric) error {
 	v2.PutTimeSeriesIntoPool(data)
 	return nil
 }
 
-func (f *fakeSerializer) SendMetadata(ctx context.Context, data *v2.TimeSeriesBinary) error {
+func (f *fakeSerializer) SendMetadata(ctx context.Context, data *types.Metric) error {
 	v2.PutTimeSeriesIntoPool(data)
 	return nil
 }

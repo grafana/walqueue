@@ -46,6 +46,7 @@ type Histograms struct {
 	FloatHistogram *FloatHistogram
 }
 
+//msgp:tuple Histogram
 type Histogram struct {
 	Count                HistogramCount
 	Sum                  float64
@@ -62,6 +63,7 @@ type Histogram struct {
 	TimestampMillisecond int64
 }
 
+//msgp:tuple FloatHistogram
 type FloatHistogram struct {
 	Count                HistogramCount
 	Sum                  float64

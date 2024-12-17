@@ -136,328 +136,298 @@ func (z BucketSpan) Msgsize() (s int) {
 
 // DecodeMsg implements msgp.Decodable
 func (z *FloatHistogram) DecodeMsg(dc *msgp.Reader) (err error) {
-	var field []byte
-	_ = field
 	var zb0001 uint32
-	zb0001, err = dc.ReadMapHeader()
+	zb0001, err = dc.ReadArrayHeader()
 	if err != nil {
 		err = msgp.WrapError(err)
 		return
 	}
-	for zb0001 > 0 {
-		zb0001--
+	if zb0001 != 13 {
+		err = msgp.ArrayError{Wanted: 13, Got: zb0001}
+		return
+	}
+	var field []byte
+	_ = field
+	var zb0002 uint32
+	zb0002, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "Count")
+		return
+	}
+	for zb0002 > 0 {
+		zb0002--
 		field, err = dc.ReadMapKeyPtr()
 		if err != nil {
-			err = msgp.WrapError(err)
+			err = msgp.WrapError(err, "Count")
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "Count":
-			var zb0002 uint32
-			zb0002, err = dc.ReadMapHeader()
+		case "IsInt":
+			z.Count.IsInt, err = dc.ReadBool()
 			if err != nil {
-				err = msgp.WrapError(err, "Count")
+				err = msgp.WrapError(err, "Count", "IsInt")
 				return
 			}
-			for zb0002 > 0 {
-				zb0002--
-				field, err = dc.ReadMapKeyPtr()
-				if err != nil {
-					err = msgp.WrapError(err, "Count")
-					return
-				}
-				switch msgp.UnsafeString(field) {
-				case "IsInt":
-					z.Count.IsInt, err = dc.ReadBool()
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "IsInt")
-						return
-					}
-				case "IntValue":
-					z.Count.IntValue, err = dc.ReadUint64()
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "IntValue")
-						return
-					}
-				case "FloatValue":
-					z.Count.FloatValue, err = dc.ReadFloat64()
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "FloatValue")
-						return
-					}
-				default:
-					err = dc.Skip()
-					if err != nil {
-						err = msgp.WrapError(err, "Count")
-						return
-					}
-				}
-			}
-		case "Sum":
-			z.Sum, err = dc.ReadFloat64()
+		case "IntValue":
+			z.Count.IntValue, err = dc.ReadUint64()
 			if err != nil {
-				err = msgp.WrapError(err, "Sum")
+				err = msgp.WrapError(err, "Count", "IntValue")
 				return
 			}
-		case "Schema":
-			z.Schema, err = dc.ReadInt32()
+		case "FloatValue":
+			z.Count.FloatValue, err = dc.ReadFloat64()
 			if err != nil {
-				err = msgp.WrapError(err, "Schema")
-				return
-			}
-		case "ZeroThreshold":
-			z.ZeroThreshold, err = dc.ReadFloat64()
-			if err != nil {
-				err = msgp.WrapError(err, "ZeroThreshold")
-				return
-			}
-		case "ZeroCount":
-			var zb0003 uint32
-			zb0003, err = dc.ReadMapHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "ZeroCount")
-				return
-			}
-			for zb0003 > 0 {
-				zb0003--
-				field, err = dc.ReadMapKeyPtr()
-				if err != nil {
-					err = msgp.WrapError(err, "ZeroCount")
-					return
-				}
-				switch msgp.UnsafeString(field) {
-				case "IsInt":
-					z.ZeroCount.IsInt, err = dc.ReadBool()
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "IsInt")
-						return
-					}
-				case "IntValue":
-					z.ZeroCount.IntValue, err = dc.ReadUint64()
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "IntValue")
-						return
-					}
-				case "FloatValue":
-					z.ZeroCount.FloatValue, err = dc.ReadFloat64()
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "FloatValue")
-						return
-					}
-				default:
-					err = dc.Skip()
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount")
-						return
-					}
-				}
-			}
-		case "NegativeSpans":
-			var zb0004 uint32
-			zb0004, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeSpans")
-				return
-			}
-			if cap(z.NegativeSpans) >= int(zb0004) {
-				z.NegativeSpans = (z.NegativeSpans)[:zb0004]
-			} else {
-				z.NegativeSpans = make([]BucketSpan, zb0004)
-			}
-			for za0001 := range z.NegativeSpans {
-				var zb0005 uint32
-				zb0005, err = dc.ReadMapHeader()
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeSpans", za0001)
-					return
-				}
-				for zb0005 > 0 {
-					zb0005--
-					field, err = dc.ReadMapKeyPtr()
-					if err != nil {
-						err = msgp.WrapError(err, "NegativeSpans", za0001)
-						return
-					}
-					switch msgp.UnsafeString(field) {
-					case "Offset":
-						z.NegativeSpans[za0001].Offset, err = dc.ReadInt32()
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001, "Offset")
-							return
-						}
-					case "Length":
-						z.NegativeSpans[za0001].Length, err = dc.ReadUint32()
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001, "Length")
-							return
-						}
-					default:
-						err = dc.Skip()
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001)
-							return
-						}
-					}
-				}
-			}
-		case "NegativeDeltas":
-			var zb0006 uint32
-			zb0006, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeDeltas")
-				return
-			}
-			if cap(z.NegativeDeltas) >= int(zb0006) {
-				z.NegativeDeltas = (z.NegativeDeltas)[:zb0006]
-			} else {
-				z.NegativeDeltas = make([]int64, zb0006)
-			}
-			for za0002 := range z.NegativeDeltas {
-				z.NegativeDeltas[za0002], err = dc.ReadInt64()
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeDeltas", za0002)
-					return
-				}
-			}
-		case "NegativeCounts":
-			var zb0007 uint32
-			zb0007, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeCounts")
-				return
-			}
-			if cap(z.NegativeCounts) >= int(zb0007) {
-				z.NegativeCounts = (z.NegativeCounts)[:zb0007]
-			} else {
-				z.NegativeCounts = make([]float64, zb0007)
-			}
-			for za0003 := range z.NegativeCounts {
-				z.NegativeCounts[za0003], err = dc.ReadFloat64()
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeCounts", za0003)
-					return
-				}
-			}
-		case "PositiveSpans":
-			var zb0008 uint32
-			zb0008, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveSpans")
-				return
-			}
-			if cap(z.PositiveSpans) >= int(zb0008) {
-				z.PositiveSpans = (z.PositiveSpans)[:zb0008]
-			} else {
-				z.PositiveSpans = make([]BucketSpan, zb0008)
-			}
-			for za0004 := range z.PositiveSpans {
-				var zb0009 uint32
-				zb0009, err = dc.ReadMapHeader()
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveSpans", za0004)
-					return
-				}
-				for zb0009 > 0 {
-					zb0009--
-					field, err = dc.ReadMapKeyPtr()
-					if err != nil {
-						err = msgp.WrapError(err, "PositiveSpans", za0004)
-						return
-					}
-					switch msgp.UnsafeString(field) {
-					case "Offset":
-						z.PositiveSpans[za0004].Offset, err = dc.ReadInt32()
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004, "Offset")
-							return
-						}
-					case "Length":
-						z.PositiveSpans[za0004].Length, err = dc.ReadUint32()
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004, "Length")
-							return
-						}
-					default:
-						err = dc.Skip()
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004)
-							return
-						}
-					}
-				}
-			}
-		case "PositiveDeltas":
-			var zb0010 uint32
-			zb0010, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveDeltas")
-				return
-			}
-			if cap(z.PositiveDeltas) >= int(zb0010) {
-				z.PositiveDeltas = (z.PositiveDeltas)[:zb0010]
-			} else {
-				z.PositiveDeltas = make([]int64, zb0010)
-			}
-			for za0005 := range z.PositiveDeltas {
-				z.PositiveDeltas[za0005], err = dc.ReadInt64()
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveDeltas", za0005)
-					return
-				}
-			}
-		case "PositiveCounts":
-			var zb0011 uint32
-			zb0011, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveCounts")
-				return
-			}
-			if cap(z.PositiveCounts) >= int(zb0011) {
-				z.PositiveCounts = (z.PositiveCounts)[:zb0011]
-			} else {
-				z.PositiveCounts = make([]float64, zb0011)
-			}
-			for za0006 := range z.PositiveCounts {
-				z.PositiveCounts[za0006], err = dc.ReadFloat64()
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveCounts", za0006)
-					return
-				}
-			}
-		case "ResetHint":
-			z.ResetHint, err = dc.ReadInt32()
-			if err != nil {
-				err = msgp.WrapError(err, "ResetHint")
-				return
-			}
-		case "TimestampMillisecond":
-			z.TimestampMillisecond, err = dc.ReadInt64()
-			if err != nil {
-				err = msgp.WrapError(err, "TimestampMillisecond")
+				err = msgp.WrapError(err, "Count", "FloatValue")
 				return
 			}
 		default:
 			err = dc.Skip()
 			if err != nil {
-				err = msgp.WrapError(err)
+				err = msgp.WrapError(err, "Count")
 				return
 			}
 		}
+	}
+	z.Sum, err = dc.ReadFloat64()
+	if err != nil {
+		err = msgp.WrapError(err, "Sum")
+		return
+	}
+	z.Schema, err = dc.ReadInt32()
+	if err != nil {
+		err = msgp.WrapError(err, "Schema")
+		return
+	}
+	z.ZeroThreshold, err = dc.ReadFloat64()
+	if err != nil {
+		err = msgp.WrapError(err, "ZeroThreshold")
+		return
+	}
+	var zb0003 uint32
+	zb0003, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "ZeroCount")
+		return
+	}
+	for zb0003 > 0 {
+		zb0003--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err, "ZeroCount")
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "IsInt":
+			z.ZeroCount.IsInt, err = dc.ReadBool()
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "IsInt")
+				return
+			}
+		case "IntValue":
+			z.ZeroCount.IntValue, err = dc.ReadUint64()
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "IntValue")
+				return
+			}
+		case "FloatValue":
+			z.ZeroCount.FloatValue, err = dc.ReadFloat64()
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "FloatValue")
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount")
+				return
+			}
+		}
+	}
+	var zb0004 uint32
+	zb0004, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeSpans")
+		return
+	}
+	if cap(z.NegativeSpans) >= int(zb0004) {
+		z.NegativeSpans = (z.NegativeSpans)[:zb0004]
+	} else {
+		z.NegativeSpans = make([]BucketSpan, zb0004)
+	}
+	for za0001 := range z.NegativeSpans {
+		var zb0005 uint32
+		zb0005, err = dc.ReadMapHeader()
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeSpans", za0001)
+			return
+		}
+		for zb0005 > 0 {
+			zb0005--
+			field, err = dc.ReadMapKeyPtr()
+			if err != nil {
+				err = msgp.WrapError(err, "NegativeSpans", za0001)
+				return
+			}
+			switch msgp.UnsafeString(field) {
+			case "Offset":
+				z.NegativeSpans[za0001].Offset, err = dc.ReadInt32()
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001, "Offset")
+					return
+				}
+			case "Length":
+				z.NegativeSpans[za0001].Length, err = dc.ReadUint32()
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001, "Length")
+					return
+				}
+			default:
+				err = dc.Skip()
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001)
+					return
+				}
+			}
+		}
+	}
+	var zb0006 uint32
+	zb0006, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeDeltas")
+		return
+	}
+	if cap(z.NegativeDeltas) >= int(zb0006) {
+		z.NegativeDeltas = (z.NegativeDeltas)[:zb0006]
+	} else {
+		z.NegativeDeltas = make([]int64, zb0006)
+	}
+	for za0002 := range z.NegativeDeltas {
+		z.NegativeDeltas[za0002], err = dc.ReadInt64()
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeDeltas", za0002)
+			return
+		}
+	}
+	var zb0007 uint32
+	zb0007, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeCounts")
+		return
+	}
+	if cap(z.NegativeCounts) >= int(zb0007) {
+		z.NegativeCounts = (z.NegativeCounts)[:zb0007]
+	} else {
+		z.NegativeCounts = make([]float64, zb0007)
+	}
+	for za0003 := range z.NegativeCounts {
+		z.NegativeCounts[za0003], err = dc.ReadFloat64()
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeCounts", za0003)
+			return
+		}
+	}
+	var zb0008 uint32
+	zb0008, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveSpans")
+		return
+	}
+	if cap(z.PositiveSpans) >= int(zb0008) {
+		z.PositiveSpans = (z.PositiveSpans)[:zb0008]
+	} else {
+		z.PositiveSpans = make([]BucketSpan, zb0008)
+	}
+	for za0004 := range z.PositiveSpans {
+		var zb0009 uint32
+		zb0009, err = dc.ReadMapHeader()
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveSpans", za0004)
+			return
+		}
+		for zb0009 > 0 {
+			zb0009--
+			field, err = dc.ReadMapKeyPtr()
+			if err != nil {
+				err = msgp.WrapError(err, "PositiveSpans", za0004)
+				return
+			}
+			switch msgp.UnsafeString(field) {
+			case "Offset":
+				z.PositiveSpans[za0004].Offset, err = dc.ReadInt32()
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004, "Offset")
+					return
+				}
+			case "Length":
+				z.PositiveSpans[za0004].Length, err = dc.ReadUint32()
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004, "Length")
+					return
+				}
+			default:
+				err = dc.Skip()
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004)
+					return
+				}
+			}
+		}
+	}
+	var zb0010 uint32
+	zb0010, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveDeltas")
+		return
+	}
+	if cap(z.PositiveDeltas) >= int(zb0010) {
+		z.PositiveDeltas = (z.PositiveDeltas)[:zb0010]
+	} else {
+		z.PositiveDeltas = make([]int64, zb0010)
+	}
+	for za0005 := range z.PositiveDeltas {
+		z.PositiveDeltas[za0005], err = dc.ReadInt64()
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveDeltas", za0005)
+			return
+		}
+	}
+	var zb0011 uint32
+	zb0011, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveCounts")
+		return
+	}
+	if cap(z.PositiveCounts) >= int(zb0011) {
+		z.PositiveCounts = (z.PositiveCounts)[:zb0011]
+	} else {
+		z.PositiveCounts = make([]float64, zb0011)
+	}
+	for za0006 := range z.PositiveCounts {
+		z.PositiveCounts[za0006], err = dc.ReadFloat64()
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveCounts", za0006)
+			return
+		}
+	}
+	z.ResetHint, err = dc.ReadInt32()
+	if err != nil {
+		err = msgp.WrapError(err, "ResetHint")
+		return
+	}
+	z.TimestampMillisecond, err = dc.ReadInt64()
+	if err != nil {
+		err = msgp.WrapError(err, "TimestampMillisecond")
+		return
 	}
 	return
 }
 
 // EncodeMsg implements msgp.Encodable
 func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 13
-	// write "Count"
-	err = en.Append(0x8d, 0xa5, 0x43, 0x6f, 0x75, 0x6e, 0x74)
-	if err != nil {
-		return
-	}
+	// array header, size 13
 	// map header, size 3
 	// write "IsInt"
-	err = en.Append(0x83, 0xa5, 0x49, 0x73, 0x49, 0x6e, 0x74)
+	err = en.Append(0x9d, 0x83, 0xa5, 0x49, 0x73, 0x49, 0x6e, 0x74)
 	if err != nil {
 		return
 	}
@@ -486,19 +456,9 @@ func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Count", "FloatValue")
 		return
 	}
-	// write "Sum"
-	err = en.Append(0xa3, 0x53, 0x75, 0x6d)
-	if err != nil {
-		return
-	}
 	err = en.WriteFloat64(z.Sum)
 	if err != nil {
 		err = msgp.WrapError(err, "Sum")
-		return
-	}
-	// write "Schema"
-	err = en.Append(0xa6, 0x53, 0x63, 0x68, 0x65, 0x6d, 0x61)
-	if err != nil {
 		return
 	}
 	err = en.WriteInt32(z.Schema)
@@ -506,19 +466,9 @@ func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Schema")
 		return
 	}
-	// write "ZeroThreshold"
-	err = en.Append(0xad, 0x5a, 0x65, 0x72, 0x6f, 0x54, 0x68, 0x72, 0x65, 0x73, 0x68, 0x6f, 0x6c, 0x64)
-	if err != nil {
-		return
-	}
 	err = en.WriteFloat64(z.ZeroThreshold)
 	if err != nil {
 		err = msgp.WrapError(err, "ZeroThreshold")
-		return
-	}
-	// write "ZeroCount"
-	err = en.Append(0xa9, 0x5a, 0x65, 0x72, 0x6f, 0x43, 0x6f, 0x75, 0x6e, 0x74)
-	if err != nil {
 		return
 	}
 	// map header, size 3
@@ -552,11 +502,6 @@ func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "ZeroCount", "FloatValue")
 		return
 	}
-	// write "NegativeSpans"
-	err = en.Append(0xad, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x53, 0x70, 0x61, 0x6e, 0x73)
-	if err != nil {
-		return
-	}
 	err = en.WriteArrayHeader(uint32(len(z.NegativeSpans)))
 	if err != nil {
 		err = msgp.WrapError(err, "NegativeSpans")
@@ -584,11 +529,6 @@ func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
 			err = msgp.WrapError(err, "NegativeSpans", za0001, "Length")
 			return
 		}
-	}
-	// write "NegativeDeltas"
-	err = en.Append(0xae, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x44, 0x65, 0x6c, 0x74, 0x61, 0x73)
-	if err != nil {
-		return
 	}
 	err = en.WriteArrayHeader(uint32(len(z.NegativeDeltas)))
 	if err != nil {
@@ -602,11 +542,6 @@ func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	}
-	// write "NegativeCounts"
-	err = en.Append(0xae, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x73)
-	if err != nil {
-		return
-	}
 	err = en.WriteArrayHeader(uint32(len(z.NegativeCounts)))
 	if err != nil {
 		err = msgp.WrapError(err, "NegativeCounts")
@@ -618,11 +553,6 @@ func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
 			err = msgp.WrapError(err, "NegativeCounts", za0003)
 			return
 		}
-	}
-	// write "PositiveSpans"
-	err = en.Append(0xad, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x53, 0x70, 0x61, 0x6e, 0x73)
-	if err != nil {
-		return
 	}
 	err = en.WriteArrayHeader(uint32(len(z.PositiveSpans)))
 	if err != nil {
@@ -652,11 +582,6 @@ func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	}
-	// write "PositiveDeltas"
-	err = en.Append(0xae, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x44, 0x65, 0x6c, 0x74, 0x61, 0x73)
-	if err != nil {
-		return
-	}
 	err = en.WriteArrayHeader(uint32(len(z.PositiveDeltas)))
 	if err != nil {
 		err = msgp.WrapError(err, "PositiveDeltas")
@@ -668,11 +593,6 @@ func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
 			err = msgp.WrapError(err, "PositiveDeltas", za0005)
 			return
 		}
-	}
-	// write "PositiveCounts"
-	err = en.Append(0xae, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x73)
-	if err != nil {
-		return
 	}
 	err = en.WriteArrayHeader(uint32(len(z.PositiveCounts)))
 	if err != nil {
@@ -686,19 +606,9 @@ func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	}
-	// write "ResetHint"
-	err = en.Append(0xa9, 0x52, 0x65, 0x73, 0x65, 0x74, 0x48, 0x69, 0x6e, 0x74)
-	if err != nil {
-		return
-	}
 	err = en.WriteInt32(z.ResetHint)
 	if err != nil {
 		err = msgp.WrapError(err, "ResetHint")
-		return
-	}
-	// write "TimestampMillisecond"
-	err = en.Append(0xb4, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x4d, 0x69, 0x6c, 0x6c, 0x69, 0x73, 0x65, 0x63, 0x6f, 0x6e, 0x64)
-	if err != nil {
 		return
 	}
 	err = en.WriteInt64(z.TimestampMillisecond)
@@ -712,12 +622,10 @@ func (z *FloatHistogram) EncodeMsg(en *msgp.Writer) (err error) {
 // MarshalMsg implements msgp.Marshaler
 func (z *FloatHistogram) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 13
-	// string "Count"
-	o = append(o, 0x8d, 0xa5, 0x43, 0x6f, 0x75, 0x6e, 0x74)
+	// array header, size 13
 	// map header, size 3
 	// string "IsInt"
-	o = append(o, 0x83, 0xa5, 0x49, 0x73, 0x49, 0x6e, 0x74)
+	o = append(o, 0x9d, 0x83, 0xa5, 0x49, 0x73, 0x49, 0x6e, 0x74)
 	o = msgp.AppendBool(o, z.Count.IsInt)
 	// string "IntValue"
 	o = append(o, 0xa8, 0x49, 0x6e, 0x74, 0x56, 0x61, 0x6c, 0x75, 0x65)
@@ -725,17 +633,9 @@ func (z *FloatHistogram) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "FloatValue"
 	o = append(o, 0xaa, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x56, 0x61, 0x6c, 0x75, 0x65)
 	o = msgp.AppendFloat64(o, z.Count.FloatValue)
-	// string "Sum"
-	o = append(o, 0xa3, 0x53, 0x75, 0x6d)
 	o = msgp.AppendFloat64(o, z.Sum)
-	// string "Schema"
-	o = append(o, 0xa6, 0x53, 0x63, 0x68, 0x65, 0x6d, 0x61)
 	o = msgp.AppendInt32(o, z.Schema)
-	// string "ZeroThreshold"
-	o = append(o, 0xad, 0x5a, 0x65, 0x72, 0x6f, 0x54, 0x68, 0x72, 0x65, 0x73, 0x68, 0x6f, 0x6c, 0x64)
 	o = msgp.AppendFloat64(o, z.ZeroThreshold)
-	// string "ZeroCount"
-	o = append(o, 0xa9, 0x5a, 0x65, 0x72, 0x6f, 0x43, 0x6f, 0x75, 0x6e, 0x74)
 	// map header, size 3
 	// string "IsInt"
 	o = append(o, 0x83, 0xa5, 0x49, 0x73, 0x49, 0x6e, 0x74)
@@ -746,8 +646,6 @@ func (z *FloatHistogram) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "FloatValue"
 	o = append(o, 0xaa, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x56, 0x61, 0x6c, 0x75, 0x65)
 	o = msgp.AppendFloat64(o, z.ZeroCount.FloatValue)
-	// string "NegativeSpans"
-	o = append(o, 0xad, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x53, 0x70, 0x61, 0x6e, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.NegativeSpans)))
 	for za0001 := range z.NegativeSpans {
 		// map header, size 2
@@ -758,20 +656,14 @@ func (z *FloatHistogram) MarshalMsg(b []byte) (o []byte, err error) {
 		o = append(o, 0xa6, 0x4c, 0x65, 0x6e, 0x67, 0x74, 0x68)
 		o = msgp.AppendUint32(o, z.NegativeSpans[za0001].Length)
 	}
-	// string "NegativeDeltas"
-	o = append(o, 0xae, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x44, 0x65, 0x6c, 0x74, 0x61, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.NegativeDeltas)))
 	for za0002 := range z.NegativeDeltas {
 		o = msgp.AppendInt64(o, z.NegativeDeltas[za0002])
 	}
-	// string "NegativeCounts"
-	o = append(o, 0xae, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.NegativeCounts)))
 	for za0003 := range z.NegativeCounts {
 		o = msgp.AppendFloat64(o, z.NegativeCounts[za0003])
 	}
-	// string "PositiveSpans"
-	o = append(o, 0xad, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x53, 0x70, 0x61, 0x6e, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.PositiveSpans)))
 	for za0004 := range z.PositiveSpans {
 		// map header, size 2
@@ -782,336 +674,303 @@ func (z *FloatHistogram) MarshalMsg(b []byte) (o []byte, err error) {
 		o = append(o, 0xa6, 0x4c, 0x65, 0x6e, 0x67, 0x74, 0x68)
 		o = msgp.AppendUint32(o, z.PositiveSpans[za0004].Length)
 	}
-	// string "PositiveDeltas"
-	o = append(o, 0xae, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x44, 0x65, 0x6c, 0x74, 0x61, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.PositiveDeltas)))
 	for za0005 := range z.PositiveDeltas {
 		o = msgp.AppendInt64(o, z.PositiveDeltas[za0005])
 	}
-	// string "PositiveCounts"
-	o = append(o, 0xae, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.PositiveCounts)))
 	for za0006 := range z.PositiveCounts {
 		o = msgp.AppendFloat64(o, z.PositiveCounts[za0006])
 	}
-	// string "ResetHint"
-	o = append(o, 0xa9, 0x52, 0x65, 0x73, 0x65, 0x74, 0x48, 0x69, 0x6e, 0x74)
 	o = msgp.AppendInt32(o, z.ResetHint)
-	// string "TimestampMillisecond"
-	o = append(o, 0xb4, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x4d, 0x69, 0x6c, 0x6c, 0x69, 0x73, 0x65, 0x63, 0x6f, 0x6e, 0x64)
 	o = msgp.AppendInt64(o, z.TimestampMillisecond)
 	return
 }
 
 // UnmarshalMsg implements msgp.Unmarshaler
 func (z *FloatHistogram) UnmarshalMsg(bts []byte) (o []byte, err error) {
-	var field []byte
-	_ = field
 	var zb0001 uint32
-	zb0001, bts, err = msgp.ReadMapHeaderBytes(bts)
+	zb0001, bts, err = msgp.ReadArrayHeaderBytes(bts)
 	if err != nil {
 		err = msgp.WrapError(err)
 		return
 	}
-	for zb0001 > 0 {
-		zb0001--
+	if zb0001 != 13 {
+		err = msgp.ArrayError{Wanted: 13, Got: zb0001}
+		return
+	}
+	var field []byte
+	_ = field
+	var zb0002 uint32
+	zb0002, bts, err = msgp.ReadMapHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "Count")
+		return
+	}
+	for zb0002 > 0 {
+		zb0002--
 		field, bts, err = msgp.ReadMapKeyZC(bts)
 		if err != nil {
-			err = msgp.WrapError(err)
+			err = msgp.WrapError(err, "Count")
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "Count":
-			var zb0002 uint32
-			zb0002, bts, err = msgp.ReadMapHeaderBytes(bts)
+		case "IsInt":
+			z.Count.IsInt, bts, err = msgp.ReadBoolBytes(bts)
 			if err != nil {
-				err = msgp.WrapError(err, "Count")
+				err = msgp.WrapError(err, "Count", "IsInt")
 				return
 			}
-			for zb0002 > 0 {
-				zb0002--
-				field, bts, err = msgp.ReadMapKeyZC(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "Count")
-					return
-				}
-				switch msgp.UnsafeString(field) {
-				case "IsInt":
-					z.Count.IsInt, bts, err = msgp.ReadBoolBytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "IsInt")
-						return
-					}
-				case "IntValue":
-					z.Count.IntValue, bts, err = msgp.ReadUint64Bytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "IntValue")
-						return
-					}
-				case "FloatValue":
-					z.Count.FloatValue, bts, err = msgp.ReadFloat64Bytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "FloatValue")
-						return
-					}
-				default:
-					bts, err = msgp.Skip(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "Count")
-						return
-					}
-				}
-			}
-		case "Sum":
-			z.Sum, bts, err = msgp.ReadFloat64Bytes(bts)
+		case "IntValue":
+			z.Count.IntValue, bts, err = msgp.ReadUint64Bytes(bts)
 			if err != nil {
-				err = msgp.WrapError(err, "Sum")
+				err = msgp.WrapError(err, "Count", "IntValue")
 				return
 			}
-		case "Schema":
-			z.Schema, bts, err = msgp.ReadInt32Bytes(bts)
+		case "FloatValue":
+			z.Count.FloatValue, bts, err = msgp.ReadFloat64Bytes(bts)
 			if err != nil {
-				err = msgp.WrapError(err, "Schema")
-				return
-			}
-		case "ZeroThreshold":
-			z.ZeroThreshold, bts, err = msgp.ReadFloat64Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "ZeroThreshold")
-				return
-			}
-		case "ZeroCount":
-			var zb0003 uint32
-			zb0003, bts, err = msgp.ReadMapHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "ZeroCount")
-				return
-			}
-			for zb0003 > 0 {
-				zb0003--
-				field, bts, err = msgp.ReadMapKeyZC(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "ZeroCount")
-					return
-				}
-				switch msgp.UnsafeString(field) {
-				case "IsInt":
-					z.ZeroCount.IsInt, bts, err = msgp.ReadBoolBytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "IsInt")
-						return
-					}
-				case "IntValue":
-					z.ZeroCount.IntValue, bts, err = msgp.ReadUint64Bytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "IntValue")
-						return
-					}
-				case "FloatValue":
-					z.ZeroCount.FloatValue, bts, err = msgp.ReadFloat64Bytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "FloatValue")
-						return
-					}
-				default:
-					bts, err = msgp.Skip(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount")
-						return
-					}
-				}
-			}
-		case "NegativeSpans":
-			var zb0004 uint32
-			zb0004, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeSpans")
-				return
-			}
-			if cap(z.NegativeSpans) >= int(zb0004) {
-				z.NegativeSpans = (z.NegativeSpans)[:zb0004]
-			} else {
-				z.NegativeSpans = make([]BucketSpan, zb0004)
-			}
-			for za0001 := range z.NegativeSpans {
-				var zb0005 uint32
-				zb0005, bts, err = msgp.ReadMapHeaderBytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeSpans", za0001)
-					return
-				}
-				for zb0005 > 0 {
-					zb0005--
-					field, bts, err = msgp.ReadMapKeyZC(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "NegativeSpans", za0001)
-						return
-					}
-					switch msgp.UnsafeString(field) {
-					case "Offset":
-						z.NegativeSpans[za0001].Offset, bts, err = msgp.ReadInt32Bytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001, "Offset")
-							return
-						}
-					case "Length":
-						z.NegativeSpans[za0001].Length, bts, err = msgp.ReadUint32Bytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001, "Length")
-							return
-						}
-					default:
-						bts, err = msgp.Skip(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001)
-							return
-						}
-					}
-				}
-			}
-		case "NegativeDeltas":
-			var zb0006 uint32
-			zb0006, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeDeltas")
-				return
-			}
-			if cap(z.NegativeDeltas) >= int(zb0006) {
-				z.NegativeDeltas = (z.NegativeDeltas)[:zb0006]
-			} else {
-				z.NegativeDeltas = make([]int64, zb0006)
-			}
-			for za0002 := range z.NegativeDeltas {
-				z.NegativeDeltas[za0002], bts, err = msgp.ReadInt64Bytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeDeltas", za0002)
-					return
-				}
-			}
-		case "NegativeCounts":
-			var zb0007 uint32
-			zb0007, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeCounts")
-				return
-			}
-			if cap(z.NegativeCounts) >= int(zb0007) {
-				z.NegativeCounts = (z.NegativeCounts)[:zb0007]
-			} else {
-				z.NegativeCounts = make([]float64, zb0007)
-			}
-			for za0003 := range z.NegativeCounts {
-				z.NegativeCounts[za0003], bts, err = msgp.ReadFloat64Bytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeCounts", za0003)
-					return
-				}
-			}
-		case "PositiveSpans":
-			var zb0008 uint32
-			zb0008, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveSpans")
-				return
-			}
-			if cap(z.PositiveSpans) >= int(zb0008) {
-				z.PositiveSpans = (z.PositiveSpans)[:zb0008]
-			} else {
-				z.PositiveSpans = make([]BucketSpan, zb0008)
-			}
-			for za0004 := range z.PositiveSpans {
-				var zb0009 uint32
-				zb0009, bts, err = msgp.ReadMapHeaderBytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveSpans", za0004)
-					return
-				}
-				for zb0009 > 0 {
-					zb0009--
-					field, bts, err = msgp.ReadMapKeyZC(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "PositiveSpans", za0004)
-						return
-					}
-					switch msgp.UnsafeString(field) {
-					case "Offset":
-						z.PositiveSpans[za0004].Offset, bts, err = msgp.ReadInt32Bytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004, "Offset")
-							return
-						}
-					case "Length":
-						z.PositiveSpans[za0004].Length, bts, err = msgp.ReadUint32Bytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004, "Length")
-							return
-						}
-					default:
-						bts, err = msgp.Skip(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004)
-							return
-						}
-					}
-				}
-			}
-		case "PositiveDeltas":
-			var zb0010 uint32
-			zb0010, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveDeltas")
-				return
-			}
-			if cap(z.PositiveDeltas) >= int(zb0010) {
-				z.PositiveDeltas = (z.PositiveDeltas)[:zb0010]
-			} else {
-				z.PositiveDeltas = make([]int64, zb0010)
-			}
-			for za0005 := range z.PositiveDeltas {
-				z.PositiveDeltas[za0005], bts, err = msgp.ReadInt64Bytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveDeltas", za0005)
-					return
-				}
-			}
-		case "PositiveCounts":
-			var zb0011 uint32
-			zb0011, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveCounts")
-				return
-			}
-			if cap(z.PositiveCounts) >= int(zb0011) {
-				z.PositiveCounts = (z.PositiveCounts)[:zb0011]
-			} else {
-				z.PositiveCounts = make([]float64, zb0011)
-			}
-			for za0006 := range z.PositiveCounts {
-				z.PositiveCounts[za0006], bts, err = msgp.ReadFloat64Bytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveCounts", za0006)
-					return
-				}
-			}
-		case "ResetHint":
-			z.ResetHint, bts, err = msgp.ReadInt32Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "ResetHint")
-				return
-			}
-		case "TimestampMillisecond":
-			z.TimestampMillisecond, bts, err = msgp.ReadInt64Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "TimestampMillisecond")
+				err = msgp.WrapError(err, "Count", "FloatValue")
 				return
 			}
 		default:
 			bts, err = msgp.Skip(bts)
 			if err != nil {
-				err = msgp.WrapError(err)
+				err = msgp.WrapError(err, "Count")
 				return
 			}
 		}
+	}
+	z.Sum, bts, err = msgp.ReadFloat64Bytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "Sum")
+		return
+	}
+	z.Schema, bts, err = msgp.ReadInt32Bytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "Schema")
+		return
+	}
+	z.ZeroThreshold, bts, err = msgp.ReadFloat64Bytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "ZeroThreshold")
+		return
+	}
+	var zb0003 uint32
+	zb0003, bts, err = msgp.ReadMapHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "ZeroCount")
+		return
+	}
+	for zb0003 > 0 {
+		zb0003--
+		field, bts, err = msgp.ReadMapKeyZC(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "ZeroCount")
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "IsInt":
+			z.ZeroCount.IsInt, bts, err = msgp.ReadBoolBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "IsInt")
+				return
+			}
+		case "IntValue":
+			z.ZeroCount.IntValue, bts, err = msgp.ReadUint64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "IntValue")
+				return
+			}
+		case "FloatValue":
+			z.ZeroCount.FloatValue, bts, err = msgp.ReadFloat64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "FloatValue")
+				return
+			}
+		default:
+			bts, err = msgp.Skip(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount")
+				return
+			}
+		}
+	}
+	var zb0004 uint32
+	zb0004, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeSpans")
+		return
+	}
+	if cap(z.NegativeSpans) >= int(zb0004) {
+		z.NegativeSpans = (z.NegativeSpans)[:zb0004]
+	} else {
+		z.NegativeSpans = make([]BucketSpan, zb0004)
+	}
+	for za0001 := range z.NegativeSpans {
+		var zb0005 uint32
+		zb0005, bts, err = msgp.ReadMapHeaderBytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeSpans", za0001)
+			return
+		}
+		for zb0005 > 0 {
+			zb0005--
+			field, bts, err = msgp.ReadMapKeyZC(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "NegativeSpans", za0001)
+				return
+			}
+			switch msgp.UnsafeString(field) {
+			case "Offset":
+				z.NegativeSpans[za0001].Offset, bts, err = msgp.ReadInt32Bytes(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001, "Offset")
+					return
+				}
+			case "Length":
+				z.NegativeSpans[za0001].Length, bts, err = msgp.ReadUint32Bytes(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001, "Length")
+					return
+				}
+			default:
+				bts, err = msgp.Skip(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001)
+					return
+				}
+			}
+		}
+	}
+	var zb0006 uint32
+	zb0006, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeDeltas")
+		return
+	}
+	if cap(z.NegativeDeltas) >= int(zb0006) {
+		z.NegativeDeltas = (z.NegativeDeltas)[:zb0006]
+	} else {
+		z.NegativeDeltas = make([]int64, zb0006)
+	}
+	for za0002 := range z.NegativeDeltas {
+		z.NegativeDeltas[za0002], bts, err = msgp.ReadInt64Bytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeDeltas", za0002)
+			return
+		}
+	}
+	var zb0007 uint32
+	zb0007, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeCounts")
+		return
+	}
+	if cap(z.NegativeCounts) >= int(zb0007) {
+		z.NegativeCounts = (z.NegativeCounts)[:zb0007]
+	} else {
+		z.NegativeCounts = make([]float64, zb0007)
+	}
+	for za0003 := range z.NegativeCounts {
+		z.NegativeCounts[za0003], bts, err = msgp.ReadFloat64Bytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeCounts", za0003)
+			return
+		}
+	}
+	var zb0008 uint32
+	zb0008, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveSpans")
+		return
+	}
+	if cap(z.PositiveSpans) >= int(zb0008) {
+		z.PositiveSpans = (z.PositiveSpans)[:zb0008]
+	} else {
+		z.PositiveSpans = make([]BucketSpan, zb0008)
+	}
+	for za0004 := range z.PositiveSpans {
+		var zb0009 uint32
+		zb0009, bts, err = msgp.ReadMapHeaderBytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveSpans", za0004)
+			return
+		}
+		for zb0009 > 0 {
+			zb0009--
+			field, bts, err = msgp.ReadMapKeyZC(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "PositiveSpans", za0004)
+				return
+			}
+			switch msgp.UnsafeString(field) {
+			case "Offset":
+				z.PositiveSpans[za0004].Offset, bts, err = msgp.ReadInt32Bytes(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004, "Offset")
+					return
+				}
+			case "Length":
+				z.PositiveSpans[za0004].Length, bts, err = msgp.ReadUint32Bytes(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004, "Length")
+					return
+				}
+			default:
+				bts, err = msgp.Skip(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004)
+					return
+				}
+			}
+		}
+	}
+	var zb0010 uint32
+	zb0010, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveDeltas")
+		return
+	}
+	if cap(z.PositiveDeltas) >= int(zb0010) {
+		z.PositiveDeltas = (z.PositiveDeltas)[:zb0010]
+	} else {
+		z.PositiveDeltas = make([]int64, zb0010)
+	}
+	for za0005 := range z.PositiveDeltas {
+		z.PositiveDeltas[za0005], bts, err = msgp.ReadInt64Bytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveDeltas", za0005)
+			return
+		}
+	}
+	var zb0011 uint32
+	zb0011, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveCounts")
+		return
+	}
+	if cap(z.PositiveCounts) >= int(zb0011) {
+		z.PositiveCounts = (z.PositiveCounts)[:zb0011]
+	} else {
+		z.PositiveCounts = make([]float64, zb0011)
+	}
+	for za0006 := range z.PositiveCounts {
+		z.PositiveCounts[za0006], bts, err = msgp.ReadFloat64Bytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveCounts", za0006)
+			return
+		}
+	}
+	z.ResetHint, bts, err = msgp.ReadInt32Bytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "ResetHint")
+		return
+	}
+	z.TimestampMillisecond, bts, err = msgp.ReadInt64Bytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "TimestampMillisecond")
+		return
 	}
 	o = bts
 	return
@@ -1119,334 +978,304 @@ func (z *FloatHistogram) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *FloatHistogram) Msgsize() (s int) {
-	s = 1 + 6 + 1 + 6 + msgp.BoolSize + 9 + msgp.Uint64Size + 11 + msgp.Float64Size + 4 + msgp.Float64Size + 7 + msgp.Int32Size + 14 + msgp.Float64Size + 10 + 1 + 6 + msgp.BoolSize + 9 + msgp.Uint64Size + 11 + msgp.Float64Size + 14 + msgp.ArrayHeaderSize + (len(z.NegativeSpans) * (15 + msgp.Int32Size + msgp.Uint32Size)) + 15 + msgp.ArrayHeaderSize + (len(z.NegativeDeltas) * (msgp.Int64Size)) + 15 + msgp.ArrayHeaderSize + (len(z.NegativeCounts) * (msgp.Float64Size)) + 14 + msgp.ArrayHeaderSize + (len(z.PositiveSpans) * (15 + msgp.Int32Size + msgp.Uint32Size)) + 15 + msgp.ArrayHeaderSize + (len(z.PositiveDeltas) * (msgp.Int64Size)) + 15 + msgp.ArrayHeaderSize + (len(z.PositiveCounts) * (msgp.Float64Size)) + 10 + msgp.Int32Size + 21 + msgp.Int64Size
+	s = 1 + 1 + 6 + msgp.BoolSize + 9 + msgp.Uint64Size + 11 + msgp.Float64Size + msgp.Float64Size + msgp.Int32Size + msgp.Float64Size + 1 + 6 + msgp.BoolSize + 9 + msgp.Uint64Size + 11 + msgp.Float64Size + msgp.ArrayHeaderSize + (len(z.NegativeSpans) * (15 + msgp.Int32Size + msgp.Uint32Size)) + msgp.ArrayHeaderSize + (len(z.NegativeDeltas) * (msgp.Int64Size)) + msgp.ArrayHeaderSize + (len(z.NegativeCounts) * (msgp.Float64Size)) + msgp.ArrayHeaderSize + (len(z.PositiveSpans) * (15 + msgp.Int32Size + msgp.Uint32Size)) + msgp.ArrayHeaderSize + (len(z.PositiveDeltas) * (msgp.Int64Size)) + msgp.ArrayHeaderSize + (len(z.PositiveCounts) * (msgp.Float64Size)) + msgp.Int32Size + msgp.Int64Size
 	return
 }
 
 // DecodeMsg implements msgp.Decodable
 func (z *Histogram) DecodeMsg(dc *msgp.Reader) (err error) {
-	var field []byte
-	_ = field
 	var zb0001 uint32
-	zb0001, err = dc.ReadMapHeader()
+	zb0001, err = dc.ReadArrayHeader()
 	if err != nil {
 		err = msgp.WrapError(err)
 		return
 	}
-	for zb0001 > 0 {
-		zb0001--
+	if zb0001 != 13 {
+		err = msgp.ArrayError{Wanted: 13, Got: zb0001}
+		return
+	}
+	var field []byte
+	_ = field
+	var zb0002 uint32
+	zb0002, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "Count")
+		return
+	}
+	for zb0002 > 0 {
+		zb0002--
 		field, err = dc.ReadMapKeyPtr()
 		if err != nil {
-			err = msgp.WrapError(err)
+			err = msgp.WrapError(err, "Count")
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "Count":
-			var zb0002 uint32
-			zb0002, err = dc.ReadMapHeader()
+		case "IsInt":
+			z.Count.IsInt, err = dc.ReadBool()
 			if err != nil {
-				err = msgp.WrapError(err, "Count")
+				err = msgp.WrapError(err, "Count", "IsInt")
 				return
 			}
-			for zb0002 > 0 {
-				zb0002--
-				field, err = dc.ReadMapKeyPtr()
-				if err != nil {
-					err = msgp.WrapError(err, "Count")
-					return
-				}
-				switch msgp.UnsafeString(field) {
-				case "IsInt":
-					z.Count.IsInt, err = dc.ReadBool()
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "IsInt")
-						return
-					}
-				case "IntValue":
-					z.Count.IntValue, err = dc.ReadUint64()
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "IntValue")
-						return
-					}
-				case "FloatValue":
-					z.Count.FloatValue, err = dc.ReadFloat64()
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "FloatValue")
-						return
-					}
-				default:
-					err = dc.Skip()
-					if err != nil {
-						err = msgp.WrapError(err, "Count")
-						return
-					}
-				}
-			}
-		case "Sum":
-			z.Sum, err = dc.ReadFloat64()
+		case "IntValue":
+			z.Count.IntValue, err = dc.ReadUint64()
 			if err != nil {
-				err = msgp.WrapError(err, "Sum")
+				err = msgp.WrapError(err, "Count", "IntValue")
 				return
 			}
-		case "Schema":
-			z.Schema, err = dc.ReadInt32()
+		case "FloatValue":
+			z.Count.FloatValue, err = dc.ReadFloat64()
 			if err != nil {
-				err = msgp.WrapError(err, "Schema")
-				return
-			}
-		case "ZeroThreshold":
-			z.ZeroThreshold, err = dc.ReadFloat64()
-			if err != nil {
-				err = msgp.WrapError(err, "ZeroThreshold")
-				return
-			}
-		case "ZeroCount":
-			var zb0003 uint32
-			zb0003, err = dc.ReadMapHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "ZeroCount")
-				return
-			}
-			for zb0003 > 0 {
-				zb0003--
-				field, err = dc.ReadMapKeyPtr()
-				if err != nil {
-					err = msgp.WrapError(err, "ZeroCount")
-					return
-				}
-				switch msgp.UnsafeString(field) {
-				case "IsInt":
-					z.ZeroCount.IsInt, err = dc.ReadBool()
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "IsInt")
-						return
-					}
-				case "IntValue":
-					z.ZeroCount.IntValue, err = dc.ReadUint64()
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "IntValue")
-						return
-					}
-				case "FloatValue":
-					z.ZeroCount.FloatValue, err = dc.ReadFloat64()
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "FloatValue")
-						return
-					}
-				default:
-					err = dc.Skip()
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount")
-						return
-					}
-				}
-			}
-		case "NegativeSpans":
-			var zb0004 uint32
-			zb0004, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeSpans")
-				return
-			}
-			if cap(z.NegativeSpans) >= int(zb0004) {
-				z.NegativeSpans = (z.NegativeSpans)[:zb0004]
-			} else {
-				z.NegativeSpans = make([]BucketSpan, zb0004)
-			}
-			for za0001 := range z.NegativeSpans {
-				var zb0005 uint32
-				zb0005, err = dc.ReadMapHeader()
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeSpans", za0001)
-					return
-				}
-				for zb0005 > 0 {
-					zb0005--
-					field, err = dc.ReadMapKeyPtr()
-					if err != nil {
-						err = msgp.WrapError(err, "NegativeSpans", za0001)
-						return
-					}
-					switch msgp.UnsafeString(field) {
-					case "Offset":
-						z.NegativeSpans[za0001].Offset, err = dc.ReadInt32()
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001, "Offset")
-							return
-						}
-					case "Length":
-						z.NegativeSpans[za0001].Length, err = dc.ReadUint32()
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001, "Length")
-							return
-						}
-					default:
-						err = dc.Skip()
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001)
-							return
-						}
-					}
-				}
-			}
-		case "NegativeBuckets":
-			var zb0006 uint32
-			zb0006, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeBuckets")
-				return
-			}
-			if cap(z.NegativeBuckets) >= int(zb0006) {
-				z.NegativeBuckets = (z.NegativeBuckets)[:zb0006]
-			} else {
-				z.NegativeBuckets = make([]int64, zb0006)
-			}
-			for za0002 := range z.NegativeBuckets {
-				z.NegativeBuckets[za0002], err = dc.ReadInt64()
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeBuckets", za0002)
-					return
-				}
-			}
-		case "NegativeCounts":
-			var zb0007 uint32
-			zb0007, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeCounts")
-				return
-			}
-			if cap(z.NegativeCounts) >= int(zb0007) {
-				z.NegativeCounts = (z.NegativeCounts)[:zb0007]
-			} else {
-				z.NegativeCounts = make([]float64, zb0007)
-			}
-			for za0003 := range z.NegativeCounts {
-				z.NegativeCounts[za0003], err = dc.ReadFloat64()
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeCounts", za0003)
-					return
-				}
-			}
-		case "PositiveSpans":
-			var zb0008 uint32
-			zb0008, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveSpans")
-				return
-			}
-			if cap(z.PositiveSpans) >= int(zb0008) {
-				z.PositiveSpans = (z.PositiveSpans)[:zb0008]
-			} else {
-				z.PositiveSpans = make([]BucketSpan, zb0008)
-			}
-			for za0004 := range z.PositiveSpans {
-				var zb0009 uint32
-				zb0009, err = dc.ReadMapHeader()
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveSpans", za0004)
-					return
-				}
-				for zb0009 > 0 {
-					zb0009--
-					field, err = dc.ReadMapKeyPtr()
-					if err != nil {
-						err = msgp.WrapError(err, "PositiveSpans", za0004)
-						return
-					}
-					switch msgp.UnsafeString(field) {
-					case "Offset":
-						z.PositiveSpans[za0004].Offset, err = dc.ReadInt32()
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004, "Offset")
-							return
-						}
-					case "Length":
-						z.PositiveSpans[za0004].Length, err = dc.ReadUint32()
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004, "Length")
-							return
-						}
-					default:
-						err = dc.Skip()
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004)
-							return
-						}
-					}
-				}
-			}
-		case "PositiveBuckets":
-			var zb0010 uint32
-			zb0010, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveBuckets")
-				return
-			}
-			if cap(z.PositiveBuckets) >= int(zb0010) {
-				z.PositiveBuckets = (z.PositiveBuckets)[:zb0010]
-			} else {
-				z.PositiveBuckets = make([]int64, zb0010)
-			}
-			for za0005 := range z.PositiveBuckets {
-				z.PositiveBuckets[za0005], err = dc.ReadInt64()
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveBuckets", za0005)
-					return
-				}
-			}
-		case "PositiveCounts":
-			var zb0011 uint32
-			zb0011, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveCounts")
-				return
-			}
-			if cap(z.PositiveCounts) >= int(zb0011) {
-				z.PositiveCounts = (z.PositiveCounts)[:zb0011]
-			} else {
-				z.PositiveCounts = make([]float64, zb0011)
-			}
-			for za0006 := range z.PositiveCounts {
-				z.PositiveCounts[za0006], err = dc.ReadFloat64()
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveCounts", za0006)
-					return
-				}
-			}
-		case "ResetHint":
-			z.ResetHint, err = dc.ReadInt32()
-			if err != nil {
-				err = msgp.WrapError(err, "ResetHint")
-				return
-			}
-		case "TimestampMillisecond":
-			z.TimestampMillisecond, err = dc.ReadInt64()
-			if err != nil {
-				err = msgp.WrapError(err, "TimestampMillisecond")
+				err = msgp.WrapError(err, "Count", "FloatValue")
 				return
 			}
 		default:
 			err = dc.Skip()
 			if err != nil {
-				err = msgp.WrapError(err)
+				err = msgp.WrapError(err, "Count")
 				return
 			}
 		}
+	}
+	z.Sum, err = dc.ReadFloat64()
+	if err != nil {
+		err = msgp.WrapError(err, "Sum")
+		return
+	}
+	z.Schema, err = dc.ReadInt32()
+	if err != nil {
+		err = msgp.WrapError(err, "Schema")
+		return
+	}
+	z.ZeroThreshold, err = dc.ReadFloat64()
+	if err != nil {
+		err = msgp.WrapError(err, "ZeroThreshold")
+		return
+	}
+	var zb0003 uint32
+	zb0003, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "ZeroCount")
+		return
+	}
+	for zb0003 > 0 {
+		zb0003--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err, "ZeroCount")
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "IsInt":
+			z.ZeroCount.IsInt, err = dc.ReadBool()
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "IsInt")
+				return
+			}
+		case "IntValue":
+			z.ZeroCount.IntValue, err = dc.ReadUint64()
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "IntValue")
+				return
+			}
+		case "FloatValue":
+			z.ZeroCount.FloatValue, err = dc.ReadFloat64()
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "FloatValue")
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount")
+				return
+			}
+		}
+	}
+	var zb0004 uint32
+	zb0004, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeSpans")
+		return
+	}
+	if cap(z.NegativeSpans) >= int(zb0004) {
+		z.NegativeSpans = (z.NegativeSpans)[:zb0004]
+	} else {
+		z.NegativeSpans = make([]BucketSpan, zb0004)
+	}
+	for za0001 := range z.NegativeSpans {
+		var zb0005 uint32
+		zb0005, err = dc.ReadMapHeader()
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeSpans", za0001)
+			return
+		}
+		for zb0005 > 0 {
+			zb0005--
+			field, err = dc.ReadMapKeyPtr()
+			if err != nil {
+				err = msgp.WrapError(err, "NegativeSpans", za0001)
+				return
+			}
+			switch msgp.UnsafeString(field) {
+			case "Offset":
+				z.NegativeSpans[za0001].Offset, err = dc.ReadInt32()
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001, "Offset")
+					return
+				}
+			case "Length":
+				z.NegativeSpans[za0001].Length, err = dc.ReadUint32()
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001, "Length")
+					return
+				}
+			default:
+				err = dc.Skip()
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001)
+					return
+				}
+			}
+		}
+	}
+	var zb0006 uint32
+	zb0006, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeBuckets")
+		return
+	}
+	if cap(z.NegativeBuckets) >= int(zb0006) {
+		z.NegativeBuckets = (z.NegativeBuckets)[:zb0006]
+	} else {
+		z.NegativeBuckets = make([]int64, zb0006)
+	}
+	for za0002 := range z.NegativeBuckets {
+		z.NegativeBuckets[za0002], err = dc.ReadInt64()
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeBuckets", za0002)
+			return
+		}
+	}
+	var zb0007 uint32
+	zb0007, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeCounts")
+		return
+	}
+	if cap(z.NegativeCounts) >= int(zb0007) {
+		z.NegativeCounts = (z.NegativeCounts)[:zb0007]
+	} else {
+		z.NegativeCounts = make([]float64, zb0007)
+	}
+	for za0003 := range z.NegativeCounts {
+		z.NegativeCounts[za0003], err = dc.ReadFloat64()
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeCounts", za0003)
+			return
+		}
+	}
+	var zb0008 uint32
+	zb0008, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveSpans")
+		return
+	}
+	if cap(z.PositiveSpans) >= int(zb0008) {
+		z.PositiveSpans = (z.PositiveSpans)[:zb0008]
+	} else {
+		z.PositiveSpans = make([]BucketSpan, zb0008)
+	}
+	for za0004 := range z.PositiveSpans {
+		var zb0009 uint32
+		zb0009, err = dc.ReadMapHeader()
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveSpans", za0004)
+			return
+		}
+		for zb0009 > 0 {
+			zb0009--
+			field, err = dc.ReadMapKeyPtr()
+			if err != nil {
+				err = msgp.WrapError(err, "PositiveSpans", za0004)
+				return
+			}
+			switch msgp.UnsafeString(field) {
+			case "Offset":
+				z.PositiveSpans[za0004].Offset, err = dc.ReadInt32()
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004, "Offset")
+					return
+				}
+			case "Length":
+				z.PositiveSpans[za0004].Length, err = dc.ReadUint32()
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004, "Length")
+					return
+				}
+			default:
+				err = dc.Skip()
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004)
+					return
+				}
+			}
+		}
+	}
+	var zb0010 uint32
+	zb0010, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveBuckets")
+		return
+	}
+	if cap(z.PositiveBuckets) >= int(zb0010) {
+		z.PositiveBuckets = (z.PositiveBuckets)[:zb0010]
+	} else {
+		z.PositiveBuckets = make([]int64, zb0010)
+	}
+	for za0005 := range z.PositiveBuckets {
+		z.PositiveBuckets[za0005], err = dc.ReadInt64()
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveBuckets", za0005)
+			return
+		}
+	}
+	var zb0011 uint32
+	zb0011, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveCounts")
+		return
+	}
+	if cap(z.PositiveCounts) >= int(zb0011) {
+		z.PositiveCounts = (z.PositiveCounts)[:zb0011]
+	} else {
+		z.PositiveCounts = make([]float64, zb0011)
+	}
+	for za0006 := range z.PositiveCounts {
+		z.PositiveCounts[za0006], err = dc.ReadFloat64()
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveCounts", za0006)
+			return
+		}
+	}
+	z.ResetHint, err = dc.ReadInt32()
+	if err != nil {
+		err = msgp.WrapError(err, "ResetHint")
+		return
+	}
+	z.TimestampMillisecond, err = dc.ReadInt64()
+	if err != nil {
+		err = msgp.WrapError(err, "TimestampMillisecond")
+		return
 	}
 	return
 }
 
 // EncodeMsg implements msgp.Encodable
 func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 13
-	// write "Count"
-	err = en.Append(0x8d, 0xa5, 0x43, 0x6f, 0x75, 0x6e, 0x74)
-	if err != nil {
-		return
-	}
+	// array header, size 13
 	// map header, size 3
 	// write "IsInt"
-	err = en.Append(0x83, 0xa5, 0x49, 0x73, 0x49, 0x6e, 0x74)
+	err = en.Append(0x9d, 0x83, 0xa5, 0x49, 0x73, 0x49, 0x6e, 0x74)
 	if err != nil {
 		return
 	}
@@ -1475,19 +1304,9 @@ func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Count", "FloatValue")
 		return
 	}
-	// write "Sum"
-	err = en.Append(0xa3, 0x53, 0x75, 0x6d)
-	if err != nil {
-		return
-	}
 	err = en.WriteFloat64(z.Sum)
 	if err != nil {
 		err = msgp.WrapError(err, "Sum")
-		return
-	}
-	// write "Schema"
-	err = en.Append(0xa6, 0x53, 0x63, 0x68, 0x65, 0x6d, 0x61)
-	if err != nil {
 		return
 	}
 	err = en.WriteInt32(z.Schema)
@@ -1495,19 +1314,9 @@ func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Schema")
 		return
 	}
-	// write "ZeroThreshold"
-	err = en.Append(0xad, 0x5a, 0x65, 0x72, 0x6f, 0x54, 0x68, 0x72, 0x65, 0x73, 0x68, 0x6f, 0x6c, 0x64)
-	if err != nil {
-		return
-	}
 	err = en.WriteFloat64(z.ZeroThreshold)
 	if err != nil {
 		err = msgp.WrapError(err, "ZeroThreshold")
-		return
-	}
-	// write "ZeroCount"
-	err = en.Append(0xa9, 0x5a, 0x65, 0x72, 0x6f, 0x43, 0x6f, 0x75, 0x6e, 0x74)
-	if err != nil {
 		return
 	}
 	// map header, size 3
@@ -1541,11 +1350,6 @@ func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "ZeroCount", "FloatValue")
 		return
 	}
-	// write "NegativeSpans"
-	err = en.Append(0xad, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x53, 0x70, 0x61, 0x6e, 0x73)
-	if err != nil {
-		return
-	}
 	err = en.WriteArrayHeader(uint32(len(z.NegativeSpans)))
 	if err != nil {
 		err = msgp.WrapError(err, "NegativeSpans")
@@ -1574,11 +1378,6 @@ func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	}
-	// write "NegativeBuckets"
-	err = en.Append(0xaf, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x42, 0x75, 0x63, 0x6b, 0x65, 0x74, 0x73)
-	if err != nil {
-		return
-	}
 	err = en.WriteArrayHeader(uint32(len(z.NegativeBuckets)))
 	if err != nil {
 		err = msgp.WrapError(err, "NegativeBuckets")
@@ -1591,11 +1390,6 @@ func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	}
-	// write "NegativeCounts"
-	err = en.Append(0xae, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x73)
-	if err != nil {
-		return
-	}
 	err = en.WriteArrayHeader(uint32(len(z.NegativeCounts)))
 	if err != nil {
 		err = msgp.WrapError(err, "NegativeCounts")
@@ -1607,11 +1401,6 @@ func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
 			err = msgp.WrapError(err, "NegativeCounts", za0003)
 			return
 		}
-	}
-	// write "PositiveSpans"
-	err = en.Append(0xad, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x53, 0x70, 0x61, 0x6e, 0x73)
-	if err != nil {
-		return
 	}
 	err = en.WriteArrayHeader(uint32(len(z.PositiveSpans)))
 	if err != nil {
@@ -1641,11 +1430,6 @@ func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	}
-	// write "PositiveBuckets"
-	err = en.Append(0xaf, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x42, 0x75, 0x63, 0x6b, 0x65, 0x74, 0x73)
-	if err != nil {
-		return
-	}
 	err = en.WriteArrayHeader(uint32(len(z.PositiveBuckets)))
 	if err != nil {
 		err = msgp.WrapError(err, "PositiveBuckets")
@@ -1657,11 +1441,6 @@ func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
 			err = msgp.WrapError(err, "PositiveBuckets", za0005)
 			return
 		}
-	}
-	// write "PositiveCounts"
-	err = en.Append(0xae, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x73)
-	if err != nil {
-		return
 	}
 	err = en.WriteArrayHeader(uint32(len(z.PositiveCounts)))
 	if err != nil {
@@ -1675,19 +1454,9 @@ func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	}
-	// write "ResetHint"
-	err = en.Append(0xa9, 0x52, 0x65, 0x73, 0x65, 0x74, 0x48, 0x69, 0x6e, 0x74)
-	if err != nil {
-		return
-	}
 	err = en.WriteInt32(z.ResetHint)
 	if err != nil {
 		err = msgp.WrapError(err, "ResetHint")
-		return
-	}
-	// write "TimestampMillisecond"
-	err = en.Append(0xb4, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x4d, 0x69, 0x6c, 0x6c, 0x69, 0x73, 0x65, 0x63, 0x6f, 0x6e, 0x64)
-	if err != nil {
 		return
 	}
 	err = en.WriteInt64(z.TimestampMillisecond)
@@ -1701,12 +1470,10 @@ func (z *Histogram) EncodeMsg(en *msgp.Writer) (err error) {
 // MarshalMsg implements msgp.Marshaler
 func (z *Histogram) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 13
-	// string "Count"
-	o = append(o, 0x8d, 0xa5, 0x43, 0x6f, 0x75, 0x6e, 0x74)
+	// array header, size 13
 	// map header, size 3
 	// string "IsInt"
-	o = append(o, 0x83, 0xa5, 0x49, 0x73, 0x49, 0x6e, 0x74)
+	o = append(o, 0x9d, 0x83, 0xa5, 0x49, 0x73, 0x49, 0x6e, 0x74)
 	o = msgp.AppendBool(o, z.Count.IsInt)
 	// string "IntValue"
 	o = append(o, 0xa8, 0x49, 0x6e, 0x74, 0x56, 0x61, 0x6c, 0x75, 0x65)
@@ -1714,17 +1481,9 @@ func (z *Histogram) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "FloatValue"
 	o = append(o, 0xaa, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x56, 0x61, 0x6c, 0x75, 0x65)
 	o = msgp.AppendFloat64(o, z.Count.FloatValue)
-	// string "Sum"
-	o = append(o, 0xa3, 0x53, 0x75, 0x6d)
 	o = msgp.AppendFloat64(o, z.Sum)
-	// string "Schema"
-	o = append(o, 0xa6, 0x53, 0x63, 0x68, 0x65, 0x6d, 0x61)
 	o = msgp.AppendInt32(o, z.Schema)
-	// string "ZeroThreshold"
-	o = append(o, 0xad, 0x5a, 0x65, 0x72, 0x6f, 0x54, 0x68, 0x72, 0x65, 0x73, 0x68, 0x6f, 0x6c, 0x64)
 	o = msgp.AppendFloat64(o, z.ZeroThreshold)
-	// string "ZeroCount"
-	o = append(o, 0xa9, 0x5a, 0x65, 0x72, 0x6f, 0x43, 0x6f, 0x75, 0x6e, 0x74)
 	// map header, size 3
 	// string "IsInt"
 	o = append(o, 0x83, 0xa5, 0x49, 0x73, 0x49, 0x6e, 0x74)
@@ -1735,8 +1494,6 @@ func (z *Histogram) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "FloatValue"
 	o = append(o, 0xaa, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x56, 0x61, 0x6c, 0x75, 0x65)
 	o = msgp.AppendFloat64(o, z.ZeroCount.FloatValue)
-	// string "NegativeSpans"
-	o = append(o, 0xad, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x53, 0x70, 0x61, 0x6e, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.NegativeSpans)))
 	for za0001 := range z.NegativeSpans {
 		// map header, size 2
@@ -1747,20 +1504,14 @@ func (z *Histogram) MarshalMsg(b []byte) (o []byte, err error) {
 		o = append(o, 0xa6, 0x4c, 0x65, 0x6e, 0x67, 0x74, 0x68)
 		o = msgp.AppendUint32(o, z.NegativeSpans[za0001].Length)
 	}
-	// string "NegativeBuckets"
-	o = append(o, 0xaf, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x42, 0x75, 0x63, 0x6b, 0x65, 0x74, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.NegativeBuckets)))
 	for za0002 := range z.NegativeBuckets {
 		o = msgp.AppendInt64(o, z.NegativeBuckets[za0002])
 	}
-	// string "NegativeCounts"
-	o = append(o, 0xae, 0x4e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.NegativeCounts)))
 	for za0003 := range z.NegativeCounts {
 		o = msgp.AppendFloat64(o, z.NegativeCounts[za0003])
 	}
-	// string "PositiveSpans"
-	o = append(o, 0xad, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x53, 0x70, 0x61, 0x6e, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.PositiveSpans)))
 	for za0004 := range z.PositiveSpans {
 		// map header, size 2
@@ -1771,336 +1522,303 @@ func (z *Histogram) MarshalMsg(b []byte) (o []byte, err error) {
 		o = append(o, 0xa6, 0x4c, 0x65, 0x6e, 0x67, 0x74, 0x68)
 		o = msgp.AppendUint32(o, z.PositiveSpans[za0004].Length)
 	}
-	// string "PositiveBuckets"
-	o = append(o, 0xaf, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x42, 0x75, 0x63, 0x6b, 0x65, 0x74, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.PositiveBuckets)))
 	for za0005 := range z.PositiveBuckets {
 		o = msgp.AppendInt64(o, z.PositiveBuckets[za0005])
 	}
-	// string "PositiveCounts"
-	o = append(o, 0xae, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x76, 0x65, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.PositiveCounts)))
 	for za0006 := range z.PositiveCounts {
 		o = msgp.AppendFloat64(o, z.PositiveCounts[za0006])
 	}
-	// string "ResetHint"
-	o = append(o, 0xa9, 0x52, 0x65, 0x73, 0x65, 0x74, 0x48, 0x69, 0x6e, 0x74)
 	o = msgp.AppendInt32(o, z.ResetHint)
-	// string "TimestampMillisecond"
-	o = append(o, 0xb4, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x4d, 0x69, 0x6c, 0x6c, 0x69, 0x73, 0x65, 0x63, 0x6f, 0x6e, 0x64)
 	o = msgp.AppendInt64(o, z.TimestampMillisecond)
 	return
 }
 
 // UnmarshalMsg implements msgp.Unmarshaler
 func (z *Histogram) UnmarshalMsg(bts []byte) (o []byte, err error) {
-	var field []byte
-	_ = field
 	var zb0001 uint32
-	zb0001, bts, err = msgp.ReadMapHeaderBytes(bts)
+	zb0001, bts, err = msgp.ReadArrayHeaderBytes(bts)
 	if err != nil {
 		err = msgp.WrapError(err)
 		return
 	}
-	for zb0001 > 0 {
-		zb0001--
+	if zb0001 != 13 {
+		err = msgp.ArrayError{Wanted: 13, Got: zb0001}
+		return
+	}
+	var field []byte
+	_ = field
+	var zb0002 uint32
+	zb0002, bts, err = msgp.ReadMapHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "Count")
+		return
+	}
+	for zb0002 > 0 {
+		zb0002--
 		field, bts, err = msgp.ReadMapKeyZC(bts)
 		if err != nil {
-			err = msgp.WrapError(err)
+			err = msgp.WrapError(err, "Count")
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "Count":
-			var zb0002 uint32
-			zb0002, bts, err = msgp.ReadMapHeaderBytes(bts)
+		case "IsInt":
+			z.Count.IsInt, bts, err = msgp.ReadBoolBytes(bts)
 			if err != nil {
-				err = msgp.WrapError(err, "Count")
+				err = msgp.WrapError(err, "Count", "IsInt")
 				return
 			}
-			for zb0002 > 0 {
-				zb0002--
-				field, bts, err = msgp.ReadMapKeyZC(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "Count")
-					return
-				}
-				switch msgp.UnsafeString(field) {
-				case "IsInt":
-					z.Count.IsInt, bts, err = msgp.ReadBoolBytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "IsInt")
-						return
-					}
-				case "IntValue":
-					z.Count.IntValue, bts, err = msgp.ReadUint64Bytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "IntValue")
-						return
-					}
-				case "FloatValue":
-					z.Count.FloatValue, bts, err = msgp.ReadFloat64Bytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "Count", "FloatValue")
-						return
-					}
-				default:
-					bts, err = msgp.Skip(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "Count")
-						return
-					}
-				}
-			}
-		case "Sum":
-			z.Sum, bts, err = msgp.ReadFloat64Bytes(bts)
+		case "IntValue":
+			z.Count.IntValue, bts, err = msgp.ReadUint64Bytes(bts)
 			if err != nil {
-				err = msgp.WrapError(err, "Sum")
+				err = msgp.WrapError(err, "Count", "IntValue")
 				return
 			}
-		case "Schema":
-			z.Schema, bts, err = msgp.ReadInt32Bytes(bts)
+		case "FloatValue":
+			z.Count.FloatValue, bts, err = msgp.ReadFloat64Bytes(bts)
 			if err != nil {
-				err = msgp.WrapError(err, "Schema")
-				return
-			}
-		case "ZeroThreshold":
-			z.ZeroThreshold, bts, err = msgp.ReadFloat64Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "ZeroThreshold")
-				return
-			}
-		case "ZeroCount":
-			var zb0003 uint32
-			zb0003, bts, err = msgp.ReadMapHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "ZeroCount")
-				return
-			}
-			for zb0003 > 0 {
-				zb0003--
-				field, bts, err = msgp.ReadMapKeyZC(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "ZeroCount")
-					return
-				}
-				switch msgp.UnsafeString(field) {
-				case "IsInt":
-					z.ZeroCount.IsInt, bts, err = msgp.ReadBoolBytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "IsInt")
-						return
-					}
-				case "IntValue":
-					z.ZeroCount.IntValue, bts, err = msgp.ReadUint64Bytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "IntValue")
-						return
-					}
-				case "FloatValue":
-					z.ZeroCount.FloatValue, bts, err = msgp.ReadFloat64Bytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount", "FloatValue")
-						return
-					}
-				default:
-					bts, err = msgp.Skip(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "ZeroCount")
-						return
-					}
-				}
-			}
-		case "NegativeSpans":
-			var zb0004 uint32
-			zb0004, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeSpans")
-				return
-			}
-			if cap(z.NegativeSpans) >= int(zb0004) {
-				z.NegativeSpans = (z.NegativeSpans)[:zb0004]
-			} else {
-				z.NegativeSpans = make([]BucketSpan, zb0004)
-			}
-			for za0001 := range z.NegativeSpans {
-				var zb0005 uint32
-				zb0005, bts, err = msgp.ReadMapHeaderBytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeSpans", za0001)
-					return
-				}
-				for zb0005 > 0 {
-					zb0005--
-					field, bts, err = msgp.ReadMapKeyZC(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "NegativeSpans", za0001)
-						return
-					}
-					switch msgp.UnsafeString(field) {
-					case "Offset":
-						z.NegativeSpans[za0001].Offset, bts, err = msgp.ReadInt32Bytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001, "Offset")
-							return
-						}
-					case "Length":
-						z.NegativeSpans[za0001].Length, bts, err = msgp.ReadUint32Bytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001, "Length")
-							return
-						}
-					default:
-						bts, err = msgp.Skip(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "NegativeSpans", za0001)
-							return
-						}
-					}
-				}
-			}
-		case "NegativeBuckets":
-			var zb0006 uint32
-			zb0006, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeBuckets")
-				return
-			}
-			if cap(z.NegativeBuckets) >= int(zb0006) {
-				z.NegativeBuckets = (z.NegativeBuckets)[:zb0006]
-			} else {
-				z.NegativeBuckets = make([]int64, zb0006)
-			}
-			for za0002 := range z.NegativeBuckets {
-				z.NegativeBuckets[za0002], bts, err = msgp.ReadInt64Bytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeBuckets", za0002)
-					return
-				}
-			}
-		case "NegativeCounts":
-			var zb0007 uint32
-			zb0007, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "NegativeCounts")
-				return
-			}
-			if cap(z.NegativeCounts) >= int(zb0007) {
-				z.NegativeCounts = (z.NegativeCounts)[:zb0007]
-			} else {
-				z.NegativeCounts = make([]float64, zb0007)
-			}
-			for za0003 := range z.NegativeCounts {
-				z.NegativeCounts[za0003], bts, err = msgp.ReadFloat64Bytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "NegativeCounts", za0003)
-					return
-				}
-			}
-		case "PositiveSpans":
-			var zb0008 uint32
-			zb0008, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveSpans")
-				return
-			}
-			if cap(z.PositiveSpans) >= int(zb0008) {
-				z.PositiveSpans = (z.PositiveSpans)[:zb0008]
-			} else {
-				z.PositiveSpans = make([]BucketSpan, zb0008)
-			}
-			for za0004 := range z.PositiveSpans {
-				var zb0009 uint32
-				zb0009, bts, err = msgp.ReadMapHeaderBytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveSpans", za0004)
-					return
-				}
-				for zb0009 > 0 {
-					zb0009--
-					field, bts, err = msgp.ReadMapKeyZC(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "PositiveSpans", za0004)
-						return
-					}
-					switch msgp.UnsafeString(field) {
-					case "Offset":
-						z.PositiveSpans[za0004].Offset, bts, err = msgp.ReadInt32Bytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004, "Offset")
-							return
-						}
-					case "Length":
-						z.PositiveSpans[za0004].Length, bts, err = msgp.ReadUint32Bytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004, "Length")
-							return
-						}
-					default:
-						bts, err = msgp.Skip(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "PositiveSpans", za0004)
-							return
-						}
-					}
-				}
-			}
-		case "PositiveBuckets":
-			var zb0010 uint32
-			zb0010, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveBuckets")
-				return
-			}
-			if cap(z.PositiveBuckets) >= int(zb0010) {
-				z.PositiveBuckets = (z.PositiveBuckets)[:zb0010]
-			} else {
-				z.PositiveBuckets = make([]int64, zb0010)
-			}
-			for za0005 := range z.PositiveBuckets {
-				z.PositiveBuckets[za0005], bts, err = msgp.ReadInt64Bytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveBuckets", za0005)
-					return
-				}
-			}
-		case "PositiveCounts":
-			var zb0011 uint32
-			zb0011, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "PositiveCounts")
-				return
-			}
-			if cap(z.PositiveCounts) >= int(zb0011) {
-				z.PositiveCounts = (z.PositiveCounts)[:zb0011]
-			} else {
-				z.PositiveCounts = make([]float64, zb0011)
-			}
-			for za0006 := range z.PositiveCounts {
-				z.PositiveCounts[za0006], bts, err = msgp.ReadFloat64Bytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "PositiveCounts", za0006)
-					return
-				}
-			}
-		case "ResetHint":
-			z.ResetHint, bts, err = msgp.ReadInt32Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "ResetHint")
-				return
-			}
-		case "TimestampMillisecond":
-			z.TimestampMillisecond, bts, err = msgp.ReadInt64Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "TimestampMillisecond")
+				err = msgp.WrapError(err, "Count", "FloatValue")
 				return
 			}
 		default:
 			bts, err = msgp.Skip(bts)
 			if err != nil {
-				err = msgp.WrapError(err)
+				err = msgp.WrapError(err, "Count")
 				return
 			}
 		}
+	}
+	z.Sum, bts, err = msgp.ReadFloat64Bytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "Sum")
+		return
+	}
+	z.Schema, bts, err = msgp.ReadInt32Bytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "Schema")
+		return
+	}
+	z.ZeroThreshold, bts, err = msgp.ReadFloat64Bytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "ZeroThreshold")
+		return
+	}
+	var zb0003 uint32
+	zb0003, bts, err = msgp.ReadMapHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "ZeroCount")
+		return
+	}
+	for zb0003 > 0 {
+		zb0003--
+		field, bts, err = msgp.ReadMapKeyZC(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "ZeroCount")
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "IsInt":
+			z.ZeroCount.IsInt, bts, err = msgp.ReadBoolBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "IsInt")
+				return
+			}
+		case "IntValue":
+			z.ZeroCount.IntValue, bts, err = msgp.ReadUint64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "IntValue")
+				return
+			}
+		case "FloatValue":
+			z.ZeroCount.FloatValue, bts, err = msgp.ReadFloat64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount", "FloatValue")
+				return
+			}
+		default:
+			bts, err = msgp.Skip(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "ZeroCount")
+				return
+			}
+		}
+	}
+	var zb0004 uint32
+	zb0004, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeSpans")
+		return
+	}
+	if cap(z.NegativeSpans) >= int(zb0004) {
+		z.NegativeSpans = (z.NegativeSpans)[:zb0004]
+	} else {
+		z.NegativeSpans = make([]BucketSpan, zb0004)
+	}
+	for za0001 := range z.NegativeSpans {
+		var zb0005 uint32
+		zb0005, bts, err = msgp.ReadMapHeaderBytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeSpans", za0001)
+			return
+		}
+		for zb0005 > 0 {
+			zb0005--
+			field, bts, err = msgp.ReadMapKeyZC(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "NegativeSpans", za0001)
+				return
+			}
+			switch msgp.UnsafeString(field) {
+			case "Offset":
+				z.NegativeSpans[za0001].Offset, bts, err = msgp.ReadInt32Bytes(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001, "Offset")
+					return
+				}
+			case "Length":
+				z.NegativeSpans[za0001].Length, bts, err = msgp.ReadUint32Bytes(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001, "Length")
+					return
+				}
+			default:
+				bts, err = msgp.Skip(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "NegativeSpans", za0001)
+					return
+				}
+			}
+		}
+	}
+	var zb0006 uint32
+	zb0006, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeBuckets")
+		return
+	}
+	if cap(z.NegativeBuckets) >= int(zb0006) {
+		z.NegativeBuckets = (z.NegativeBuckets)[:zb0006]
+	} else {
+		z.NegativeBuckets = make([]int64, zb0006)
+	}
+	for za0002 := range z.NegativeBuckets {
+		z.NegativeBuckets[za0002], bts, err = msgp.ReadInt64Bytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeBuckets", za0002)
+			return
+		}
+	}
+	var zb0007 uint32
+	zb0007, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "NegativeCounts")
+		return
+	}
+	if cap(z.NegativeCounts) >= int(zb0007) {
+		z.NegativeCounts = (z.NegativeCounts)[:zb0007]
+	} else {
+		z.NegativeCounts = make([]float64, zb0007)
+	}
+	for za0003 := range z.NegativeCounts {
+		z.NegativeCounts[za0003], bts, err = msgp.ReadFloat64Bytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "NegativeCounts", za0003)
+			return
+		}
+	}
+	var zb0008 uint32
+	zb0008, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveSpans")
+		return
+	}
+	if cap(z.PositiveSpans) >= int(zb0008) {
+		z.PositiveSpans = (z.PositiveSpans)[:zb0008]
+	} else {
+		z.PositiveSpans = make([]BucketSpan, zb0008)
+	}
+	for za0004 := range z.PositiveSpans {
+		var zb0009 uint32
+		zb0009, bts, err = msgp.ReadMapHeaderBytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveSpans", za0004)
+			return
+		}
+		for zb0009 > 0 {
+			zb0009--
+			field, bts, err = msgp.ReadMapKeyZC(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "PositiveSpans", za0004)
+				return
+			}
+			switch msgp.UnsafeString(field) {
+			case "Offset":
+				z.PositiveSpans[za0004].Offset, bts, err = msgp.ReadInt32Bytes(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004, "Offset")
+					return
+				}
+			case "Length":
+				z.PositiveSpans[za0004].Length, bts, err = msgp.ReadUint32Bytes(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004, "Length")
+					return
+				}
+			default:
+				bts, err = msgp.Skip(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "PositiveSpans", za0004)
+					return
+				}
+			}
+		}
+	}
+	var zb0010 uint32
+	zb0010, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveBuckets")
+		return
+	}
+	if cap(z.PositiveBuckets) >= int(zb0010) {
+		z.PositiveBuckets = (z.PositiveBuckets)[:zb0010]
+	} else {
+		z.PositiveBuckets = make([]int64, zb0010)
+	}
+	for za0005 := range z.PositiveBuckets {
+		z.PositiveBuckets[za0005], bts, err = msgp.ReadInt64Bytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveBuckets", za0005)
+			return
+		}
+	}
+	var zb0011 uint32
+	zb0011, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "PositiveCounts")
+		return
+	}
+	if cap(z.PositiveCounts) >= int(zb0011) {
+		z.PositiveCounts = (z.PositiveCounts)[:zb0011]
+	} else {
+		z.PositiveCounts = make([]float64, zb0011)
+	}
+	for za0006 := range z.PositiveCounts {
+		z.PositiveCounts[za0006], bts, err = msgp.ReadFloat64Bytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "PositiveCounts", za0006)
+			return
+		}
+	}
+	z.ResetHint, bts, err = msgp.ReadInt32Bytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "ResetHint")
+		return
+	}
+	z.TimestampMillisecond, bts, err = msgp.ReadInt64Bytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err, "TimestampMillisecond")
+		return
 	}
 	o = bts
 	return
@@ -2108,7 +1826,7 @@ func (z *Histogram) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *Histogram) Msgsize() (s int) {
-	s = 1 + 6 + 1 + 6 + msgp.BoolSize + 9 + msgp.Uint64Size + 11 + msgp.Float64Size + 4 + msgp.Float64Size + 7 + msgp.Int32Size + 14 + msgp.Float64Size + 10 + 1 + 6 + msgp.BoolSize + 9 + msgp.Uint64Size + 11 + msgp.Float64Size + 14 + msgp.ArrayHeaderSize + (len(z.NegativeSpans) * (15 + msgp.Int32Size + msgp.Uint32Size)) + 16 + msgp.ArrayHeaderSize + (len(z.NegativeBuckets) * (msgp.Int64Size)) + 15 + msgp.ArrayHeaderSize + (len(z.NegativeCounts) * (msgp.Float64Size)) + 14 + msgp.ArrayHeaderSize + (len(z.PositiveSpans) * (15 + msgp.Int32Size + msgp.Uint32Size)) + 16 + msgp.ArrayHeaderSize + (len(z.PositiveBuckets) * (msgp.Int64Size)) + 15 + msgp.ArrayHeaderSize + (len(z.PositiveCounts) * (msgp.Float64Size)) + 10 + msgp.Int32Size + 21 + msgp.Int64Size
+	s = 1 + 1 + 6 + msgp.BoolSize + 9 + msgp.Uint64Size + 11 + msgp.Float64Size + msgp.Float64Size + msgp.Int32Size + msgp.Float64Size + 1 + 6 + msgp.BoolSize + 9 + msgp.Uint64Size + 11 + msgp.Float64Size + msgp.ArrayHeaderSize + (len(z.NegativeSpans) * (15 + msgp.Int32Size + msgp.Uint32Size)) + msgp.ArrayHeaderSize + (len(z.NegativeBuckets) * (msgp.Int64Size)) + msgp.ArrayHeaderSize + (len(z.NegativeCounts) * (msgp.Float64Size)) + msgp.ArrayHeaderSize + (len(z.PositiveSpans) * (15 + msgp.Int32Size + msgp.Uint32Size)) + msgp.ArrayHeaderSize + (len(z.PositiveBuckets) * (msgp.Int64Size)) + msgp.ArrayHeaderSize + (len(z.PositiveCounts) * (msgp.Float64Size)) + msgp.Int32Size + msgp.Int64Size
 	return
 }
 

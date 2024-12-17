@@ -1,7 +1,6 @@
 package v2
 
 import (
-	"github.com/alphadose/haxmap"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/tinylib/msgp/msgp"
@@ -58,7 +57,6 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 	sg.Metadata = make([]*TimeSeriesBinary, 0, len(metadata))
 
 	strMapToIndex := make(map[string]uint32, (len(metrics)+len(metadata))*10)
-	strings := make([]string, 0, (len(metrics)+len(metadata))*10)
 	for _, m := range metrics {
 		ts := createTimeSeries(m, strMapToIndex)
 		sg.Series = append(sg.Series, ts)

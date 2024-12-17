@@ -44,41 +44,6 @@ func (v ByteString) String() string {
 	return unsafe.String(&v[0], len([]byte(v)))
 }
 
-type Serialization struct{}
-
-func GetSerializer() types.Serialization {
-	return &Serialization{}
-}
-
-func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Metric) ([]byte, error) {
-	sg := SeriesGroup{}
-	buf := make([]byte, 0)
-	sg.Series = make([]*TimeSeriesBinary, 0, len(metrics))
-	sg.Metadata = make([]*TimeSeriesBinary, 0, len(metadata))
-
-	strMapToIndex := make(map[string]uint32, (len(metrics)+len(metadata))*10)
-	for _, m := range metrics {
-		ts := createTimeSeries(m, strMapToIndex)
-		sg.Series = append(sg.Series, ts)
-	}
-	for _, m := range metadata {
-		ts := createTimeSeries(m, strMapToIndex)
-		sg.Metadata = append(sg.Metadata, ts)
-	}
-	stringsSlice := make([]ByteString, len(strMapToIndex))
-	for stringValue, index := range strMapToIndex {
-		d := unsafe.StringData(stringValue)
-		stringsSlice[index] = unsafe.Slice(d, len(stringValue))
-	}
-	sg.Strings = stringsSlice
-	return sg.MarshalMsg(buf)
-}
-
-func (s *Serialization) Deserialize(bytes []byte) ([]*types.Metric, []*types.Metric, []byte, error) {
-	sg := &SeriesGroup{}
-	return DeserializeToSeriesGroup(sg, bytes)
-}
-
 // createTimeSeries is what does the conversion from labels.Labels to LabelNames and
 // LabelValues while filling in the string map, that is later converted to []string.
 func createTimeSeries(m *types.Metric, strMapToInt map[string]uint32) *TimeSeriesBinary {

@@ -43,6 +43,7 @@ func TestLabels(t *testing.T) {
 
 func BenchmarkDeserialize(b *testing.B) {
 	// 2024-12-17 BenchmarkDeserialize-24    	     909	   1234031 ns/op after some optimization on pools
+	// 2024-12-17 BenchmarkDeserialize-24    	    1308	    858204 ns/op further optimizations on allocs
 	metrics := make([]*types.Metric, 0)
 	for k := 0; k < 1_000; k++ {
 		lblsMap := make(map[string]string)
@@ -67,6 +68,7 @@ func BenchmarkDeserialize(b *testing.B) {
 		if err != nil {
 			panic(err.Error())
 		}
+		bufPool.Put(buf)
 		types.PutMetricsIntoPool(newMetrics)
 		types.PutMetricsIntoPool(newMeta)
 	}

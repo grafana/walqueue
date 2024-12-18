@@ -29,7 +29,7 @@ func TestLabels(t *testing.T) {
 	serializer := GetSerializer()
 	buf, err := serializer.Serialize(metrics, nil)
 	require.NoError(t, err)
-	newMetrics, _, _, err := serializer.Deserialize(buf)
+	newMetrics, _, err := serializer.Deserialize(buf)
 	require.NoError(t, err)
 	series1 := newMetrics[0]
 	series2 := metrics[0]
@@ -63,7 +63,7 @@ func BenchmarkDeserialize(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		newMetrics, _, _, err := sg.Deserialize(buf)
+		newMetrics, _, err := sg.Deserialize(buf)
 		if err != nil {
 			panic(err.Error())
 		}

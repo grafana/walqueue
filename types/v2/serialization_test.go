@@ -29,7 +29,7 @@ func TestLabels(t *testing.T) {
 	serializer := GetSerializer()
 	buf, err := serializer.Serialize(metrics, nil)
 	require.NoError(t, err)
-	newMetrics, _, _, err := serializer.Deserialize(buf)
+	newMetrics, _, err := serializer.Deserialize(buf)
 	require.NoError(t, err)
 	series1 := newMetrics[0]
 	series2 := metrics[0]
@@ -44,6 +44,7 @@ func TestLabels(t *testing.T) {
 func BenchmarkDeserialize(b *testing.B) {
 	// 2024-12-17 BenchmarkDeserialize-24    	     909	   1234031 ns/op after some optimization on pools
 	// 2024-12-17 BenchmarkDeserialize-24    	    1308	    858204 ns/op further optimizations on allocs
+	// 2023-12-17 BenchmarkDeserialize-24    	    1508	    811829 ns/op after switching to swiss map
 	metrics := make([]*types.Metric, 0)
 	for k := 0; k < 1_000; k++ {
 		lblsMap := make(map[string]string)
@@ -64,7 +65,7 @@ func BenchmarkDeserialize(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		newMetrics, newMeta, _, err := sg.Deserialize(buf)
+		newMetrics, newMeta, err := sg.Deserialize(buf)
 		if err != nil {
 			panic(err.Error())
 		}

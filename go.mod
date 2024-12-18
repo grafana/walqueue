@@ -5,7 +5,7 @@ go 1.23
 toolchain go1.23.1
 
 require (
-	github.com/alphadose/haxmap v1.4.1
+	github.com/dolthub/swiss v0.2.1
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3
 	github.com/go-kit/log v0.2.1
 	github.com/gogo/protobuf v1.3.2
@@ -25,6 +25,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dennwc/varint v1.0.0 // indirect
+	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/gammazero/deque v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/grafana/regexp v0.0.0-20240518133315-a468a5bfb3bc // indirect

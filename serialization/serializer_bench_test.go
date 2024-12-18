@@ -3,7 +3,6 @@ package serialization
 import (
 	"context"
 	"fmt"
-	"github.com/grafana/walqueue/types/v2"
 	"math/rand"
 	"testing"
 	"time"
@@ -36,7 +35,7 @@ func BenchmarkSerializer(b *testing.B) {
 	serial, _ := NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: 1_000,
 		FlushFrequency:    1 * time.Second,
-	}, &fakeFileQueue{}, func(stats types.SerializerStats) {}, V1, logger)
+	}, &fakeFileQueue{}, func(stats types.SerializerStats) {}, types.AlloyFileVersionV1, logger)
 	serial.Start()
 	for i := 0; i < b.N; i++ {
 		_ = serial.SendSeries(context.Background(), getSingleTimeSeries(b))
@@ -44,7 +43,7 @@ func BenchmarkSerializer(b *testing.B) {
 	serial.Stop()
 }
 
-func BecnchmarkTrie(b *testing.B) {
+func BenchmarkV2(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	// This should be ~11 allocs and 1400-1800 ns/op.
@@ -52,7 +51,7 @@ func BecnchmarkTrie(b *testing.B) {
 	serial, _ := NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: 1_000,
 		FlushFrequency:    1 * time.Second,
-	}, &fakeFileQueue{}, func(stats types.SerializerStats) {}, Trie, logger)
+	}, &fakeFileQueue{}, func(stats types.SerializerStats) {}, types.AlloyFileVersionV2, logger)
 	serial.Start()
 	for i := 0; i < b.N; i++ {
 		_ = serial.SendSeries(context.Background(), getSingleTimeSeries(b))
@@ -63,7 +62,7 @@ func BecnchmarkTrie(b *testing.B) {
 
 func getSingleTimeSeries(b *testing.B) *types.Metric {
 	b.Helper()
-	timeseries := v2.getTimeSeriesFromPool()
+	timeseries := types.GetMetricFromPool()
 	timeseries.TS = time.Now().Unix()
 	timeseries.Value = rand.Float64()
 	timeseries.Labels = getLabels()
@@ -96,12 +95,12 @@ func (f *fakeSerializer) Start() {}
 func (f *fakeSerializer) Stop() {}
 
 func (f *fakeSerializer) SendSeries(ctx context.Context, data *types.Metric) error {
-	v2.PutTimeSeriesIntoPool(data)
+	types.PutMetricIntoPool(data)
 	return nil
 }
 
 func (f *fakeSerializer) SendMetadata(ctx context.Context, data *types.Metric) error {
-	v2.PutTimeSeriesIntoPool(data)
+	types.PutMetricIntoPool(data)
 	return nil
 }
 

@@ -48,7 +48,7 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 
 }
 
-func (s *Serialization) Deserialize(i []byte) (metrics []*types.Metric, metadata []*types.Metric, out []byte, err error) {
+func (s *Serialization) Deserialize(i []byte) (metrics []*types.Metric, metadata []*types.Metric, err error) {
 	sg := &SeriesGroup{}
 	return DeserializeToSeriesGroup(sg, i)
 }
@@ -107,17 +107,6 @@ func (lh LabelHandles) Get(name string) string {
 		}
 	}
 	return ""
-}
-
-func MakeHandles(lbls labels.Labels) LabelHandles {
-	lhs := make([]LabelHandle, len(lbls))
-	for i, lbl := range lbls {
-		lhs[i] = LabelHandle{
-			Name:  unique.Make(lbl.Name),
-			Value: unique.Make(lbl.Value),
-		}
-	}
-	return lhs
 }
 
 func (h *Histogram) ToPromHistogram() prompb.Histogram {
@@ -259,17 +248,17 @@ func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
 }
 
 // DeserializeToSeriesGroup transforms a buffer to a SeriesGroup and converts the stringmap + indexes into actual Labels.
-func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*types.Metric, []byte, error) {
+func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*types.Metric, error) {
 	nr := msgp.NewReader(bytes.NewReader(buf))
 	err := sg.DecodeMsg(nr)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	// Need to fill in the labels.
 	metrics := types.GetMetricsFromPool()
 	if cap(metrics) < len(sg.Series) {
 		metrics = make([]*types.Metric, len(sg.Series))
-		for i, _ := range metrics {
+		for i := range metrics {
 			metrics[i] = &types.Metric{}
 		}
 	} else {
@@ -296,7 +285,7 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*
 	meta := types.GetMetricsFromPool()
 	if cap(meta) < len(sg.Metadata) {
 		meta = make([]*types.Metric, len(sg.Metadata))
-		for i, _ := range meta {
+		for i := range meta {
 			meta[i] = &types.Metric{}
 		}
 	} else {
@@ -321,5 +310,5 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*
 	}
 
 	sg.Strings = sg.Strings[:0]
-	return metrics, meta, buf, err
+	return metrics, meta, err
 }

@@ -2,9 +2,10 @@ package prometheus
 
 import (
 	"context"
+	v1 "github.com/grafana/walqueue/types/v1"
 	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/client_golang/prometheus"
-	"strconv"
+	"sync"
 	"time"
 
 	snappy "github.com/eapache/go-xerial-snappy"
@@ -19,6 +20,7 @@ import (
 	"github.com/vladopajic/go-actor/actor"
 )
 
+var pool = sync.Pool{New: func() interface{} { return make([]byte, 0) }}
 var _ storage.Appendable = (*queue)(nil)
 var _ Queue = (*queue)(nil)
 
@@ -46,7 +48,6 @@ type queue struct {
 	incoming   actor.Mailbox[types.DataHandle]
 	stats      *PrometheusStats
 	metaStats  *PrometheusStats
-	buf        []byte
 }
 
 // NewQueue creates and returns a new Queue instance, initializing its components
@@ -153,7 +154,10 @@ func (q *queue) Appender(ctx context.Context) storage.Appender {
 
 func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, buf []byte) {
 	var err error
-	q.buf, err = snappy.DecodeInto(q.buf, buf)
+	uncompressedBuf := pool.Get().([]byte)
+	defer pool.Put(uncompressedBuf)
+
+	uncompressedBuf, err = snappy.DecodeInto(uncompressedBuf, buf)
 	if err != nil {
 		level.Debug(q.logger).Log("msg", "error snappy decoding", "err", err)
 		return
@@ -166,47 +170,31 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		level.Error(q.logger).Log("msg", "version not found for deserialization")
 		return
 	}
-	switch version {
-
-	}
-	if version != types.AlloyFileVersionV2 {
+	var metrics []*types.Metric
+	var metadata []*types.Metric
+	switch types.FileFormat(version) {
+	case types.AlloyFileVersionV2:
+		s := v2.GetSerializer()
+		metrics, metadata, err = s.Deserialize(uncompressedBuf)
+	case types.AlloyFileVersionV1:
+		s := v1.GetSerializer()
+		metrics, metadata, err = s.Deserialize(uncompressedBuf)
+	default:
 		level.Error(q.logger).Log("msg", "invalid version found for deserialization", "version", version)
 		return
 	}
-
-}
-
-func (q *queue) serializeV2(ctx context.Context, meta map[string]string, buf []byte) {
-	// Grab the amounts of each type and we can go ahead and alloc the space.
-	seriesCount, _ := strconv.Atoi(meta["series_count"])
-	metaCount, _ := strconv.Atoi(meta["meta_count"])
-	stringsCount, _ := strconv.Atoi(meta["strings_count"])
-	sg := &v2.SeriesGroup{
-		Series:   make([]*types.Metric, seriesCount),
-		Metadata: make([]*types.Metric, metaCount),
-		Strings:  make([]string, stringsCount),
-	}
-	// Prefill our series with items from the pool to limit allocs.
-	for i := 0; i < seriesCount; i++ {
-		sg.Series[i] = v2.getTimeSeriesFromPool()
-	}
-	for i := 0; i < metaCount; i++ {
-		sg.Metadata[i] = v2.getTimeSeriesFromPool()
-	}
-	sg, q.buf, err = v2.DeserializeToSeriesGroup(sg, q.buf)
 	if err != nil {
-		level.Debug(q.logger).Log("msg", "error deserializing", "err", err)
-		return
+		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
 
-	for _, series := range sg.Series {
+	for _, series := range metrics {
 		// Check that the TTL.
 		seriesAge := time.Since(time.UnixMilli(series.TS))
 		// For any series that exceeds the time to live (ttl) based on its timestamp we do not want to push it to the networking layer
 		// but instead drop it here by continuing.
 		if seriesAge > q.ttl {
 			// Since we arent pushing the TS forward we should put it back into the pool.
-			v2.PutTimeSeriesIntoPool(series)
+			types.PutMetricIntoPool(series)
 			q.stats.NetworkTTLDrops.Inc()
 			continue
 		}
@@ -216,7 +204,7 @@ func (q *queue) serializeV2(ctx context.Context, meta map[string]string, buf []b
 		}
 	}
 
-	for _, md := range sg.Metadata {
+	for _, md := range metadata {
 		sendErr := q.network.SendMetadata(ctx, md)
 		if sendErr != nil {
 			level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)

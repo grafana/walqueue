@@ -3,6 +3,7 @@ package serialization
 import (
 	"context"
 	"fmt"
+	v1 "github.com/grafana/walqueue/types/v1"
 	"github.com/grafana/walqueue/types/v2"
 	"strconv"
 	"time"
@@ -33,10 +34,10 @@ type serializer struct {
 	meta           []*types.Metric
 	msgpBuffer     []byte
 	stats          func(stats types.SerializerStats)
-	fileFormat     FileFormat
+	fileFormat     types.FileFormat
 }
 
-func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(stats types.SerializerStats), ff FileFormat, l log.Logger) (types.Serializer, error) {
+func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(stats types.SerializerStats), ff types.FileFormat, l log.Logger) (types.Serializer, error) {
 	s := &serializer{
 		maxItemsBeforeFlush: int(cfg.MaxSignalsInBatch),
 		flushFrequency:      cfg.FlushFrequency,
@@ -143,126 +144,41 @@ func (s *serializer) DoWork(ctx actor.Context) actor.WorkerStatus {
 }
 
 func (s *serializer) flushToDisk(ctx actor.Context) error {
+	var err error
 	defer func() {
 		s.lastFlush = time.Now()
+		s.storeStats(err)
+		s.series = s.series[:0]
+		s.meta = s.meta[:0]
 	}()
 	// Do nothing if there is nothing.
 	if len(s.series) == 0 && len(s.meta) == 0 {
 		return nil
 	}
+	var buf []byte
+	var ser types.Serialization
 	switch s.fileFormat {
-	case V1:
-		return s.storeV1(ctx)
-	case Trie:
-		return nil
+	case types.AlloyFileVersionV1:
+		ser = v1.GetSerializer()
+	case types.AlloyFileVersionV2:
+		ser = v2.GetSerializer()
 	default:
 		return fmt.Errorf("invalid file format %s", s.fileFormat)
 	}
-}
-
-func (s *serializer) storeV1(ctx context.Context) error {
-	var err error
-	group := &v2.SeriesGroup{
-		Series:   make([]*types.Metric, len(s.series)),
-		Metadata: make([]*types.Metric, len(s.meta)),
-	}
-	defer func() {
-		s.storeStats(err)
-		// Return series to the pool, this is key to reducing allocs.
-		v2.putTimeSeriesSliceIntoPool(s.series)
-		v2.putTimeSeriesSliceIntoPool(s.meta)
-		s.series = s.series[:0]
-		s.meta = s.meta[:0]
-	}()
-
-	// This maps strings to index position in a slice. This is doing to reduce the file size of the data.
-	// Assume roughly each series has 10 labels, we do this because at very large mappings growing the map took up to 5% of cpu time.
-	// By pre allocating it that disappeared.
-	strMapToIndex := make(map[string]uint32, len(s.series)*10)
-	for i, ts := range s.series {
-		ts.FillLabelMapping(strMapToIndex)
-		group.Series[i] = ts
-	}
-	for i, ts := range s.meta {
-		ts.FillLabelMapping(strMapToIndex)
-		group.Metadata[i] = ts
-	}
-
-	stringsSlice := make([]types.ByteString, len(strMapToIndex))
-	for stringValue, index := range strMapToIndex {
-		stringsSlice[index] = types.ByteString(stringValue)
-	}
-	group.Strings = stringsSlice
-
-	buf, err := group.MarshalMsg(s.msgpBuffer)
+	buf, err = ser.Serialize(s.series, s.meta)
 	if err != nil {
 		return err
 	}
-
 	out := snappy.Encode(buf)
 	meta := map[string]string{
 		// product.signal_type.schema.version
-		"version":       types.AlloyFileVersion,
-		"compression":   "snappy",
-		"series_count":  strconv.Itoa(len(group.Series)),
-		"meta_count":    strconv.Itoa(len(group.Metadata)),
-		"strings_count": strconv.Itoa(len(group.Strings)),
+		"version":      string(s.fileFormat),
+		"compression":  "snappy",
+		"series_count": strconv.Itoa(len(s.series)),
+		"meta_count":   strconv.Itoa(len(s.meta)),
 	}
 	err = s.queue.Store(ctx, meta, out)
 	return err
-
-}
-
-func (s *serializer) storeTrie(ctx context.Context) error {
-	var err error
-	group := &types.SeriesGroupSingleName{
-		Series: make([]*types.TimeSeriesSingleName, len(s.series)),
-	}
-	defer func() {
-		s.storeStats(err)
-		// Return series to the pool, this is key to reducing allocs.
-		v2.putTimeSeriesSliceIntoPool(s.series)
-		v2.putTimeSeriesSliceIntoPool(s.meta)
-		s.series = s.series[:0]
-		s.meta = s.meta[:0]
-	}()
-
-	// This maps strings to index position in a slice. This is doing to reduce the file size of the data.
-	// Assume roughly each series has 10 labels, we do this because at very large mappings growing the map took up to 5% of cpu time.
-	// By pre allocating it that disappeared.
-
-	strMapToIndex := make(map[string]uint32, len(s.series)*10)
-	var count uint32
-	for i, ts := range s.series {
-		tst := &types.TimeSeriesSingleName{
-			Labels: ts.Labels,
-		}
-		count = tst.FillLabelMapping(tr, strMapToIndex, count)
-		group.Series[i] = tst
-	}
-
-	stringsSlice := make([]types.ByteString, len(strMapToIndex))
-	for stringValue, index := range strMapToIndex {
-		stringsSlice[index] = types.ByteString(stringValue)
-	}
-	group.Strings = stringsSlice
-
-	buf, err := group.MarshalMsg(s.msgpBuffer)
-	if err != nil {
-		return err
-	}
-
-	out := snappy.Encode(buf)
-	meta := map[string]string{
-		// product.signal_type.schema.version
-		"version":       types.AlloyFileVersionTrie,
-		"compression":   "snappy",
-		"series_count":  strconv.Itoa(len(group.Series)),
-		"strings_count": strconv.Itoa(len(group.Strings)),
-	}
-	err = s.queue.Store(ctx, meta, out)
-	return err
-
 }
 
 func (s *serializer) storeStats(err error) {

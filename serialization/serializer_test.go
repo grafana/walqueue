@@ -54,8 +54,8 @@ func TestRoundTripSerialization(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return f.total.Load() == 10
 	}, 5*time.Second, 100*time.Millisecond)
-	// 100 series send from the above for loop
-	require.True(t, totalSeries.Load() == 10)
+	// 10 series send from the above for loop
+	require.Truef(t, totalSeries.Load() == 10, "total series load does not equal 10 currently %d", totalSeries.Load())
 }
 
 func TestUpdateConfig(t *testing.T) {
@@ -98,7 +98,7 @@ func (f *fqq) Stop() {
 func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) error {
 	f.buf, _ = snappy.Decode(nil, value)
 	sg := &v2.SeriesGroup{}
-	metrics, _, _, err := v2.DeserializeToSeriesGroup(sg, f.buf)
+	metrics, _, err := v2.DeserializeToSeriesGroup(sg, f.buf)
 	require.NoError(f.t, err)
 	require.Len(f.t, sg.Series, 10)
 	for _, series := range metrics {

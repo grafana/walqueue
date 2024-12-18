@@ -1,13 +1,16 @@
 package v2
 
 import (
+	"github.com/prometheus/prometheus/model/histogram"
+	"sync"
+	"unique"
+	"unsafe"
+
+	"github.com/dolthub/swiss"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/tinylib/msgp/msgp"
 	"go.uber.org/atomic"
-	"sync"
-	"unique"
-	"unsafe"
 )
 
 func (v *ByteString) UnmarshalMsg(bts []byte) (o []byte, err error) {
@@ -46,25 +49,35 @@ func (v ByteString) String() string {
 
 // createTimeSeries is what does the conversion from labels.Labels to LabelNames and
 // LabelValues while filling in the string map, that is later converted to []string.
-func createTimeSeries(m *types.Metric, strMapToInt map[string]uint32) *TimeSeriesBinary {
+func createTimeSeries(m *types.Metric, strMapToInt *swiss.Map[string, uint32]) *TimeSeriesBinary {
 	ts := getTimeSeriesFromPool()
 	ts.LabelsNames = setSliceLength(ts.LabelsNames, len(m.Labels))
 	ts.LabelsValues = setSliceLength(ts.LabelsValues, len(m.Labels))
 
+	ts.TS = m.TS
+	ts.Hash = m.Hash
+	ts.Value = m.Value
+	if m.Histogram != nil {
+		ts.FromHistogram(m.TS, m.Histogram)
+	}
+	if m.FloatHistogram != nil {
+		ts.FromFloatHistogram(m.TS, m.FloatHistogram)
+	}
+
 	// This is where we deduplicate the ts.Labels into uint32 values
 	// that map to a string in the strings slice via the index.
 	for i, v := range m.Labels {
-		val, found := strMapToInt[v.Name]
+		val, found := strMapToInt.Get(v.Name)
 		if !found {
-			val = uint32(len(strMapToInt))
-			strMapToInt[v.Name] = val
+			val = uint32(strMapToInt.Count())
+			strMapToInt.Put(v.Name, val)
 		}
 		ts.LabelsNames[i] = val
 
-		val, found = strMapToInt[v.Value]
+		val, found = strMapToInt.Get(v.Value)
 		if !found {
-			val = uint32(len(strMapToInt))
-			strMapToInt[v.Value] = val
+			val = uint32(strMapToInt.Count())
+			strMapToInt.Put(v.Value, val)
 		}
 		ts.LabelsValues[i] = val
 	}
@@ -100,13 +113,6 @@ type LabelHandles []LabelHandle
 
 var OutStandingTimeSeriesBinary = atomic.Int32{}
 
-func putTimeSeriesSliceIntoPool(tss []*TimeSeriesBinary) {
-	for i := 0; i < len(tss); i++ {
-		PutTimeSeriesIntoPool(tss[i])
-	}
-
-}
-
 func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
 	OutStandingTimeSeriesBinary.Dec()
 	ts.LabelsNames = ts.LabelsNames[:0]
@@ -123,15 +129,15 @@ func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
 }
 
 // DeserializeToSeriesGroup transforms a buffer to a SeriesGroup and converts the stringmap + indexes into actual Labels.
-func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*types.Metric, []byte, error) {
+func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*types.Metric, error) {
 	buf, err := sg.UnmarshalMsg(buf)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	metrics := types.GetMetricsFromPool()
 	if cap(metrics) < len(sg.Series) {
 		metrics = make([]*types.Metric, len(sg.Series))
-		for i, _ := range metrics {
+		for i := range metrics {
 			metrics[i] = &types.Metric{}
 		}
 	} else {
@@ -145,6 +151,18 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*
 		} else {
 			metric.Labels = metric.Labels[:len(series.LabelsNames)]
 		}
+		metric.TS = series.TS
+		metric.Value = series.Value
+		metric.Hash = series.Hash
+		if series.Histograms != nil {
+			if series.Histograms.Histogram != nil {
+				metric.Histogram = ConvertToHistogram(series.Histograms.Histogram)
+			}
+			if series.Histograms.FloatHistogram != nil {
+				metric.FloatHistogram = ConvertToFloatHistogram(series.Histograms.FloatHistogram)
+			}
+		}
+
 		// Since the LabelNames/LabelValues are indexes into the Strings slice we can access it like the below.
 		// 1 Label corresponds to two entries, one in LabelsNames and one in LabelsValues.
 		for i := range series.LabelsNames {
@@ -160,7 +178,7 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*
 	metadata := types.GetMetricsFromPool()
 	if cap(metadata) < len(sg.Metadata) {
 		metadata = make([]*types.Metric, 0, len(sg.Metadata))
-		for i, _ := range metrics {
+		for i := range metrics {
 			metadata[i] = &types.Metric{}
 		}
 	} else {
@@ -185,5 +203,148 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*
 		series.LabelsValues = series.LabelsValues[:0]
 	}
 	sg.Strings = sg.Strings[:0]
-	return metrics, metadata, buf, err
+	return metrics, metadata, err
+}
+
+// ConvertToHistogram converts a local Histogram to histogram.Histogram
+func ConvertToHistogram(h *Histogram) *histogram.Histogram {
+	if h == nil {
+		return nil
+	}
+
+	// Convert spans
+	negativeSpans := make([]histogram.Span, len(h.NegativeSpans))
+	for i, span := range h.NegativeSpans {
+		negativeSpans[i] = histogram.Span{
+			Offset: span.Offset,
+			Length: span.Length,
+		}
+	}
+
+	positiveSpans := make([]histogram.Span, len(h.PositiveSpans))
+	for i, span := range h.PositiveSpans {
+		positiveSpans[i] = histogram.Span{
+			Offset: span.Offset,
+			Length: span.Length,
+		}
+	}
+
+	// Determine the count type
+	var count int64
+	if h.Count.IsInt {
+		count = int64(h.Count.IntValue)
+	} else {
+		count = int64(h.Count.FloatValue)
+	}
+
+	var zeroCount int64
+	if h.ZeroCount.IsInt {
+		zeroCount = int64(h.ZeroCount.IntValue)
+	} else {
+		zeroCount = int64(h.ZeroCount.FloatValue)
+	}
+
+	return &histogram.Histogram{
+		Count:            uint64(count),
+		Sum:              h.Sum,
+		Schema:           h.Schema,
+		ZeroThreshold:    h.ZeroThreshold,
+		ZeroCount:        uint64(zeroCount),
+		NegativeSpans:    negativeSpans,
+		NegativeBuckets:  h.NegativeBuckets,
+		PositiveSpans:    positiveSpans,
+		PositiveBuckets:  h.PositiveBuckets,
+		CounterResetHint: histogram.CounterResetHint(h.ResetHint),
+	}
+}
+
+// ConvertToFloatHistogram converts a local FloatHistogram to histogram.FloatHistogram
+func ConvertToFloatHistogram(h *FloatHistogram) *histogram.FloatHistogram {
+	if h == nil {
+		return nil
+	}
+
+	// Convert spans
+	negativeSpans := make([]histogram.Span, len(h.NegativeSpans))
+	for i, span := range h.NegativeSpans {
+		negativeSpans[i] = histogram.Span{
+			Offset: span.Offset,
+			Length: span.Length,
+		}
+	}
+
+	positiveSpans := make([]histogram.Span, len(h.PositiveSpans))
+	for i, span := range h.PositiveSpans {
+		positiveSpans[i] = histogram.Span{
+			Offset: span.Offset,
+			Length: span.Length,
+		}
+	}
+
+	// Determine the count type
+	var count float64
+	if h.Count.IsInt {
+		count = float64(h.Count.IntValue)
+	} else {
+		count = h.Count.FloatValue
+	}
+
+	var zeroCount float64
+	if h.ZeroCount.IsInt {
+		zeroCount = float64(h.ZeroCount.IntValue)
+	} else {
+		zeroCount = h.ZeroCount.FloatValue
+	}
+
+	return &histogram.FloatHistogram{
+		Count:            count,
+		Sum:              h.Sum,
+		Schema:           h.Schema,
+		ZeroThreshold:    h.ZeroThreshold,
+		ZeroCount:        zeroCount,
+		NegativeSpans:    negativeSpans,
+		NegativeBuckets:  h.NegativeCounts,
+		PositiveSpans:    positiveSpans,
+		PositiveBuckets:  h.PositiveCounts,
+		CounterResetHint: histogram.CounterResetHint(h.ResetHint),
+	}
+}
+
+func (ts *TimeSeriesBinary) FromHistogram(timestamp int64, h *histogram.Histogram) {
+	ts.Histograms.Histogram = &Histogram{
+		Count:                HistogramCount{IsInt: true, IntValue: h.Count},
+		Sum:                  h.Sum,
+		Schema:               h.Schema,
+		ZeroThreshold:        h.ZeroThreshold,
+		ZeroCount:            HistogramZeroCount{IsInt: true, IntValue: h.ZeroCount},
+		NegativeSpans:        FromPromSpan(h.NegativeSpans),
+		NegativeBuckets:      h.NegativeBuckets,
+		PositiveSpans:        FromPromSpan(h.PositiveSpans),
+		PositiveBuckets:      h.PositiveBuckets,
+		ResetHint:            int32(h.CounterResetHint),
+		TimestampMillisecond: timestamp,
+	}
+}
+func (ts *TimeSeriesBinary) FromFloatHistogram(timestamp int64, h *histogram.FloatHistogram) {
+	ts.Histograms.FloatHistogram = &FloatHistogram{
+		Count:                HistogramCount{IsInt: false, FloatValue: h.Count},
+		Sum:                  h.Sum,
+		Schema:               h.Schema,
+		ZeroThreshold:        h.ZeroThreshold,
+		ZeroCount:            HistogramZeroCount{IsInt: false, FloatValue: h.ZeroCount},
+		NegativeSpans:        FromPromSpan(h.NegativeSpans),
+		NegativeCounts:       h.NegativeBuckets,
+		PositiveSpans:        FromPromSpan(h.PositiveSpans),
+		PositiveCounts:       h.PositiveBuckets,
+		ResetHint:            int32(h.CounterResetHint),
+		TimestampMillisecond: timestamp,
+	}
+}
+func FromPromSpan(spans []histogram.Span) []BucketSpan {
+	bs := make([]BucketSpan, len(spans))
+	for i, s := range spans {
+		bs[i].Offset = s.Offset
+		bs[i].Length = s.Length
+	}
+	return bs
 }

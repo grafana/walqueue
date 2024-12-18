@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"github.com/dolthub/swiss"
 	"github.com/grafana/walqueue/types"
 	"sync"
 	"unsafe"
@@ -47,8 +48,10 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 	} else {
 		sg.Metadata = sg.Metadata[:len(metadata)]
 	}
+	// Swissmap was a 25% improvement over normal maps. At some point go will adopt swiss maps and this
+	// might be able to be removed.
+	strMapToIndex := swiss.NewMap[string, uint32](uint32((len(metrics) + len(metadata)) * 10))
 
-	strMapToIndex := make(map[string]uint32, (len(metrics)+len(metadata))*10)
 	for index, m := range metrics {
 		ts := createTimeSeries(m, strMapToIndex)
 		sg.Series[index] = ts
@@ -57,21 +60,23 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 		ts := createTimeSeries(m, strMapToIndex)
 		sg.Metadata[index] = ts
 	}
-	if cap(sg.Strings) < len(strMapToIndex) {
-		sg.Strings = make([]ByteString, len(strMapToIndex))
+	if cap(sg.Strings) < strMapToIndex.Count() {
+		sg.Strings = make([]ByteString, strMapToIndex.Count())
 	} else {
-		sg.Strings = sg.Strings[:len(strMapToIndex)]
+		sg.Strings = sg.Strings[:strMapToIndex.Count()]
 	}
-	for stringValue, index := range strMapToIndex {
-		d := unsafe.StringData(stringValue)
-		sg.Strings[index] = unsafe.Slice(d, len(stringValue))
-	}
+	strMapToIndex.Iter(func(k string, v uint32) (stop bool) {
+		d := unsafe.StringData(k)
+		sg.Strings[v] = unsafe.Slice(d, len(k))
+		return false
+	})
+
 	buf := bufPool.Get().([]byte)
 
 	return sg.MarshalMsg(buf)
 }
 
-func (s *Serialization) Deserialize(bytes []byte) ([]*types.Metric, []*types.Metric, []byte, error) {
+func (s *Serialization) Deserialize(bytes []byte) ([]*types.Metric, []*types.Metric, error) {
 	sg := getSeriesGroup()
 	defer putSeriesGroup(sg)
 	return DeserializeToSeriesGroup(sg, bytes)

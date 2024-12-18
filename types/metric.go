@@ -7,9 +7,10 @@ import (
 	"sync"
 )
 
+// Serialization provides the ability to read and write for a given schema defined by the FileFormat.
 type Serialization interface {
 	Serialize(metrics []*Metric, metadata []*Metric) ([]byte, error)
-	Deserialize([]byte) (metrics []*Metric, metadata []*Metric, out []byte, err error)
+	Deserialize([]byte) (metrics []*Metric, metadata []*Metric, err error)
 }
 
 type Metric struct {

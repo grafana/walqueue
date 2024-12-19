@@ -2137,221 +2137,6 @@ func (z HistogramZeroCount) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
-func (z *Histograms) DecodeMsg(dc *msgp.Reader) (err error) {
-	var field []byte
-	_ = field
-	var zb0001 uint32
-	zb0001, err = dc.ReadMapHeader()
-	if err != nil {
-		err = msgp.WrapError(err)
-		return
-	}
-	for zb0001 > 0 {
-		zb0001--
-		field, err = dc.ReadMapKeyPtr()
-		if err != nil {
-			err = msgp.WrapError(err)
-			return
-		}
-		switch msgp.UnsafeString(field) {
-		case "Histogram":
-			if dc.IsNil() {
-				err = dc.ReadNil()
-				if err != nil {
-					err = msgp.WrapError(err, "Histogram")
-					return
-				}
-				z.Histogram = nil
-			} else {
-				if z.Histogram == nil {
-					z.Histogram = new(Histogram)
-				}
-				err = z.Histogram.DecodeMsg(dc)
-				if err != nil {
-					err = msgp.WrapError(err, "Histogram")
-					return
-				}
-			}
-		case "FloatHistogram":
-			if dc.IsNil() {
-				err = dc.ReadNil()
-				if err != nil {
-					err = msgp.WrapError(err, "FloatHistogram")
-					return
-				}
-				z.FloatHistogram = nil
-			} else {
-				if z.FloatHistogram == nil {
-					z.FloatHistogram = new(FloatHistogram)
-				}
-				err = z.FloatHistogram.DecodeMsg(dc)
-				if err != nil {
-					err = msgp.WrapError(err, "FloatHistogram")
-					return
-				}
-			}
-		default:
-			err = dc.Skip()
-			if err != nil {
-				err = msgp.WrapError(err)
-				return
-			}
-		}
-	}
-	return
-}
-
-// EncodeMsg implements msgp.Encodable
-func (z *Histograms) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 2
-	// write "Histogram"
-	err = en.Append(0x82, 0xa9, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x67, 0x72, 0x61, 0x6d)
-	if err != nil {
-		return
-	}
-	if z.Histogram == nil {
-		err = en.WriteNil()
-		if err != nil {
-			return
-		}
-	} else {
-		err = z.Histogram.EncodeMsg(en)
-		if err != nil {
-			err = msgp.WrapError(err, "Histogram")
-			return
-		}
-	}
-	// write "FloatHistogram"
-	err = en.Append(0xae, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x67, 0x72, 0x61, 0x6d)
-	if err != nil {
-		return
-	}
-	if z.FloatHistogram == nil {
-		err = en.WriteNil()
-		if err != nil {
-			return
-		}
-	} else {
-		err = z.FloatHistogram.EncodeMsg(en)
-		if err != nil {
-			err = msgp.WrapError(err, "FloatHistogram")
-			return
-		}
-	}
-	return
-}
-
-// MarshalMsg implements msgp.Marshaler
-func (z *Histograms) MarshalMsg(b []byte) (o []byte, err error) {
-	o = msgp.Require(b, z.Msgsize())
-	// map header, size 2
-	// string "Histogram"
-	o = append(o, 0x82, 0xa9, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x67, 0x72, 0x61, 0x6d)
-	if z.Histogram == nil {
-		o = msgp.AppendNil(o)
-	} else {
-		o, err = z.Histogram.MarshalMsg(o)
-		if err != nil {
-			err = msgp.WrapError(err, "Histogram")
-			return
-		}
-	}
-	// string "FloatHistogram"
-	o = append(o, 0xae, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x67, 0x72, 0x61, 0x6d)
-	if z.FloatHistogram == nil {
-		o = msgp.AppendNil(o)
-	} else {
-		o, err = z.FloatHistogram.MarshalMsg(o)
-		if err != nil {
-			err = msgp.WrapError(err, "FloatHistogram")
-			return
-		}
-	}
-	return
-}
-
-// UnmarshalMsg implements msgp.Unmarshaler
-func (z *Histograms) UnmarshalMsg(bts []byte) (o []byte, err error) {
-	var field []byte
-	_ = field
-	var zb0001 uint32
-	zb0001, bts, err = msgp.ReadMapHeaderBytes(bts)
-	if err != nil {
-		err = msgp.WrapError(err)
-		return
-	}
-	for zb0001 > 0 {
-		zb0001--
-		field, bts, err = msgp.ReadMapKeyZC(bts)
-		if err != nil {
-			err = msgp.WrapError(err)
-			return
-		}
-		switch msgp.UnsafeString(field) {
-		case "Histogram":
-			if msgp.IsNil(bts) {
-				bts, err = msgp.ReadNilBytes(bts)
-				if err != nil {
-					return
-				}
-				z.Histogram = nil
-			} else {
-				if z.Histogram == nil {
-					z.Histogram = new(Histogram)
-				}
-				bts, err = z.Histogram.UnmarshalMsg(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "Histogram")
-					return
-				}
-			}
-		case "FloatHistogram":
-			if msgp.IsNil(bts) {
-				bts, err = msgp.ReadNilBytes(bts)
-				if err != nil {
-					return
-				}
-				z.FloatHistogram = nil
-			} else {
-				if z.FloatHistogram == nil {
-					z.FloatHistogram = new(FloatHistogram)
-				}
-				bts, err = z.FloatHistogram.UnmarshalMsg(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "FloatHistogram")
-					return
-				}
-			}
-		default:
-			bts, err = msgp.Skip(bts)
-			if err != nil {
-				err = msgp.WrapError(err)
-				return
-			}
-		}
-	}
-	o = bts
-	return
-}
-
-// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
-func (z *Histograms) Msgsize() (s int) {
-	s = 1 + 10
-	if z.Histogram == nil {
-		s += msgp.NilSize
-	} else {
-		s += z.Histogram.Msgsize()
-	}
-	s += 15
-	if z.FloatHistogram == nil {
-		s += msgp.NilSize
-	} else {
-		s += z.FloatHistogram.Msgsize()
-	}
-	return
-}
-
-// DecodeMsg implements msgp.Decodable
 func (z *SeriesGroup) DecodeMsg(dc *msgp.Reader) (err error) {
 	var zb0001 uint32
 	zb0001, err = dc.ReadArrayHeader()
@@ -2669,8 +2454,8 @@ func (z *TimeSeriesBinary) DecodeMsg(dc *msgp.Reader) (err error) {
 		err = msgp.WrapError(err)
 		return
 	}
-	if zb0001 != 6 {
-		err = msgp.ArrayError{Wanted: 6, Got: zb0001}
+	if zb0001 != 7 {
+		err = msgp.ArrayError{Wanted: 7, Got: zb0001}
 		return
 	}
 	var zb0002 uint32
@@ -2727,17 +2512,34 @@ func (z *TimeSeriesBinary) DecodeMsg(dc *msgp.Reader) (err error) {
 	if dc.IsNil() {
 		err = dc.ReadNil()
 		if err != nil {
-			err = msgp.WrapError(err, "Histograms")
+			err = msgp.WrapError(err, "Histogram")
 			return
 		}
-		z.Histograms = nil
+		z.Histogram = nil
 	} else {
-		if z.Histograms == nil {
-			z.Histograms = new(Histograms)
+		if z.Histogram == nil {
+			z.Histogram = new(Histogram)
 		}
-		err = z.Histograms.DecodeMsg(dc)
+		err = z.Histogram.DecodeMsg(dc)
 		if err != nil {
-			err = msgp.WrapError(err, "Histograms")
+			err = msgp.WrapError(err, "Histogram")
+			return
+		}
+	}
+	if dc.IsNil() {
+		err = dc.ReadNil()
+		if err != nil {
+			err = msgp.WrapError(err, "FloatHistogram")
+			return
+		}
+		z.FloatHistogram = nil
+	} else {
+		if z.FloatHistogram == nil {
+			z.FloatHistogram = new(FloatHistogram)
+		}
+		err = z.FloatHistogram.DecodeMsg(dc)
+		if err != nil {
+			err = msgp.WrapError(err, "FloatHistogram")
 			return
 		}
 	}
@@ -2746,8 +2548,8 @@ func (z *TimeSeriesBinary) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *TimeSeriesBinary) EncodeMsg(en *msgp.Writer) (err error) {
-	// array header, size 6
-	err = en.Append(0x96)
+	// array header, size 7
+	err = en.Append(0x97)
 	if err != nil {
 		return
 	}
@@ -2790,15 +2592,27 @@ func (z *TimeSeriesBinary) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Hash")
 		return
 	}
-	if z.Histograms == nil {
+	if z.Histogram == nil {
 		err = en.WriteNil()
 		if err != nil {
 			return
 		}
 	} else {
-		err = z.Histograms.EncodeMsg(en)
+		err = z.Histogram.EncodeMsg(en)
 		if err != nil {
-			err = msgp.WrapError(err, "Histograms")
+			err = msgp.WrapError(err, "Histogram")
+			return
+		}
+	}
+	if z.FloatHistogram == nil {
+		err = en.WriteNil()
+		if err != nil {
+			return
+		}
+	} else {
+		err = z.FloatHistogram.EncodeMsg(en)
+		if err != nil {
+			err = msgp.WrapError(err, "FloatHistogram")
 			return
 		}
 	}
@@ -2808,8 +2622,8 @@ func (z *TimeSeriesBinary) EncodeMsg(en *msgp.Writer) (err error) {
 // MarshalMsg implements msgp.Marshaler
 func (z *TimeSeriesBinary) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// array header, size 6
-	o = append(o, 0x96)
+	// array header, size 7
+	o = append(o, 0x97)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.LabelsNames)))
 	for za0001 := range z.LabelsNames {
 		o = msgp.AppendUint32(o, z.LabelsNames[za0001])
@@ -2821,12 +2635,21 @@ func (z *TimeSeriesBinary) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.AppendInt64(o, z.TS)
 	o = msgp.AppendFloat64(o, z.Value)
 	o = msgp.AppendUint64(o, z.Hash)
-	if z.Histograms == nil {
+	if z.Histogram == nil {
 		o = msgp.AppendNil(o)
 	} else {
-		o, err = z.Histograms.MarshalMsg(o)
+		o, err = z.Histogram.MarshalMsg(o)
 		if err != nil {
-			err = msgp.WrapError(err, "Histograms")
+			err = msgp.WrapError(err, "Histogram")
+			return
+		}
+	}
+	if z.FloatHistogram == nil {
+		o = msgp.AppendNil(o)
+	} else {
+		o, err = z.FloatHistogram.MarshalMsg(o)
+		if err != nil {
+			err = msgp.WrapError(err, "FloatHistogram")
 			return
 		}
 	}
@@ -2841,8 +2664,8 @@ func (z *TimeSeriesBinary) UnmarshalMsg(bts []byte) (o []byte, err error) {
 		err = msgp.WrapError(err)
 		return
 	}
-	if zb0001 != 6 {
-		err = msgp.ArrayError{Wanted: 6, Got: zb0001}
+	if zb0001 != 7 {
+		err = msgp.ArrayError{Wanted: 7, Got: zb0001}
 		return
 	}
 	var zb0002 uint32
@@ -2901,14 +2724,30 @@ func (z *TimeSeriesBinary) UnmarshalMsg(bts []byte) (o []byte, err error) {
 		if err != nil {
 			return
 		}
-		z.Histograms = nil
+		z.Histogram = nil
 	} else {
-		if z.Histograms == nil {
-			z.Histograms = new(Histograms)
+		if z.Histogram == nil {
+			z.Histogram = new(Histogram)
 		}
-		bts, err = z.Histograms.UnmarshalMsg(bts)
+		bts, err = z.Histogram.UnmarshalMsg(bts)
 		if err != nil {
-			err = msgp.WrapError(err, "Histograms")
+			err = msgp.WrapError(err, "Histogram")
+			return
+		}
+	}
+	if msgp.IsNil(bts) {
+		bts, err = msgp.ReadNilBytes(bts)
+		if err != nil {
+			return
+		}
+		z.FloatHistogram = nil
+	} else {
+		if z.FloatHistogram == nil {
+			z.FloatHistogram = new(FloatHistogram)
+		}
+		bts, err = z.FloatHistogram.UnmarshalMsg(bts)
+		if err != nil {
+			err = msgp.WrapError(err, "FloatHistogram")
 			return
 		}
 	}
@@ -2919,10 +2758,15 @@ func (z *TimeSeriesBinary) UnmarshalMsg(bts []byte) (o []byte, err error) {
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *TimeSeriesBinary) Msgsize() (s int) {
 	s = 1 + msgp.ArrayHeaderSize + (len(z.LabelsNames) * (msgp.Uint32Size)) + msgp.ArrayHeaderSize + (len(z.LabelsValues) * (msgp.Uint32Size)) + msgp.Int64Size + msgp.Float64Size + msgp.Uint64Size
-	if z.Histograms == nil {
+	if z.Histogram == nil {
 		s += msgp.NilSize
 	} else {
-		s += z.Histograms.Msgsize()
+		s += z.Histogram.Msgsize()
+	}
+	if z.FloatHistogram == nil {
+		s += msgp.NilSize
+	} else {
+		s += z.FloatHistogram.Msgsize()
 	}
 	return
 }

@@ -29,13 +29,9 @@ type TimeSeriesBinary struct {
 	LabelsNames  []uint32
 	LabelsValues []uint32
 	// TS is unix milliseconds.
-	TS         int64
-	Value      float64
-	Hash       uint64
-	Histograms *Histograms
-}
-
-type Histograms struct {
+	TS             int64
+	Value          float64
+	Hash           uint64
 	Histogram      *Histogram
 	FloatHistogram *FloatHistogram
 }

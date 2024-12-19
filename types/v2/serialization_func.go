@@ -120,11 +120,8 @@ func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
 	ts.TS = 0
 	ts.Value = 0
 	ts.Hash = 0
-	if ts.Histograms != nil {
-		ts.Histograms.Histogram = nil
-		ts.Histograms.FloatHistogram = nil
-	}
-
+	ts.Histogram = nil
+	ts.FloatHistogram = nil
 	tsBinaryPool.Put(ts)
 }
 
@@ -154,15 +151,12 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*
 		metric.TS = series.TS
 		metric.Value = series.Value
 		metric.Hash = series.Hash
-		if series.Histograms != nil {
-			if series.Histograms.Histogram != nil {
-				metric.Histogram = ConvertToHistogram(series.Histograms.Histogram)
-			}
-			if series.Histograms.FloatHistogram != nil {
-				metric.FloatHistogram = ConvertToFloatHistogram(series.Histograms.FloatHistogram)
-			}
+		if series.Histogram != nil {
+			metric.Histogram = ConvertToHistogram(series.Histogram)
 		}
-
+		if series.FloatHistogram != nil {
+			metric.FloatHistogram = ConvertToFloatHistogram(series.FloatHistogram)
+		}
 		// Since the LabelNames/LabelValues are indexes into the Strings slice we can access it like the below.
 		// 1 Label corresponds to two entries, one in LabelsNames and one in LabelsValues.
 		for i := range series.LabelsNames {
@@ -311,7 +305,7 @@ func ConvertToFloatHistogram(h *FloatHistogram) *histogram.FloatHistogram {
 }
 
 func (ts *TimeSeriesBinary) FromHistogram(timestamp int64, h *histogram.Histogram) {
-	ts.Histograms.Histogram = &Histogram{
+	ts.Histogram = &Histogram{
 		Count:                HistogramCount{IsInt: true, IntValue: h.Count},
 		Sum:                  h.Sum,
 		Schema:               h.Schema,
@@ -326,7 +320,7 @@ func (ts *TimeSeriesBinary) FromHistogram(timestamp int64, h *histogram.Histogra
 	}
 }
 func (ts *TimeSeriesBinary) FromFloatHistogram(timestamp int64, h *histogram.FloatHistogram) {
-	ts.Histograms.FloatHistogram = &FloatHistogram{
+	ts.FloatHistogram = &FloatHistogram{
 		Count:                HistogramCount{IsInt: false, FloatValue: h.Count},
 		Sum:                  h.Sum,
 		Schema:               h.Schema,

@@ -1,10 +1,11 @@
 package v2
 
 import (
-	"github.com/dolthub/swiss"
-	"github.com/grafana/walqueue/types"
 	"sync"
 	"unsafe"
+
+	"github.com/dolthub/swiss"
+	"github.com/grafana/walqueue/types"
 )
 
 var bufPool = sync.Pool{New: func() interface{} {
@@ -33,7 +34,7 @@ func GetSerializer() types.Serialization {
 	return &Serialization{}
 }
 
-func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Metric) ([]byte, error) {
+func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Metric, handler func([]byte)) error {
 	sg := getSeriesGroup()
 	defer putSeriesGroup(sg)
 
@@ -72,8 +73,14 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 	})
 
 	buf := bufPool.Get().([]byte)
+	defer bufPool.Put(buf)
 
-	return sg.MarshalMsg(buf)
+	buf, err := sg.MarshalMsg(buf)
+	if err != nil {
+		return err
+	}
+	handler(buf)
+	return nil
 }
 
 func (s *Serialization) Deserialize(bytes []byte) ([]*types.Metric, []*types.Metric, error) {

@@ -2,10 +2,10 @@ package v2
 
 import (
 	"fmt"
-	"github.com/grafana/walqueue/types"
 	"math/rand"
 	"testing"
 
+	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
@@ -27,9 +27,12 @@ func TestLabels(t *testing.T) {
 	metrics[0].Labels = labels.FromMap(lblsMap)
 
 	serializer := GetSerializer()
-	buf, err := serializer.Serialize(metrics, nil)
-	require.NoError(t, err)
-	newMetrics, _, err := serializer.Deserialize(buf)
+	var newMetrics []*types.Metric
+	err := serializer.Serialize(metrics, nil, func(b []byte) {
+		var err error
+		newMetrics, _, err = serializer.Deserialize(b)
+		require.NoError(t, err)
+	})
 	require.NoError(t, err)
 	series1 := newMetrics[0]
 	series2 := metrics[0]
@@ -42,6 +45,8 @@ func TestLabels(t *testing.T) {
 }
 
 func BenchmarkDeserialize(b *testing.B) {
+	// NOTE there can be a fair amount of variance in these, +-200 is easily observable.
+	// cpu: 13th Gen Intel(R) Core(TM) i7-13700K
 	// 2024-12-17 BenchmarkDeserialize-24    	     909	   1234031 ns/op after some optimization on pools
 	// 2024-12-17 BenchmarkDeserialize-24    	    1308	    858204 ns/op further optimizations on allocs
 	// 2023-12-17 BenchmarkDeserialize-24    	    1508	    811829 ns/op after switching to swiss map
@@ -57,19 +62,21 @@ func BenchmarkDeserialize(b *testing.B) {
 		m.Labels = labels.FromMap(lblsMap)
 		metrics = append(metrics, m)
 	}
-	var buf []byte
 	var err error
 	for i := 0; i < b.N; i++ {
 		sg := GetSerializer()
-		buf, err = sg.Serialize(metrics, nil)
+		var newMetrics []*types.Metric
+		var newMeta []*types.Metric
+		err = sg.Serialize(metrics, nil, func(buf []byte) {
+			var err error
+			newMetrics, newMeta, err = sg.Deserialize(buf)
+			if err != nil {
+				panic(err.Error())
+			}
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
-		newMetrics, newMeta, err := sg.Deserialize(buf)
-		if err != nil {
-			panic(err.Error())
-		}
-		bufPool.Put(buf)
 		types.PutMetricsIntoPool(newMetrics)
 		types.PutMetricsIntoPool(newMeta)
 	}
@@ -83,4 +90,37 @@ func randString() string {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(b)
+}
+
+func TestBenchmarkDeserialize(t *testing.T) {
+	type args struct {
+		b *testing.B
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			BenchmarkDeserialize(tt.args.b)
+		})
+	}
+}
+
+func Test_randString(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := randString(); got != tt.want {
+				t.Errorf("randString() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

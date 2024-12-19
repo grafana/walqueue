@@ -1,15 +1,19 @@
 package types
 
 import (
+	"sync"
+
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"go.uber.org/atomic"
-	"sync"
 )
 
 // Serialization provides the ability to read and write for a given schema defined by the FileFormat.
 type Serialization interface {
-	Serialize(metrics []*Metric, metadata []*Metric) ([]byte, error)
+	// Serialize is used to convert metrics and metadata to a before that is passed
+	// into handle. The []byte slice is only garaunteed within the func.
+	// The handler will only be called if there is no error.
+	Serialize(metrics []*Metric, metadata []*Metric, handle func([]byte)) error
 	Deserialize([]byte) (metrics []*Metric, metadata []*Metric, err error)
 }
 

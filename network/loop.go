@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -267,7 +268,27 @@ func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 }
 
 func createWriteRequest(series []*types.Metric, externalLabels map[string]string, data *proto.Buffer) ([]byte, error) {
-	wr := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, len(series))}
+	wr := tsPool.Get().(*prompb.WriteRequest)
+	defer func() {
+		for _, ts := range wr.Timeseries {
+			ts.Histograms = ts.Histograms[:0]
+			ts.Labels = ts.Labels[:0]
+			ts.Samples = ts.Samples[:0]
+			ts.Exemplars = ts.Exemplars[:0]
+		}
+		for _, md := range wr.Metadata {
+			md.Unit = ""
+			md.MetricFamilyName = ""
+			md.Help = ""
+		}
+		wr.Timeseries = wr.Timeseries[:0]
+		tsPool.Put(wr)
+	}()
+	if cap(wr.Timeseries) < len(series) {
+		wr.Timeseries = make([]prompb.TimeSeries, len(series))
+	} else {
+		wr.Timeseries = wr.Timeseries[:cap(wr.Timeseries)]
+	}
 
 	for i, tsBuf := range series {
 		ts := wr.Timeseries[i]
@@ -431,3 +452,5 @@ func spansToSpansProto(s []histogram.Span) []prompb.BucketSpan {
 
 	return spans
 }
+
+var tsPool = sync.Pool{New: func() interface{} { return &prompb.WriteRequest{} }}

@@ -40,12 +40,18 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 
 	if cap(sg.Series) < len(metrics) {
 		sg.Series = make([]*TimeSeriesBinary, len(metrics))
+		for i := range sg.Series {
+			sg.Series[i] = &TimeSeriesBinary{}
+		}
 	} else {
 		sg.Series = sg.Series[:len(metrics)]
 	}
 
 	if cap(sg.Metadata) < len(metadata) {
 		sg.Metadata = make([]*TimeSeriesBinary, len(metadata))
+		for i := 0; i < len(metadata); i++ {
+			sg.Metadata[i] = &TimeSeriesBinary{}
+		}
 	} else {
 		sg.Metadata = sg.Metadata[:len(metadata)]
 	}
@@ -54,12 +60,10 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 	strMapToIndex := swiss.NewMap[string, uint32](uint32((len(metrics) + len(metadata)) * 10))
 
 	for index, m := range metrics {
-		ts := createTimeSeries(m, strMapToIndex)
-		sg.Series[index] = ts
+		sg.Series[index] = fillTimeSeries(sg.Series[index], m, strMapToIndex)
 	}
 	for index, m := range metadata {
-		ts := createTimeSeries(m, strMapToIndex)
-		sg.Metadata[index] = ts
+		sg.Metadata[index] = fillTimeSeries(sg.Metadata[index], m, strMapToIndex)
 	}
 	if cap(sg.Strings) < strMapToIndex.Count() {
 		sg.Strings = make([]ByteString, strMapToIndex.Count())

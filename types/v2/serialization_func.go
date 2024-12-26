@@ -2,7 +2,6 @@ package v2
 
 import (
 	"github.com/prometheus/prometheus/model/histogram"
-	"sync"
 	"unique"
 	"unsafe"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/tinylib/msgp/msgp"
-	"go.uber.org/atomic"
 )
 
 func (v *ByteString) UnmarshalMsg(bts []byte) (o []byte, err error) {
@@ -47,12 +45,20 @@ func (v ByteString) String() string {
 	return unsafe.String(&v[0], len([]byte(v)))
 }
 
-// createTimeSeries is what does the conversion from labels.Labels to LabelNames and
+// fillTimeSeries is what does the conversion from labels.Labels to LabelNames and
 // LabelValues while filling in the string map, that is later converted to []string.
-func createTimeSeries(m *types.Metric, strMapToInt *swiss.Map[string, uint32]) *TimeSeriesBinary {
-	ts := getTimeSeriesFromPool()
-	ts.LabelsNames = setSliceLength(ts.LabelsNames, len(m.Labels))
-	ts.LabelsValues = setSliceLength(ts.LabelsValues, len(m.Labels))
+func fillTimeSeries(ts *TimeSeriesBinary, m *types.Metric, strMapToInt *swiss.Map[string, uint32]) *TimeSeriesBinary {
+	if cap(ts.LabelsNames) <= len(m.Labels) {
+		ts.LabelsNames = make([]uint32, len(m.Labels))
+	} else {
+		ts.LabelsNames = ts.LabelsNames[:len(m.Labels)]
+	}
+
+	if cap(ts.LabelsValues) <= len(m.Labels) {
+		ts.LabelsValues = make([]uint32, len(m.Labels))
+	} else {
+		ts.LabelsValues = ts.LabelsValues[:len(m.Labels)]
+	}
 
 	ts.TS = m.TS
 	ts.Hash = m.Hash
@@ -84,46 +90,12 @@ func createTimeSeries(m *types.Metric, strMapToInt *swiss.Map[string, uint32]) *
 	return ts
 }
 
-func setSliceLength(lbls []uint32, length int) []uint32 {
-	if cap(lbls) <= length {
-		lbls = make([]uint32, length)
-	} else {
-		lbls = lbls[:length]
-	}
-	return lbls
-}
-
-var tsBinaryPool = sync.Pool{
-	New: func() any {
-		return &TimeSeriesBinary{}
-	},
-}
-
-func getTimeSeriesFromPool() *TimeSeriesBinary {
-	OutStandingTimeSeriesBinary.Inc()
-	return tsBinaryPool.Get().(*TimeSeriesBinary)
-}
-
 type LabelHandle struct {
 	Name  unique.Handle[string]
 	Value unique.Handle[string]
 }
 
 type LabelHandles []LabelHandle
-
-var OutStandingTimeSeriesBinary = atomic.Int32{}
-
-func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
-	OutStandingTimeSeriesBinary.Dec()
-	ts.LabelsNames = ts.LabelsNames[:0]
-	ts.LabelsValues = ts.LabelsValues[:0]
-	ts.TS = 0
-	ts.Value = 0
-	ts.Hash = 0
-	ts.Histogram = nil
-	ts.FloatHistogram = nil
-	tsBinaryPool.Put(ts)
-}
 
 // DeserializeToSeriesGroup transforms a buffer to a SeriesGroup and converts the stringmap + indexes into actual Labels.
 func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*types.Metric, error) {

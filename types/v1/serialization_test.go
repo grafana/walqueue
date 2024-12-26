@@ -2,9 +2,10 @@ package v1
 
 import (
 	"fmt"
-	"github.com/grafana/walqueue/types"
 	"math/rand"
 	"testing"
+
+	"github.com/grafana/walqueue/types"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
@@ -27,9 +28,12 @@ func TestLabels(t *testing.T) {
 	metrics[0].Labels = labels.FromMap(lblsMap)
 
 	serializer := GetSerializer()
-	buf, err := serializer.Serialize(metrics, nil)
-	require.NoError(t, err)
-	newMetrics, _, err := serializer.Deserialize(buf)
+	var newMetrics []*types.Metric
+	var err error
+	err = serializer.Serialize(metrics, nil, func(buf []byte) {
+		newMetrics, _, err = serializer.Deserialize(buf)
+		require.NoError(t, err)
+	})
 	require.NoError(t, err)
 	series1 := newMetrics[0]
 	series2 := metrics[0]
@@ -55,15 +59,20 @@ func BenchmarkDeserialize(b *testing.B) {
 		m.Labels = labels.FromMap(lblsMap)
 		metrics = append(metrics, m)
 	}
-	var buf []byte
-	var err error
 	for i := 0; i < b.N; i++ {
 		sg := GetSerializer()
-		buf, err = sg.Serialize(metrics, nil)
+		var newMetrics []*types.Metric
+		var err error
+		err = sg.Serialize(metrics, nil, func(buf []byte) {
+
+			newMetrics, _, err = sg.Deserialize(buf)
+			if err != nil {
+				b.Fatal(err)
+			}
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
-		newMetrics, _, err := sg.Deserialize(buf)
 		if err != nil {
 			panic(err.Error())
 		}

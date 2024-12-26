@@ -2,10 +2,11 @@ package v1
 
 import (
 	"bytes"
-	"github.com/grafana/walqueue/types"
 	"sync"
 	"unique"
 	"unsafe"
+
+	"github.com/grafana/walqueue/types"
 
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -20,7 +21,7 @@ func GetSerializer() types.Serialization {
 
 type Serialization struct{}
 
-func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Metric) ([]byte, error) {
+func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Metric, handle func([]byte)) error {
 	sg := &SeriesGroup{}
 	buf := make([]byte, 0)
 	sg.Series = make([]*TimeSeriesBinary, 0, len(metrics))
@@ -44,7 +45,12 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 		stringsSlice[index] = ByteString(stringValue)
 	}
 	sg.Strings = stringsSlice
-	return sg.MarshalMsg(buf)
+	buf, err := sg.MarshalMsg(buf)
+	if err != nil {
+		return err
+	}
+	handle(buf)
+	return nil
 
 }
 

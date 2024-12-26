@@ -3,10 +3,11 @@ package serialization
 import (
 	"context"
 	"fmt"
-	v1 "github.com/grafana/walqueue/types/v1"
-	"github.com/grafana/walqueue/types/v2"
 	"strconv"
 	"time"
+
+	v1 "github.com/grafana/walqueue/types/v1"
+	v2 "github.com/grafana/walqueue/types/v2"
 
 	"github.com/go-kit/log/level"
 
@@ -155,7 +156,6 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 	if len(s.series) == 0 && len(s.meta) == 0 {
 		return nil
 	}
-	var buf []byte
 	var ser types.Serialization
 	switch s.fileFormat {
 	case types.AlloyFileVersionV1:
@@ -165,11 +165,13 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 	default:
 		return fmt.Errorf("invalid file format %s", s.fileFormat)
 	}
-	buf, err = ser.Serialize(s.series, s.meta)
+	var out []byte
+	err = ser.Serialize(s.series, s.meta, func(buf []byte) {
+		out = snappy.Encode(buf)
+	})
 	if err != nil {
 		return err
 	}
-	out := snappy.Encode(buf)
 	meta := map[string]string{
 		// product.signal_type.schema.version
 		"version":      string(s.fileFormat),

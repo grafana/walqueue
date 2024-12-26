@@ -79,6 +79,7 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 	if err != nil {
 		return err
 	}
+	// Pass the buffer in with the knowledge that it should not be reused.
 	handler(buf)
 	return nil
 }

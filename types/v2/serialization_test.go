@@ -44,6 +44,40 @@ func TestLabels(t *testing.T) {
 	}
 }
 
+func TestMetadata(t *testing.T) {
+	lblsMap := make(map[string]string)
+	unique := make(map[string]struct{})
+	for i := 0; i < 1_000; i++ {
+		k := fmt.Sprintf("key_%d", i)
+		v := randString()
+		lblsMap[k] = v
+		unique[k] = struct{}{}
+		unique[v] = struct{}{}
+	}
+
+	meta := make([]*types.Metric, 1)
+	meta[0] = &types.Metric{}
+
+	meta[0].Labels = labels.FromMap(lblsMap)
+
+	serializer := GetSerializer()
+	var newMeta []*types.Metric
+	err := serializer.Serialize(nil, meta, func(b []byte) {
+		var err error
+		_, newMeta, err = serializer.Deserialize(b)
+		require.NoError(t, err)
+	})
+	require.NoError(t, err)
+	series1 := newMeta[0]
+	series2 := meta[0]
+	require.Len(t, series2.Labels, len(series1.Labels))
+	// Ensure we were able to convert back and forth properly.
+	for i, lbl := range series2.Labels {
+		require.Equal(t, lbl.Name, series1.Labels[i].Name)
+		require.Equal(t, lbl.Value, series1.Labels[i].Value)
+	}
+}
+
 func BenchmarkDeserialize(b *testing.B) {
 	// NOTE there can be a fair amount of variance in these, +-200 is easily observable.
 	// cpu: 13th Gen Intel(R) Core(TM) i7-13700K

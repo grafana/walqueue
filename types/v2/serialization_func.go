@@ -171,8 +171,8 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*
 
 	metadata := types.GetMetricsFromPool()
 	if cap(metadata) < len(sg.Metadata) {
-		metadata = make([]*types.Metric, 0, len(sg.Metadata))
-		for i := range metrics {
+		metadata = make([]*types.Metric, len(sg.Metadata))
+		for i := range metadata {
 			metadata[i] = &types.Metric{}
 		}
 	} else {

@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"github.com/grafana/walqueue/types/v2"
+	"github.com/prometheus/prometheus/model/histogram"
 	"io"
 	"net/http"
 	"strconv"
@@ -287,11 +288,11 @@ func createWriteRequest(series []*types.Metric, externalLabels map[string]string
 		}
 		if tsBuf.Histogram != nil {
 			ts.Histograms = ts.Histograms[:1]
-			ts.Histograms[0] = prompb.FromIntHistogram(tsBuf.TS, tsBuf.Histogram)
+			ts.Histograms[0] = FromIntHistogram(tsBuf.TS, tsBuf.Histogram)
 		}
 		if tsBuf.FloatHistogram != nil {
 			ts.Histograms = ts.Histograms[:1]
-			ts.Histograms[0] = prompb.FromFloatHistogram(tsBuf.TS, tsBuf.FloatHistogram)
+			ts.Histograms[0] = FromFloatHistogram(tsBuf.TS, tsBuf.FloatHistogram)
 
 		}
 
@@ -386,4 +387,47 @@ func retryAfterDuration(defaultDuration time.Duration, t string) time.Duration {
 		return defaultDuration
 	}
 	return time.Duration(d) * time.Second
+}
+
+// FromIntHistogram returns remote Histogram from the integer Histogram.
+func FromIntHistogram(timestamp int64, h *histogram.Histogram) prompb.Histogram {
+	return prompb.Histogram{
+		Count:          &prompb.Histogram_CountInt{CountInt: h.Count},
+		Sum:            h.Sum,
+		Schema:         h.Schema,
+		ZeroThreshold:  h.ZeroThreshold,
+		ZeroCount:      &prompb.Histogram_ZeroCountInt{ZeroCountInt: h.ZeroCount},
+		NegativeSpans:  spansToSpansProto(h.NegativeSpans),
+		NegativeDeltas: h.NegativeBuckets,
+		PositiveSpans:  spansToSpansProto(h.PositiveSpans),
+		PositiveDeltas: h.PositiveBuckets,
+		ResetHint:      prompb.Histogram_ResetHint(h.CounterResetHint),
+		Timestamp:      timestamp,
+	}
+}
+
+// FromFloatHistogram returns remote Histogram from the float Histogram.
+func FromFloatHistogram(timestamp int64, fh *histogram.FloatHistogram) prompb.Histogram {
+	return prompb.Histogram{
+		Count:          &prompb.Histogram_CountFloat{CountFloat: fh.Count},
+		Sum:            fh.Sum,
+		Schema:         fh.Schema,
+		ZeroThreshold:  fh.ZeroThreshold,
+		ZeroCount:      &prompb.Histogram_ZeroCountFloat{ZeroCountFloat: fh.ZeroCount},
+		NegativeSpans:  spansToSpansProto(fh.NegativeSpans),
+		NegativeCounts: fh.NegativeBuckets,
+		PositiveSpans:  spansToSpansProto(fh.PositiveSpans),
+		PositiveCounts: fh.PositiveBuckets,
+		ResetHint:      prompb.Histogram_ResetHint(fh.CounterResetHint),
+		Timestamp:      timestamp,
+	}
+}
+
+func spansToSpansProto(s []histogram.Span) []prompb.BucketSpan {
+	spans := make([]prompb.BucketSpan, len(s))
+	for i := 0; i < len(s); i++ {
+		spans[i] = prompb.BucketSpan{Offset: s[i].Offset, Length: s[i].Length}
+	}
+
+	return spans
 }

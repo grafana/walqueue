@@ -48,13 +48,13 @@ func (v ByteString) String() string {
 // fillTimeSeries is what does the conversion from labels.Labels to LabelNames and
 // LabelValues while filling in the string map, that is later converted to []string.
 func fillTimeSeries(ts *TimeSeriesBinary, m *types.Metric, strMapToInt *swiss.Map[string, uint32]) *TimeSeriesBinary {
-	if cap(ts.LabelsNames) <= len(m.Labels) {
+	if cap(ts.LabelsNames) < len(m.Labels) {
 		ts.LabelsNames = make([]uint32, len(m.Labels))
 	} else {
 		ts.LabelsNames = ts.LabelsNames[:len(m.Labels)]
 	}
 
-	if cap(ts.LabelsValues) <= len(m.Labels) {
+	if cap(ts.LabelsValues) < len(m.Labels) {
 		ts.LabelsValues = make([]uint32, len(m.Labels))
 	} else {
 		ts.LabelsValues = ts.LabelsValues[:len(m.Labels)]

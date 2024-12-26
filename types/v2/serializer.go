@@ -34,35 +34,42 @@ func GetSerializer() types.Serialization {
 	return &Serialization{}
 }
 
-func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Metric, handler func([]byte)) error {
+func (s *Serialization) Serialize(metrics *types.Metrics, metadata *types.Metrics, handler func([]byte)) error {
 	sg := getSeriesGroup()
 	defer putSeriesGroup(sg)
 
-	if cap(sg.Series) < len(metrics) {
-		sg.Series = make([]*TimeSeriesBinary, len(metrics))
+	if metrics == nil {
+		metrics = &types.Metrics{M: make([]*types.Metric, 0)}
+	}
+	if metadata == nil {
+		metadata = &types.Metrics{M: make([]*types.Metric, 0)}
+	}
+
+	if cap(sg.Series) < len(metrics.M) {
+		sg.Series = make([]*TimeSeriesBinary, len(metrics.M))
 		for i := range sg.Series {
 			sg.Series[i] = &TimeSeriesBinary{}
 		}
 	} else {
-		sg.Series = sg.Series[:len(metrics)]
+		sg.Series = sg.Series[:len(metrics.M)]
 	}
 
-	if cap(sg.Metadata) < len(metadata) {
-		sg.Metadata = make([]*TimeSeriesBinary, len(metadata))
-		for i := 0; i < len(metadata); i++ {
+	if cap(sg.Metadata) < len(metadata.M) {
+		sg.Metadata = make([]*TimeSeriesBinary, len(metadata.M))
+		for i := 0; i < len(metadata.M); i++ {
 			sg.Metadata[i] = &TimeSeriesBinary{}
 		}
 	} else {
-		sg.Metadata = sg.Metadata[:len(metadata)]
+		sg.Metadata = sg.Metadata[:len(metadata.M)]
 	}
 	// Swissmap was a 25% improvement over normal maps. At some point go will adopt swiss maps and this
 	// might be able to be removed.
-	strMapToIndex := swiss.NewMap[string, uint32](uint32((len(metrics) + len(metadata)) * 10))
+	strMapToIndex := swiss.NewMap[string, uint32](uint32((len(metrics.M) + len(metadata.M)) * 10))
 
-	for index, m := range metrics {
+	for index, m := range metrics.M {
 		sg.Series[index] = fillTimeSeries(sg.Series[index], m, strMapToIndex)
 	}
-	for index, m := range metadata {
+	for index, m := range metadata.M {
 		sg.Metadata[index] = fillTimeSeries(sg.Metadata[index], m, strMapToIndex)
 	}
 	if cap(sg.Strings) < strMapToIndex.Count() {
@@ -88,7 +95,7 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 	return nil
 }
 
-func (s *Serialization) Deserialize(bytes []byte) ([]*types.Metric, []*types.Metric, error) {
+func (s *Serialization) Deserialize(bytes []byte) (*types.Metrics, *types.Metrics, error) {
 	sg := getSeriesGroup()
 	defer putSeriesGroup(sg)
 	return DeserializeToSeriesGroup(sg, bytes)

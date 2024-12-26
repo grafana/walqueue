@@ -28,14 +28,14 @@ func TestLabels(t *testing.T) {
 	metrics[0].Labels = labels.FromMap(lblsMap)
 
 	serializer := GetSerializer()
-	var newMetrics []*types.Metric
+	var newMetrics *types.Metrics
 	var err error
-	err = serializer.Serialize(metrics, nil, func(buf []byte) {
+	err = serializer.Serialize(&types.Metrics{M: metrics}, nil, func(buf []byte) {
 		newMetrics, _, err = serializer.Deserialize(buf)
 		require.NoError(t, err)
 	})
 	require.NoError(t, err)
-	series1 := newMetrics[0]
+	series1 := newMetrics.M[0]
 	series2 := metrics[0]
 	require.Len(t, series2.Labels, len(series1.Labels))
 	// Ensure we were able to convert back and forth properly.
@@ -61,9 +61,9 @@ func BenchmarkDeserialize(b *testing.B) {
 	}
 	for i := 0; i < b.N; i++ {
 		sg := GetSerializer()
-		var newMetrics []*types.Metric
+		var newMetrics *types.Metrics
 		var err error
-		err = sg.Serialize(metrics, nil, func(buf []byte) {
+		err = sg.Serialize(&types.Metrics{M: metrics}, nil, func(buf []byte) {
 
 			newMetrics, _, err = sg.Deserialize(buf)
 			if err != nil {

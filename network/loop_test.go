@@ -133,7 +133,7 @@ func TestTLSConnection(t *testing.T) {
 			require.NotNil(t, l, "newLoop should not return nil for valid TLS config")
 
 			// Create a test series for sending
-			l.series = append(l.series, createSeries(t))
+			l.series.M = append(l.series.M, createSeries(t))
 
 			// Test connection by sending a request
 			ctx := context.Background()

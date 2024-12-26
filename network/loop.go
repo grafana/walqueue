@@ -41,7 +41,7 @@ type loop struct {
 	statsFunc      func(s types.NetworkStats)
 	stopCalled     atomic.Bool
 	externalLabels map[string]string
-	series         []*types.Metric
+	series         *types.Metrics
 	self           actor.Actor
 	ticker         *time.Ticker
 	buf            *proto.Buffer
@@ -90,6 +90,7 @@ func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats fun
 		ticker:         time.NewTicker(1 * time.Second),
 		buf:            proto.NewBuffer(nil),
 		sendBuffer:     make([]byte, 0),
+		series:         &types.Metrics{M: make([]*types.Metric, 0)},
 	}, nil
 }
 
@@ -117,7 +118,7 @@ func (l *loop) DoWork(ctx actor.Context) actor.WorkerStatus {
 		return actor.WorkerEnd
 	// Ticker is to ensure the flush timer is called.
 	case <-l.ticker.C:
-		if len(l.series) == 0 {
+		if len(l.series.M) == 0 {
 			return actor.WorkerContinue
 		}
 		if time.Since(l.lastSend) > l.cfg.FlushInterval {
@@ -128,8 +129,8 @@ func (l *loop) DoWork(ctx actor.Context) actor.WorkerStatus {
 		if !ok {
 			return actor.WorkerEnd
 		}
-		l.series = append(l.series, series)
-		if len(l.series) >= l.cfg.BatchCount {
+		l.series.M = append(l.series.M, series)
+		if len(l.series.M) >= l.cfg.BatchCount {
 			l.trySend(ctx)
 		}
 		return actor.WorkerContinue
@@ -184,7 +185,7 @@ type sendResult struct {
 func (l *loop) sendingCleanup() {
 	types.PutMetricsIntoPool(l.series)
 	l.sendBuffer = l.sendBuffer[:0]
-	l.series = make([]*types.Metric, 0, l.cfg.BatchCount)
+	l.series = &types.Metrics{M: make([]*types.Metric, 0, l.cfg.BatchCount)}
 	l.lastSend = time.Now()
 }
 
@@ -192,7 +193,7 @@ func (l *loop) sendingCleanup() {
 func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 	result := sendResult{}
 	defer func() {
-		recordStats(l.series, l.isMeta, l.statsFunc, result, len(l.sendBuffer))
+		recordStats(l.series.M, l.isMeta, l.statsFunc, result, len(l.sendBuffer))
 	}()
 	// Check to see if this is a retry and we can reuse the buffer.
 	// I wonder if we should do this, its possible we are sending things that have exceeded the TTL.
@@ -200,9 +201,9 @@ func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 		var data []byte
 		var wrErr error
 		if l.isMeta {
-			data, wrErr = createWriteRequestMetadata(l.log, l.series, l.buf)
+			data, wrErr = createWriteRequestMetadata(l.log, l.series.M, l.buf)
 		} else {
-			data, wrErr = createWriteRequest(l.series, l.externalLabels, l.buf)
+			data, wrErr = createWriteRequest(l.series.M, l.externalLabels, l.buf)
 		}
 		if wrErr != nil {
 			result.err = wrErr

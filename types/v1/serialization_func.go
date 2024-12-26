@@ -21,22 +21,28 @@ func GetSerializer() types.Serialization {
 
 type Serialization struct{}
 
-func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Metric, handle func([]byte)) error {
+func (s *Serialization) Serialize(metrics *types.Metrics, metadata *types.Metrics, handle func([]byte)) error {
 	sg := &SeriesGroup{}
 	buf := make([]byte, 0)
-	sg.Series = make([]*TimeSeriesBinary, 0, len(metrics))
-	sg.Metadata = make([]*TimeSeriesBinary, 0, len(metadata))
-	strMapToIndex := make(map[string]uint32, (len(metrics)+len(metadata))*10)
+	if metrics == nil {
+		metrics = &types.Metrics{M: make([]*types.Metric, 0)}
+	}
+	if metadata == nil {
+		metadata = &types.Metrics{M: make([]*types.Metric, 0)}
+	}
+	sg.Series = make([]*TimeSeriesBinary, 0, len(metrics.M))
+	sg.Metadata = make([]*TimeSeriesBinary, 0, len(metadata.M))
+	strMapToIndex := make(map[string]uint32, (len(metrics.M)+len(metadata.M))*10)
 
 	defer func() {
 		PutTimeSeriesSliceIntoPool(sg.Series)
 		PutTimeSeriesSliceIntoPool(sg.Metadata)
 	}()
-	for _, m := range metrics {
+	for _, m := range metrics.M {
 		ts := createTimeSeries(m, strMapToIndex)
 		sg.Series = append(sg.Series, ts)
 	}
-	for _, m := range metadata {
+	for _, m := range metadata.M {
 		ts := createTimeSeries(m, strMapToIndex)
 		sg.Metadata = append(sg.Metadata, ts)
 	}
@@ -54,7 +60,7 @@ func (s *Serialization) Serialize(metrics []*types.Metric, metadata []*types.Met
 
 }
 
-func (s *Serialization) Deserialize(i []byte) (metrics []*types.Metric, metadata []*types.Metric, err error) {
+func (s *Serialization) Deserialize(i []byte) (metrics *types.Metrics, metadata *types.Metrics, err error) {
 	sg := &SeriesGroup{}
 	return DeserializeToSeriesGroup(sg, i)
 }
@@ -254,7 +260,7 @@ func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
 }
 
 // DeserializeToSeriesGroup transforms a buffer to a SeriesGroup and converts the stringmap + indexes into actual Labels.
-func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*types.Metric, error) {
+func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*types.Metrics, *types.Metrics, error) {
 	nr := msgp.NewReader(bytes.NewReader(buf))
 	err := sg.DecodeMsg(nr)
 	if err != nil {
@@ -262,16 +268,9 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*
 	}
 	// Need to fill in the labels.
 	metrics := types.GetMetricsFromPool()
-	if cap(metrics) < len(sg.Series) {
-		metrics = make([]*types.Metric, len(sg.Series))
-		for i := range metrics {
-			metrics[i] = &types.Metric{}
-		}
-	} else {
-		metrics = metrics[:len(sg.Series)]
-	}
+	metrics.Resize(len(sg.Series))
 	for seriesIndex, series := range sg.Series {
-		metric := metrics[seriesIndex]
+		metric := metrics.M[seriesIndex]
 		if cap(metric.Labels) < len(series.LabelsNames) {
 			metric.Labels = make(labels.Labels, len(series.LabelsNames))
 		} else {
@@ -289,16 +288,9 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*
 		series.LabelsValues = series.LabelsValues[:0]
 	}
 	meta := types.GetMetricsFromPool()
-	if cap(meta) < len(sg.Metadata) {
-		meta = make([]*types.Metric, len(sg.Metadata))
-		for i := range meta {
-			meta[i] = &types.Metric{}
-		}
-	} else {
-		meta = meta[:len(sg.Metadata)]
-	}
+	meta.Resize(len(sg.Metadata))
 	for seriesIndex, series := range sg.Metadata {
-		m := meta[seriesIndex]
+		m := meta.M[seriesIndex]
 		if cap(m.Labels) < len(series.LabelsNames) {
 			m.Labels = make([]labels.Label, len(series.LabelsNames))
 		} else {

@@ -98,23 +98,23 @@ type LabelHandle struct {
 type LabelHandles []LabelHandle
 
 // DeserializeToSeriesGroup transforms a buffer to a SeriesGroup and converts the stringmap + indexes into actual Labels.
-func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*types.Metric, error) {
+func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*types.Metrics, *types.Metrics, error) {
 	buf, err := sg.UnmarshalMsg(buf)
 	if err != nil {
 		return nil, nil, err
 	}
 	metrics := types.GetMetricsFromPool()
-	if cap(metrics) < len(sg.Series) {
-		metrics = make([]*types.Metric, len(sg.Series))
-		for i := range metrics {
-			metrics[i] = &types.Metric{}
+	if cap(metrics.M) < len(sg.Series) {
+		metrics.M = make([]*types.Metric, len(sg.Series))
+		for i := range metrics.M {
+			metrics.M[i] = &types.Metric{}
 		}
 	} else {
-		metrics = metrics[:len(sg.Series)]
+		metrics.M = metrics.M[:len(sg.Series)]
 	}
 	// Need to fill in the labels.
 	for seriesIndex, series := range sg.Series {
-		metric := metrics[seriesIndex]
+		metric := metrics.M[seriesIndex]
 		if cap(metric.Labels) < len(series.LabelsNames) {
 			metric.Labels = make(labels.Labels, len(series.LabelsNames))
 		} else {
@@ -142,16 +142,16 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]*types.Metric, []*
 	}
 
 	metadata := types.GetMetricsFromPool()
-	if cap(metadata) < len(sg.Metadata) {
-		metadata = make([]*types.Metric, len(sg.Metadata))
-		for i := range metadata {
-			metadata[i] = &types.Metric{}
+	if cap(metadata.M) < len(sg.Metadata) {
+		metadata.M = make([]*types.Metric, len(sg.Metadata))
+		for i := range metadata.M {
+			metadata.M[i] = &types.Metric{}
 		}
 	} else {
-		metadata = metadata[:len(sg.Metadata)]
+		metadata.M = metadata.M[:len(sg.Metadata)]
 	}
 	for seriesIndex, series := range sg.Metadata {
-		meta := metadata[seriesIndex]
+		meta := metadata.M[seriesIndex]
 
 		if cap(meta.Labels) < len(series.LabelsNames) {
 			meta.Labels = make([]labels.Label, len(series.LabelsNames))

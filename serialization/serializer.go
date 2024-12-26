@@ -31,8 +31,8 @@ type serializer struct {
 	self                actor.Actor
 	// Every 1 second we should check if we need to flush.
 	flushTestTimer *time.Ticker
-	series         []*types.Metric
-	meta           []*types.Metric
+	series         *types.Metrics
+	meta           *types.Metrics
 	msgpBuffer     []byte
 	stats          func(stats types.SerializerStats)
 	fileFormat     types.FileFormat
@@ -43,7 +43,8 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		maxItemsBeforeFlush: int(cfg.MaxSignalsInBatch),
 		flushFrequency:      cfg.FlushFrequency,
 		queue:               q,
-		series:              make([]*types.Metric, 0),
+		series:              &types.Metrics{M: make([]*types.Metric, 0)},
+		meta:                &types.Metrics{M: make([]*types.Metric, 0)},
 		logger:              l,
 		inbox:               actor.NewMailbox[*types.Metric](),
 		metaInbox:           actor.NewMailbox[*types.Metric](),
@@ -111,9 +112,9 @@ func (s *serializer) DoWork(ctx actor.Context) actor.WorkerStatus {
 		if !ok {
 			return actor.WorkerEnd
 		}
-		s.series = append(s.series, item)
+		s.series.M = append(s.series.M, item)
 		// If we would go over the max size then send, or if we have hit the flush duration then send.
-		if len(s.meta)+len(s.series) >= s.maxItemsBeforeFlush {
+		if len(s.meta.M)+len(s.series.M) >= s.maxItemsBeforeFlush {
 			err := s.flushToDisk(ctx)
 			if err != nil {
 				level.Error(s.logger).Log("msg", "unable to append to serializer", "err", err)
@@ -125,8 +126,8 @@ func (s *serializer) DoWork(ctx actor.Context) actor.WorkerStatus {
 		if !ok {
 			return actor.WorkerEnd
 		}
-		s.meta = append(s.meta, item)
-		if len(s.meta)+len(s.series) >= s.maxItemsBeforeFlush {
+		s.meta.M = append(s.meta.M, item)
+		if len(s.meta.M)+len(s.series.M) >= s.maxItemsBeforeFlush {
 			err := s.flushToDisk(ctx)
 			if err != nil {
 				level.Error(s.logger).Log("msg", "unable to append metadata to serializer", "err", err)
@@ -149,11 +150,11 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 	defer func() {
 		s.lastFlush = time.Now()
 		s.storeStats(err)
-		s.series = s.series[:0]
-		s.meta = s.meta[:0]
+		s.series.M = s.series.M[:0]
+		s.meta.M = s.meta.M[:0]
 	}()
 	// Do nothing if there is nothing.
-	if len(s.series) == 0 && len(s.meta) == 0 {
+	if len(s.series.M) == 0 && len(s.meta.M) == 0 {
 		return nil
 	}
 	var ser types.Serialization
@@ -176,8 +177,8 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 		// product.signal_type.schema.version
 		"version":      string(s.fileFormat),
 		"compression":  "snappy",
-		"series_count": strconv.Itoa(len(s.series)),
-		"meta_count":   strconv.Itoa(len(s.meta)),
+		"series_count": strconv.Itoa(len(s.series.M)),
+		"meta_count":   strconv.Itoa(len(s.meta.M)),
 	}
 	err = s.queue.Store(ctx, meta, out)
 	return err
@@ -189,14 +190,14 @@ func (s *serializer) storeStats(err error) {
 		hasError = 1
 	}
 	newestTS := int64(0)
-	for _, ts := range s.series {
+	for _, ts := range s.series.M {
 		if ts.TS > newestTS {
 			newestTS = ts.TS
 		}
 	}
 	s.stats(types.SerializerStats{
-		SeriesStored:           len(s.series),
-		MetadataStored:         len(s.meta),
+		SeriesStored:           len(s.series.M),
+		MetadataStored:         len(s.meta.M),
 		Errors:                 hasError,
 		NewestTimestampSeconds: time.UnixMilli(newestTS).Unix(),
 	})

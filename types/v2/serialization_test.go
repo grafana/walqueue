@@ -21,21 +21,21 @@ func TestLabels(t *testing.T) {
 		unique[v] = struct{}{}
 	}
 
-	metrics := make([]*types.Metric, 1)
-	metrics[0] = &types.Metric{}
+	metrics := &types.Metrics{M: make([]*types.Metric, 1)}
+	metrics.M[0] = &types.Metric{}
 
-	metrics[0].Labels = labels.FromMap(lblsMap)
+	metrics.M[0].Labels = labels.FromMap(lblsMap)
 
 	serializer := GetSerializer()
-	var newMetrics []*types.Metric
+	var newMetrics *types.Metrics
 	err := serializer.Serialize(metrics, nil, func(b []byte) {
 		var err error
 		newMetrics, _, err = serializer.Deserialize(b)
 		require.NoError(t, err)
 	})
 	require.NoError(t, err)
-	series1 := newMetrics[0]
-	series2 := metrics[0]
+	series1 := newMetrics.M[0]
+	series2 := metrics.M[0]
 	require.Len(t, series2.Labels, len(series1.Labels))
 	// Ensure we were able to convert back and forth properly.
 	for i, lbl := range series2.Labels {
@@ -55,21 +55,21 @@ func TestMetadata(t *testing.T) {
 		unique[v] = struct{}{}
 	}
 
-	meta := make([]*types.Metric, 1)
-	meta[0] = &types.Metric{}
+	meta := &types.Metrics{M: make([]*types.Metric, 1)}
+	meta.M[0] = &types.Metric{}
 
-	meta[0].Labels = labels.FromMap(lblsMap)
+	meta.M[0].Labels = labels.FromMap(lblsMap)
 
 	serializer := GetSerializer()
-	var newMeta []*types.Metric
+	var newMeta *types.Metrics
 	err := serializer.Serialize(nil, meta, func(b []byte) {
 		var err error
 		_, newMeta, err = serializer.Deserialize(b)
 		require.NoError(t, err)
 	})
 	require.NoError(t, err)
-	series1 := newMeta[0]
-	series2 := meta[0]
+	series1 := newMeta.M[0]
+	series2 := meta.M[0]
 	require.Len(t, series2.Labels, len(series1.Labels))
 	// Ensure we were able to convert back and forth properly.
 	for i, lbl := range series2.Labels {
@@ -84,7 +84,7 @@ func BenchmarkDeserialize(b *testing.B) {
 	// 2024-12-17 BenchmarkDeserialize-24    	     909	   1234031 ns/op after some optimization on pools
 	// 2024-12-17 BenchmarkDeserialize-24    	    1308	    858204 ns/op further optimizations on allocs
 	// 2023-12-17 BenchmarkDeserialize-24    	    1508	    811829 ns/op after switching to swiss map
-	metrics := make([]*types.Metric, 0)
+	metrics := &types.Metrics{M: make([]*types.Metric, 0)}
 	for k := 0; k < 1_000; k++ {
 		lblsMap := make(map[string]string)
 		for j := 0; j < 10; j++ {
@@ -94,13 +94,13 @@ func BenchmarkDeserialize(b *testing.B) {
 		}
 		m := &types.Metric{}
 		m.Labels = labels.FromMap(lblsMap)
-		metrics = append(metrics, m)
+		metrics.M = append(metrics.M, m)
 	}
 	var err error
 	for i := 0; i < b.N; i++ {
 		sg := GetSerializer()
-		var newMetrics []*types.Metric
-		var newMeta []*types.Metric
+		var newMetrics *types.Metrics
+		var newMeta *types.Metrics
 		err = sg.Serialize(metrics, nil, func(buf []byte) {
 			var err error
 			newMetrics, newMeta, err = sg.Deserialize(buf)

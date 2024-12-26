@@ -13,8 +13,23 @@ type Serialization interface {
 	// Serialize is used to convert metrics and metadata to a before that is passed
 	// into handle. The []byte slice is only garaunteed within the func.
 	// The handler will only be called if there is no error.
-	Serialize(metrics []*Metric, metadata []*Metric, handle func([]byte)) error
-	Deserialize([]byte) (metrics []*Metric, metadata []*Metric, err error)
+	Serialize(metrics *Metrics, metadata *Metrics, handle func([]byte)) error
+	Deserialize([]byte) (metrics *Metrics, metadata *Metrics, err error)
+}
+
+type Metrics struct {
+	M []*Metric
+}
+
+func (m *Metrics) Resize(length int) {
+	if cap(m.M) < length {
+		m.M = make([]*Metric, length)
+		for i := range m.M {
+			m.M[i] = &Metric{}
+		}
+	} else {
+		m.M = m.M[:length]
+	}
 }
 
 type Metric struct {
@@ -34,18 +49,18 @@ func (m Metric) IsMetadata() bool {
 var OutstandingMetrics = atomic.Int32{}
 var metricPool = sync.Pool{
 	New: func() any {
-		return make([]*Metric, 0)
+		return &Metrics{}
 	},
 }
 
-func GetMetricsFromPool() []*Metric {
+func GetMetricsFromPool() *Metrics {
 	OutstandingMetrics.Inc()
-	return metricPool.Get().([]*Metric)
+	return metricPool.Get().(*Metrics)
 }
 
-func PutMetricsIntoPool(m []*Metric) {
+func PutMetricsIntoPool(m *Metrics) {
 	OutstandingMetrics.Dec()
-	for _, met := range m {
+	for _, met := range m.M {
 		met.Hash = 0
 		met.TS = 0
 		met.Value = 0
@@ -53,7 +68,7 @@ func PutMetricsIntoPool(m []*Metric) {
 		met.Histogram = nil
 		met.FloatHistogram = nil
 	}
-	m = m[:0]
+	m.M = m.M[:0]
 	metricPool.Put(m)
 }
 

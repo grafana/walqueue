@@ -170,8 +170,8 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		level.Error(q.logger).Log("msg", "version not found for deserialization")
 		return
 	}
-	var metrics []*types.Metric
-	var metadata []*types.Metric
+	var metrics *types.Metrics
+	var metadata *types.Metrics
 	switch types.FileFormat(version) {
 	case types.AlloyFileVersionV2:
 		s := v2.GetSerializer()
@@ -187,7 +187,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
 
-	for _, series := range metrics {
+	for _, series := range metrics.M {
 		// Check that the TTL.
 		seriesAge := time.Since(time.UnixMilli(series.TS))
 		// For any series that exceeds the time to live (ttl) based on its timestamp we do not want to push it to the networking layer
@@ -204,7 +204,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		}
 	}
 
-	for _, md := range metadata {
+	for _, md := range metadata.M {
 		sendErr := q.network.SendMetadata(ctx, md)
 		if sendErr != nil {
 			level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)

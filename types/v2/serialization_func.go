@@ -74,6 +74,7 @@ func fillTimeSeries(ts *TimeSeriesBinary, m *types.Metric, strMapToInt *swiss.Ma
 
 	// This is where we deduplicate the ts.Labels into uint32 values
 	// that map to a string in the strings slice via the index.
+	// For deserializing this is the bottleneck, the millions of gets.
 	for i, v := range m.Labels {
 		val, found := strMapToInt.Get(v.Name)
 		if !found {

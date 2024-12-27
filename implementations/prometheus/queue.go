@@ -4,6 +4,7 @@ import (
 	"context"
 	v1 "github.com/grafana/walqueue/types/v1"
 	v2 "github.com/grafana/walqueue/types/v2"
+	v3 "github.com/grafana/walqueue/types/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"sync"
 	"time"
@@ -70,7 +71,7 @@ type queue struct {
 // Returns:
 // - Queue: An initialized Queue instance.
 // - error: An error if any of the components fail to initialize.
-func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSignalsToBatch uint32, flushInterval time.Duration, ttl time.Duration, registerer prometheus.Registerer, namespace string, logger log.Logger) (Queue, error) {
+func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSignalsToBatch uint32, flushInterval time.Duration, ttl time.Duration, registerer prometheus.Registerer, namespace string, ff types.FileFormat, logger log.Logger) (Queue, error) {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"endpoint": name}, registerer)
 	stats := NewStats(namespace, "queue_series", reg)
 	stats.SeriesBackwardsCompatibility(reg)
@@ -101,7 +102,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	serial, err := serialization.NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: maxSignalsToBatch,
 		FlushFrequency:    flushInterval,
-	}, q.queue, stats.UpdateSerializer, types.AlloyFileVersionV2, logger)
+	}, q.queue, stats.UpdateSerializer, ff, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +179,9 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		metrics, metadata, err = s.Deserialize(uncompressedBuf)
 	case types.AlloyFileVersionV1:
 		s := v1.GetSerializer()
+		metrics, metadata, err = s.Deserialize(uncompressedBuf)
+	case types.AlloyFileVersionV3:
+		s := v3.GetSerializer()
 		metrics, metadata, err = s.Deserialize(uncompressedBuf)
 	default:
 		level.Error(q.logger).Log("msg", "invalid version found for deserialization", "version", version)

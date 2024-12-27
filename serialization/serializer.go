@@ -3,6 +3,7 @@ package serialization
 import (
 	"context"
 	"fmt"
+	v3 "github.com/grafana/walqueue/types/v3"
 	"strconv"
 	"time"
 
@@ -164,6 +165,8 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 		ser = v1.GetSerializer()
 	case types.AlloyFileVersionV2:
 		ser = v2.GetSerializer()
+	case types.AlloyFileVersionV3:
+		ser = v3.GetSerializer()
 	default:
 		return fmt.Errorf("invalid file format %s", s.fileFormat)
 	}

@@ -13,6 +13,9 @@ const AlloyFileVersionV1 = FileFormat("alloy.metrics.queue.v1")
 // save/restore histograms if they are nil. This can have up to 3x increase versus v1.
 const AlloyFileVersionV2 = FileFormat("alloy.metrics.queue.v2")
 
+// AlloyFileVersionV3 is similiar to v2 but doesnt do any dictionary encoding.
+const AlloyFileVersionV3 = FileFormat("alloy.metrics.queue.v3")
+
 type SerializerConfig struct {
 	// MaxSignalsInBatch controls what the max batch size is.
 	MaxSignalsInBatch uint32

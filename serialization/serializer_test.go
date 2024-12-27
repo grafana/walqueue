@@ -101,7 +101,7 @@ func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) e
 	metrics, _, err := v2.DeserializeToSeriesGroup(sg, f.buf)
 	require.NoError(f.t, err)
 	require.Len(f.t, sg.Series, 10)
-	for _, series := range metrics {
+	for _, series := range metrics.M {
 		require.Len(f.t, series.Labels, 10)
 		for j := 0; j < 10; j++ {
 			series.Labels[j].Name = fmt.Sprintf("name_%d_%d", int(series.Value), j)

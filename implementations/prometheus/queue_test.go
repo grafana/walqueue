@@ -92,6 +92,7 @@ func TestQueue_Appender(t *testing.T) {
 				1*time.Hour,
 				reg,
 				"test",
+				types.AlloyFileVersionV3,
 				logger,
 			)
 			require.NoError(t, err)
@@ -114,7 +115,7 @@ func TestStats(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	end, err := NewQueue("test", types.ConnectionConfig{
 		URL: "example.com",
-	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
+	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", types.AlloyFileVersionV2, log.NewNopLogger())
 	require.NoError(t, err)
 	// This will unregister the metrics
 	end.Start()
@@ -125,7 +126,7 @@ func TestStats(t *testing.T) {
 	// This will trigger a panic if duplicate metrics found.
 	end2, err := NewQueue("test", types.ConnectionConfig{
 		URL: "example.com",
-	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
+	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", types.AlloyFileVersionV2, log.NewNopLogger())
 	require.NoError(t, err)
 
 	end2.Start()

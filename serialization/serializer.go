@@ -55,7 +55,6 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		stats:               stats,
 		fileFormat:          ff,
 	}
-
 	return s, nil
 }
 func (s *serializer) Start() {
@@ -150,8 +149,10 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 	defer func() {
 		s.lastFlush = time.Now()
 		s.storeStats(err)
-		s.series.M = s.series.M[:0]
-		s.meta.M = s.meta.M[:0]
+		types.PutMetricSliceIntoPool(s.series.M)
+		types.PutMetricSliceIntoPool(s.meta.M)
+		s.series.M = make([]*types.Metric, 0, s.maxItemsBeforeFlush)
+		s.meta.M = make([]*types.Metric, 0, s.maxItemsBeforeFlush)
 	}()
 	// Do nothing if there is nothing.
 	if len(s.series.M) == 0 && len(s.meta.M) == 0 {

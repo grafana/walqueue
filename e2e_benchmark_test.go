@@ -46,12 +46,11 @@ func TestV2E2E(b *testing.T) {
 			for _, sample := range x.Samples {
 				_, found := set[sample.Value]
 				if found {
-					println("error " + sample.String())
+					panic("found duplicate sample")
 				}
 				set[sample.Value] = struct{}{}
 			}
 		}
-		println(totalSeries.Load())
 	}))
 	cc := types.ConnectionConfig{
 		URL:           srv.URL,
@@ -93,7 +92,7 @@ func TestV2E2E(b *testing.T) {
 	require.Eventually(b, func() bool {
 		return totalSeries.Load() == int32(metricCount*sends)
 	}, 50*time.Second, 50*time.Millisecond)
-	require.True(b, types.OutstandingIndividualMetrics.Load() == 0)
+	require.Truef(b, types.OutstandingIndividualMetrics.Load() == 0, "outstanding indicidual metrics are %d", types.OutstandingIndividualMetrics.Load())
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")

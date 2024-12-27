@@ -42,7 +42,7 @@ func NewAppender(ctx context.Context, ttl time.Duration, s types.Serializer, log
 
 // Append metric
 func (a *appender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
-	ts := &types.Metric{}
+	ts := types.GetMetricFromPool()
 	ts.Labels = l
 	ts.TS = t
 	ts.Value = v
@@ -67,7 +67,7 @@ func (a *appender) AppendExemplar(ref storage.SeriesRef, _ labels.Labels, e exem
 	if e.HasTs && e.Ts < endTime {
 		return ref, nil
 	}
-	ts := &types.Metric{}
+	ts := types.GetMetricFromPool()
 	ts.Hash = e.Labels.Hash()
 	ts.TS = e.Ts
 	ts.Labels = e.Labels
@@ -82,7 +82,7 @@ func (a *appender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int
 	if t < endTime {
 		return ref, nil
 	}
-	ts := &types.Metric{}
+	ts := types.GetMetricFromPool()
 	ts.Labels = l
 	ts.TS = t
 	if h != nil {

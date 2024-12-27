@@ -3,6 +3,8 @@ package v2
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/grafana/walqueue/types"
@@ -116,6 +118,22 @@ func BenchmarkDeserialize(b *testing.B) {
 		}
 		types.PutMetricSliceIntoPool(newMetrics.M)
 		types.PutMetricSliceIntoPool(newMeta.M)
+	}
+}
+
+func TestBackwardsCompatability(t *testing.T) {
+	buf, err := os.ReadFile("v2.bin")
+	require.NoError(t, err)
+	sg := GetSerializer()
+	metrics, meta, err := sg.Deserialize(buf)
+	require.NoError(t, err)
+	require.Len(t, metrics.M, 1_000)
+	require.Len(t, meta.M, 0)
+	for _, m := range metrics.M {
+		require.Len(t, m.Labels, 10)
+		for _, lbl := range m.Labels {
+			require.True(t, strings.HasPrefix(lbl.Name, "key"))
+		}
 	}
 }
 

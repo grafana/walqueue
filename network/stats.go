@@ -1,6 +1,7 @@
 package network
 
 import (
+	"github.com/prometheus/prometheus/prompb"
 	"net/http"
 	"time"
 
@@ -9,10 +10,10 @@ import (
 
 // recordStats determines what values to send to the stats function. This allows for any
 // number of metrics/signals libraries to be used. Prometheus, OTel, and any other.
-func recordStats(series []*types.Metric, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
+func recordStats(series []prompb.TimeSeries, meta []prompb.MetricMetadata, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
 	seriesCount := getSeriesCount(series)
 	histogramCount := getHistogramCount(series)
-	metadataCount := getMetadataCount(series)
+	metadataCount := len(meta)
 	switch {
 	case r.networkError:
 		stats(types.NetworkStats{
@@ -30,8 +31,10 @@ func recordStats(series []*types.Metric, isMeta bool, stats func(s types.Network
 		// Need to grab the newest series.
 		var newestTS int64
 		for _, ts := range series {
-			if ts.TS > newestTS {
-				newestTS = ts.TS
+			if len(ts.Samples) > 0 {
+				if ts.Samples[0].Timestamp > newestTS {
+					newestTS = ts.Samples[0].Timestamp
+				}
 			}
 		}
 		var sampleBytesSent int
@@ -99,29 +102,20 @@ func recordStats(series []*types.Metric, isMeta bool, stats func(s types.Network
 
 }
 
-func getSeriesCount(tss []*types.Metric) int {
+func getSeriesCount(tss []prompb.TimeSeries) int {
 	cnt := 0
 	for _, ts := range tss {
-		// This is metadata
-		if isMetadata(ts) {
-			continue
-		}
-		if ts.Histogram == nil && ts.FloatHistogram == nil {
+		if len(ts.Samples) > 0 {
 			cnt++
 		}
 	}
 	return cnt
 }
 
-func getHistogramCount(tss []*types.Metric) int {
+func getHistogramCount(tss []prompb.TimeSeries) int {
 	cnt := 0
 	for _, ts := range tss {
-		if isMetadata(ts) {
-			continue
-		}
-		if ts.Histogram != nil || ts.FloatHistogram != nil {
-			cnt++
-		}
+		cnt = cnt + len(ts.Histograms)
 	}
 	return cnt
 }

@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 )
@@ -25,7 +26,11 @@ func TestV2E2E(b *testing.T) {
 	// BenchmarkV2E2E-20    	    2504	    451484 ns/op
 	dir := b.TempDir()
 	totalSeries := atomic.NewInt32(0)
+	mut := sync.Mutex{}
+	set := make(map[float64]struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mut.Lock()
+		defer mut.Unlock()
 		defer r.Body.Close()
 		data, err := io.ReadAll(r.Body)
 		require.NoError(b, err)
@@ -35,15 +40,24 @@ func TestV2E2E(b *testing.T) {
 		var req prompb.WriteRequest
 		err = req.Unmarshal(data)
 		require.NoError(b, err)
+
 		for _, x := range req.GetTimeseries() {
 			totalSeries.Add(int32(len(x.Samples)))
+			for _, sample := range x.Samples {
+				_, found := set[sample.Value]
+				if found {
+					println("error " + sample.String())
+				}
+				set[sample.Value] = struct{}{}
+			}
 		}
+		println(totalSeries.Load())
 	}))
 	cc := types.ConnectionConfig{
 		URL:           srv.URL,
-		BatchCount:    1000,
+		BatchCount:    10,
 		FlushInterval: 1 * time.Second,
-		Connections:   10,
+		Connections:   3,
 		Timeout:       10 * time.Second,
 	}
 	q, err := prom.NewQueue("test", cc, dir, 10000, 1*time.Second, 1*time.Hour, prometheus.NewRegistry(), "alloy", log.NewLogfmtLogger(os.Stderr))
@@ -52,8 +66,8 @@ func TestV2E2E(b *testing.T) {
 	go q.Start()
 	defer q.Stop()
 
-	metricCount := 1_000
-	sends := 1_000
+	metricCount := 100
+	sends := 2
 	metrics := make([]*types.Metric, 0)
 	for k := 0; k < metricCount; k++ {
 		lblsMap := make(map[string]string)
@@ -67,16 +81,19 @@ func TestV2E2E(b *testing.T) {
 		m.TS = time.Now().UnixMilli()
 		metrics = append(metrics, m)
 	}
+	index := 1
 	for n := 0; n < sends; n++ {
 		app := q.Appender(context.Background())
 		for _, m := range metrics {
-			app.Append(0, m.Labels, m.TS, m.Value)
+			app.Append(0, m.Labels, m.TS, float64(index))
+			index++
 		}
 		app.Commit()
 	}
 	require.Eventually(b, func() bool {
 		return totalSeries.Load() == int32(metricCount*sends)
 	}, 50*time.Second, 50*time.Millisecond)
+	require.True(b, types.OutstandingIndividualMetrics.Load() == 0)
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")

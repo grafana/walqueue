@@ -22,13 +22,9 @@ type Metrics struct {
 }
 
 func (m *Metrics) Resize(length int) {
-	if cap(m.M) < length {
-		m.M = make([]*Metric, length)
-		for i := range m.M {
-			m.M[i] = &Metric{}
-		}
-	} else {
-		m.M = m.M[:length]
+	m.M = make([]*Metric, length)
+	for i := range m.M {
+		m.M[i] = GetMetricFromPool()
 	}
 }
 
@@ -46,32 +42,6 @@ func (m Metric) IsMetadata() bool {
 	return m.Labels.Has("__alloy_metadata_type__")
 }
 
-var OutstandingMetrics = atomic.Int32{}
-var metricPool = sync.Pool{
-	New: func() any {
-		return &Metrics{}
-	},
-}
-
-func GetMetricsFromPool() *Metrics {
-	OutstandingMetrics.Inc()
-	return metricPool.Get().(*Metrics)
-}
-
-func PutMetricsIntoPool(m *Metrics) {
-	OutstandingMetrics.Dec()
-	for _, met := range m.M {
-		met.Hash = 0
-		met.TS = 0
-		met.Value = 0
-		met.Labels = nil
-		met.Histogram = nil
-		met.FloatHistogram = nil
-	}
-	m.M = m.M[:0]
-	metricPool.Put(m)
-}
-
 var OutstandingIndividualMetrics = atomic.Int32{}
 var metricSinglePool = sync.Pool{
 	New: func() any {
@@ -82,6 +52,12 @@ var metricSinglePool = sync.Pool{
 func GetMetricFromPool() *Metric {
 	OutstandingIndividualMetrics.Inc()
 	return metricSinglePool.Get().(*Metric)
+}
+
+func PutMetricSliceIntoPool(m []*Metric) {
+	for _, mt := range m {
+		PutMetricIntoPool(mt)
+	}
 }
 
 func PutMetricIntoPool(m *Metric) {

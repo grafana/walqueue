@@ -81,9 +81,7 @@ func TestMetadata(t *testing.T) {
 func BenchmarkDeserialize(b *testing.B) {
 	// NOTE there can be a fair amount of variance in these, +-200 is easily observable.
 	// cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-	// 2024-12-17 BenchmarkDeserialize-24    	     909	   1234031 ns/op after some optimization on pools
-	// 2024-12-17 BenchmarkDeserialize-24    	    1308	    858204 ns/op further optimizations on allocs
-	// 2023-12-17 BenchmarkDeserialize-24    	    1508	    811829 ns/op after switching to swiss map
+	// 2024-12-26 BenchmarkDeserialize-20    	     616	   2322859 ns/op
 	metrics := &types.Metrics{M: make([]*types.Metric, 0)}
 	for k := 0; k < 1_000; k++ {
 		lblsMap := make(map[string]string)
@@ -111,8 +109,12 @@ func BenchmarkDeserialize(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		types.PutMetricsIntoPool(newMetrics)
-		types.PutMetricsIntoPool(newMeta)
+		for _, m := range newMetrics.M {
+			types.PutMetricIntoPool(m)
+		}
+		for _, m := range newMeta.M {
+			types.PutMetricIntoPool(m)
+		}
 	}
 }
 

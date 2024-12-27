@@ -267,7 +267,7 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*types.Metrics, *typ
 		return nil, nil, err
 	}
 	// Need to fill in the labels.
-	metrics := types.GetMetricsFromPool()
+	metrics := &types.Metrics{}
 	metrics.Resize(len(sg.Series))
 	for seriesIndex, series := range sg.Series {
 		metric := metrics.M[seriesIndex]
@@ -287,7 +287,7 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*types.Metrics, *typ
 		series.LabelsNames = series.LabelsNames[:0]
 		series.LabelsValues = series.LabelsValues[:0]
 	}
-	meta := types.GetMetricsFromPool()
+	meta := &types.Metrics{}
 	meta.Resize(len(sg.Metadata))
 	for seriesIndex, series := range sg.Metadata {
 		m := meta.M[seriesIndex]

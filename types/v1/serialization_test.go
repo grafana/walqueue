@@ -46,7 +46,7 @@ func TestLabels(t *testing.T) {
 }
 
 func BenchmarkDeserialize(b *testing.B) {
-	// 2024-12-17 BenchmarkDeserialize-24    	     631	   1806962 ns/op
+	// 2024-12-26 BenchmarkDeserialize-20    	     226	   5447446 ns/op
 	metrics := make([]*types.Metric, 0)
 	for k := 0; k < 1_000; k++ {
 		lblsMap := make(map[string]string)
@@ -76,7 +76,7 @@ func BenchmarkDeserialize(b *testing.B) {
 		if err != nil {
 			panic(err.Error())
 		}
-		types.PutMetricsIntoPool(newMetrics)
+		types.PutMetricSliceIntoPool(newMetrics.M)
 	}
 }
 

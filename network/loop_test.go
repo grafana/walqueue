@@ -133,11 +133,12 @@ func TestTLSConnection(t *testing.T) {
 			require.NotNil(t, l, "newLoop should not return nil for valid TLS config")
 
 			// Create a test series for sending
-			l.series.M = append(l.series.M, createSeries(t))
+			pending := make([]prompb.TimeSeries, 1)
+			pending[0] = toSeries(createSeries(t), pending[0], nil)
 
 			// Test connection by sending a request
 			ctx := context.Background()
-			result := l.send(ctx, 0)
+			result := l.send(pending, nil, ctx, 0)
 			if !tt.wantErr {
 				require.True(t, result.successful, "request should be successful")
 				require.NoError(t, result.err, "request should not return error")

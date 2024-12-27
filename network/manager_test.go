@@ -206,10 +206,10 @@ func TestRecoverable(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		send(t, wr, ctx)
 	}
-	require.Eventually(t, func() bool {
+	require.Eventuallyf(t, func() bool {
 		// We send 10 but each one gets retried once so 20 total.
 		return recoverable.Load() == 10*2
-	}, 2*time.Second, 100*time.Millisecond)
+	}, 2*time.Second, 100*time.Millisecond, "recoverable should be 20 but is %d", recoverable.Load())
 	time.Sleep(2 * time.Second)
 	// Ensure we dont get any more.
 	require.True(t, recoverable.Load() == 10*2)

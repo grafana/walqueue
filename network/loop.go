@@ -41,11 +41,12 @@ type loop struct {
 	statsFunc      func(s types.NetworkStats)
 	stopCalled     atomic.Bool
 	externalLabels map[string]string
-	series         *types.Metrics
 	self           actor.Actor
 	ticker         *time.Ticker
 	buf            *proto.Buffer
 	sendBuffer     []byte
+	series         *seriesSlice
+	metaSlice      *metaSlice
 }
 
 func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop, error) {
@@ -90,7 +91,8 @@ func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats fun
 		ticker:         time.NewTicker(1 * time.Second),
 		buf:            proto.NewBuffer(nil),
 		sendBuffer:     make([]byte, 0),
-		series:         &types.Metrics{M: make([]*types.Metric, 0)},
+		series:         &seriesSlice{m: make([]prompb.TimeSeries, 0)},
+		metaSlice:      &metaSlice{m: make([]prompb.MetricMetadata, 0)},
 	}, nil
 }
 
@@ -112,37 +114,61 @@ func (l *loop) actors() []actor.Actor {
 }
 
 func (l *loop) DoWork(ctx actor.Context) actor.WorkerStatus {
+	send := func(series *types.Metric) {
+		defer types.PutMetricIntoPool(series)
+		if l.isMeta {
+			l.metaSlice.Add(toMetadata(series))
+			if l.metaSlice.Len() >= l.cfg.BatchCount {
+				l.trySend(nil, l.metaSlice.Slice(), ctx)
+				l.metaSlice.Reset()
+			}
+		} else {
+			l.series.Add(series, l.externalLabels)
+			if l.series.Len() >= l.cfg.BatchCount {
+				l.trySend(l.series.Slice(), nil, ctx)
+				l.series.Reset()
+			}
+		}
+	}
 	// Main select loop
 	select {
 	case <-ctx.Done():
 		return actor.WorkerEnd
 	// Ticker is to ensure the flush timer is called.
 	case <-l.ticker.C:
-		if len(l.series.M) == 0 {
+		if l.series.Len() == 0 && !l.isMeta {
+			return actor.WorkerContinue
+		}
+		if l.metaSlice.Len() == 0 && l.isMeta {
 			return actor.WorkerContinue
 		}
 		if time.Since(l.lastSend) > l.cfg.FlushInterval {
-			l.trySend(ctx)
+			if l.isMeta {
+				l.trySend(nil, l.metaSlice.Slice(), ctx)
+				l.metaSlice.Reset()
+			} else {
+				l.trySend(l.series.Slice(), nil, ctx)
+				l.series.Reset()
+			}
+
 		}
 		return actor.WorkerContinue
 	case series, ok := <-l.seriesMbx.ReceiveC():
 		if !ok {
 			return actor.WorkerEnd
 		}
-		l.series.M = append(l.series.M, series)
-		if len(l.series.M) >= l.cfg.BatchCount {
-			l.trySend(ctx)
-		}
+		send(series)
 		return actor.WorkerContinue
 	}
 }
 
 // trySend is the core functionality for sending data to a endpoint. It will attempt retries as defined in MaxRetryAttempts.
-func (l *loop) trySend(ctx context.Context) {
+func (l *loop) trySend(series []prompb.TimeSeries, meta []prompb.MetricMetadata, ctx context.Context) {
 	attempts := 0
+	defer l.sendingCleanup()
 	for {
 		start := time.Now()
-		result := l.send(ctx, attempts)
+		result := l.send(series, meta, ctx, attempts)
 		duration := time.Since(start)
 		l.statsFunc(types.NetworkStats{
 			SendDuration: duration,
@@ -151,17 +177,14 @@ func (l *loop) trySend(ctx context.Context) {
 			level.Error(l.log).Log("msg", "error in sending telemetry", "err", result.err.Error())
 		}
 		if result.successful {
-			l.sendingCleanup()
 			return
 		}
 		if !result.recoverableError {
-			l.sendingCleanup()
 			return
 		}
 		attempts++
 		if attempts > int(l.cfg.MaxRetryAttempts) && l.cfg.MaxRetryAttempts > 0 {
 			level.Debug(l.log).Log("msg", "max retry attempts reached", "attempts", attempts)
-			l.sendingCleanup()
 			return
 		}
 		// This helps us short circuit the loop if we are stopping.
@@ -183,17 +206,15 @@ type sendResult struct {
 }
 
 func (l *loop) sendingCleanup() {
-	types.PutMetricsIntoPool(l.series)
 	l.sendBuffer = l.sendBuffer[:0]
-	l.series = &types.Metrics{M: make([]*types.Metric, 0, l.cfg.BatchCount)}
 	l.lastSend = time.Now()
 }
 
 // send is the main work loop of the loop.
-func (l *loop) send(ctx context.Context, retryCount int) sendResult {
+func (l *loop) send(series []prompb.TimeSeries, meta []prompb.MetricMetadata, ctx context.Context, retryCount int) sendResult {
 	result := sendResult{}
 	defer func() {
-		recordStats(l.series.M, l.isMeta, l.statsFunc, result, len(l.sendBuffer))
+		recordStats(series, meta, l.isMeta, l.statsFunc, result, len(l.sendBuffer))
 	}()
 	// Check to see if this is a retry and we can reuse the buffer.
 	// I wonder if we should do this, its possible we are sending things that have exceeded the TTL.
@@ -201,9 +222,9 @@ func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 		var data []byte
 		var wrErr error
 		if l.isMeta {
-			data, wrErr = createWriteRequestMetadata(l.log, l.series.M, l.buf)
+			data, wrErr = createWriteRequestMetadata(meta, l.buf)
 		} else {
-			data, wrErr = createWriteRequest(l.series.M, l.externalLabels, l.buf)
+			data, wrErr = createWriteRequest(series, l.buf)
 		}
 		if wrErr != nil {
 			result.err = wrErr
@@ -268,117 +289,80 @@ func (l *loop) send(ctx context.Context, retryCount int) sendResult {
 	return result
 }
 
-func createWriteRequest(series []*types.Metric, externalLabels map[string]string, data *proto.Buffer) ([]byte, error) {
-	wr := tsPool.Get().(*prompb.WriteRequest)
-	defer func() {
-		for _, ts := range wr.Timeseries {
-			ts.Histograms = ts.Histograms[:0]
-			ts.Labels = ts.Labels[:0]
-			ts.Samples = ts.Samples[:0]
-			ts.Exemplars = ts.Exemplars[:0]
-		}
-		for _, md := range wr.Metadata {
-			md.Unit = ""
-			md.MetricFamilyName = ""
-			md.Help = ""
-		}
-		wr.Timeseries = wr.Timeseries[:0]
-		tsPool.Put(wr)
-	}()
-	if cap(wr.Timeseries) < len(series) {
-		wr.Timeseries = make([]prompb.TimeSeries, len(series))
+func toSeries(m *types.Metric, ts prompb.TimeSeries, externalLabels map[string]string) prompb.TimeSeries {
+	if cap(ts.Labels) < len(m.Labels) {
+		ts.Labels = make([]prompb.Label, 0, len(m.Labels))
+	}
+	ts.Labels = ts.Labels[:len(m.Labels)]
+	for k, v := range m.Labels {
+		ts.Labels[k].Name = v.Name
+		ts.Labels[k].Value = v.Value
+	}
+
+	// By default each sample only has a histogram, float histogram or sample.
+	if cap(ts.Histograms) == 0 {
+		ts.Histograms = make([]prompb.Histogram, 1)
 	} else {
-		wr.Timeseries = wr.Timeseries[:cap(wr.Timeseries)]
+		ts.Histograms = ts.Histograms[:0]
+	}
+	if m.Histogram != nil {
+		ts.Histograms = ts.Histograms[:1]
+		ts.Histograms[0] = FromIntHistogram(m.TS, m.Histogram)
+	}
+	if m.FloatHistogram != nil {
+		ts.Histograms = ts.Histograms[:1]
+		ts.Histograms[0] = FromFloatHistogram(m.TS, m.FloatHistogram)
+
 	}
 
-	for i, tsBuf := range series {
-		ts := wr.Timeseries[i]
-		if cap(ts.Labels) < len(tsBuf.Labels) {
-			ts.Labels = make([]prompb.Label, 0, len(tsBuf.Labels))
-		}
-		ts.Labels = ts.Labels[:len(tsBuf.Labels)]
-		for k, v := range tsBuf.Labels {
-			ts.Labels[k].Name = v.Name
-			ts.Labels[k].Value = v.Value
-		}
-
-		// By default each sample only has a histogram, float histogram or sample.
-		if cap(ts.Histograms) == 0 {
-			ts.Histograms = make([]prompb.Histogram, 1)
-		} else {
-			ts.Histograms = ts.Histograms[:0]
-		}
-		if tsBuf.Histogram != nil {
-			ts.Histograms = ts.Histograms[:1]
-			ts.Histograms[0] = FromIntHistogram(tsBuf.TS, tsBuf.Histogram)
-		}
-		if tsBuf.FloatHistogram != nil {
-			ts.Histograms = ts.Histograms[:1]
-			ts.Histograms[0] = FromFloatHistogram(tsBuf.TS, tsBuf.FloatHistogram)
-
-		}
-
-		if tsBuf.Histogram == nil && tsBuf.FloatHistogram == nil {
-			ts.Histograms = ts.Histograms[:0]
-		}
-
-		// Encode the external labels inside if needed.
-		for k, v := range externalLabels {
-			found := false
-			for j, lbl := range ts.Labels {
-				if lbl.Name == k {
-					ts.Labels[j].Value = v
-					found = true
-					break
-				}
-			}
-			if !found {
-				ts.Labels = append(ts.Labels, prompb.Label{
-					Name:  k,
-					Value: v,
-				})
-			}
-		}
-		// By default each TimeSeries only has one sample.
-		if len(ts.Samples) == 0 {
-			ts.Samples = make([]prompb.Sample, 1)
-		}
-		ts.Samples[0].Value = tsBuf.Value
-		ts.Samples[0].Timestamp = tsBuf.TS
-		wr.Timeseries[i] = ts
+	if m.Histogram == nil && m.FloatHistogram == nil {
+		ts.Histograms = ts.Histograms[:0]
 	}
+
+	// Encode the external labels inside if needed.
+	for k, v := range externalLabels {
+		found := false
+		for j, lbl := range ts.Labels {
+			if lbl.Name == k {
+				ts.Labels[j].Value = v
+				found = true
+				break
+			}
+		}
+		if !found {
+			ts.Labels = append(ts.Labels, prompb.Label{
+				Name:  k,
+				Value: v,
+			})
+		}
+	}
+	// By default each TimeSeries only has one sample.
+	if len(ts.Samples) == 0 {
+		ts.Samples = make([]prompb.Sample, 1)
+	}
+	ts.Samples[0].Value = m.Value
+	ts.Samples[0].Timestamp = m.TS
+	return ts
+}
+
+func createWriteRequest(series []prompb.TimeSeries, data *proto.Buffer) ([]byte, error) {
+	wr := &prompb.WriteRequest{
+		Timeseries: series,
+	}
+
 	// Reset the buffer for reuse.
 	data.Reset()
 	err := data.Marshal(wr)
 	return data.Bytes(), err
 }
 
-func createWriteRequestMetadata(l log.Logger, series []*types.Metric, data *proto.Buffer) ([]byte, error) {
-	wr := &prompb.WriteRequest{}
-
-	// Metadata is rarely sent so having this being less than optimal is fine.
-	wr.Metadata = make([]prompb.MetricMetadata, 0)
-	for _, ts := range series {
-		mt, valid := toMetadata(ts)
-		if !valid {
-			level.Error(l).Log("msg", "invalid metadata was found")
-			continue
-		}
-		wr.Metadata = append(wr.Metadata, mt)
+func createWriteRequestMetadata(meta []prompb.MetricMetadata, data *proto.Buffer) ([]byte, error) {
+	wr := &prompb.WriteRequest{
+		Metadata: meta,
 	}
 	data.Reset()
 	err := data.Marshal(wr)
 	return data.Bytes(), err
-}
-
-func getMetadataCount(tss []*types.Metric) int {
-	var cnt int
-	for _, ts := range tss {
-		if isMetadata(ts) {
-			cnt++
-		}
-	}
-	return cnt
 }
 
 func isMetadata(ts *types.Metric) bool {
@@ -387,16 +371,14 @@ func isMetadata(ts *types.Metric) bool {
 		ts.Labels.Has(v2.MetaHelp)
 }
 
-func toMetadata(ts *types.Metric) (prompb.MetricMetadata, bool) {
-	if !isMetadata(ts) {
-		return prompb.MetricMetadata{}, false
-	}
+func toMetadata(ts *types.Metric) prompb.MetricMetadata {
+
 	return prompb.MetricMetadata{
 		Type:             prompb.MetricMetadata_MetricType(prompb.MetricMetadata_MetricType_value[strings.ToUpper(ts.Labels.Get(v2.MetaType))]),
 		Help:             ts.Labels.Get(v2.MetaHelp),
 		Unit:             ts.Labels.Get(v2.MetaUnit),
 		MetricFamilyName: ts.Labels.Get("__name__"),
-	}, true
+	}
 }
 
 func retryAfterDuration(defaultDuration time.Duration, t string) time.Duration {

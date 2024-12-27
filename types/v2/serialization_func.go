@@ -1,5 +1,8 @@
 package v2
 
+import "github.com/tinylib/msgp/msgp"
+
+// TODO @mattdurham these func files are messy.
 import (
 	"github.com/prometheus/prometheus/model/histogram"
 	"unique"
@@ -8,7 +11,6 @@ import (
 	"github.com/dolthub/swiss"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/tinylib/msgp/msgp"
 )
 
 func (v *ByteString) UnmarshalMsg(bts []byte) (o []byte, err error) {
@@ -103,15 +105,9 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*types.Metrics, *typ
 	if err != nil {
 		return nil, nil, err
 	}
-	metrics := types.GetMetricsFromPool()
-	if cap(metrics.M) < len(sg.Series) {
-		metrics.M = make([]*types.Metric, len(sg.Series))
-		for i := range metrics.M {
-			metrics.M[i] = &types.Metric{}
-		}
-	} else {
-		metrics.M = metrics.M[:len(sg.Series)]
-	}
+	metrics := &types.Metrics{}
+	metrics.Resize(len(sg.Series))
+
 	// Need to fill in the labels.
 	for seriesIndex, series := range sg.Series {
 		metric := metrics.M[seriesIndex]
@@ -141,15 +137,8 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*types.Metrics, *typ
 		series.LabelsValues = series.LabelsValues[:0]
 	}
 
-	metadata := types.GetMetricsFromPool()
-	if cap(metadata.M) < len(sg.Metadata) {
-		metadata.M = make([]*types.Metric, len(sg.Metadata))
-		for i := range metadata.M {
-			metadata.M[i] = &types.Metric{}
-		}
-	} else {
-		metadata.M = metadata.M[:len(sg.Metadata)]
-	}
+	metadata := &types.Metrics{}
+	metadata.Resize(len(sg.Metadata))
 	for seriesIndex, series := range sg.Metadata {
 		meta := metadata.M[seriesIndex]
 

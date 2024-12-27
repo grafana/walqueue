@@ -1,51 +1,11 @@
 package v2
 
-import "github.com/tinylib/msgp/msgp"
-
-// TODO @mattdurham these func files are messy.
 import (
-	"github.com/prometheus/prometheus/model/histogram"
-	"unique"
-	"unsafe"
-
 	"github.com/dolthub/swiss"
 	"github.com/grafana/walqueue/types"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 )
-
-func (v *ByteString) UnmarshalMsg(bts []byte) (o []byte, err error) {
-	*v, o, err = msgp.ReadStringZC(bts)
-	return o, err
-}
-
-func (v *ByteString) MarshalMsg(bts []byte) (o []byte, err error) {
-	buf := msgp.AppendString(bts, v.String())
-	return buf, nil
-}
-
-func (v *ByteString) Msgsize() int {
-	return msgp.StringPrefixSize + len(*v)
-}
-
-func (v *ByteString) DecodeMsg(dc *msgp.Reader) (err error) {
-	s, err := dc.ReadStringAsBytes(nil)
-	if err != nil {
-		return err
-	}
-	*v = s
-	return nil
-}
-
-func (v *ByteString) EncodeMsg(en *msgp.Writer) (err error) {
-	return en.WriteString(v.String())
-}
-
-func (v ByteString) String() string {
-	if len([]byte(v)) == 0 {
-		return ""
-	}
-	return unsafe.String(&v[0], len([]byte(v)))
-}
 
 // fillTimeSeries is what does the conversion from labels.Labels to LabelNames and
 // LabelValues while filling in the string map, that is later converted to []string.
@@ -92,13 +52,6 @@ func fillTimeSeries(ts *TimeSeriesBinary, m *types.Metric, strMapToInt *swiss.Ma
 	}
 	return ts
 }
-
-type LabelHandle struct {
-	Name  unique.Handle[string]
-	Value unique.Handle[string]
-}
-
-type LabelHandles []LabelHandle
 
 // DeserializeToSeriesGroup transforms a buffer to a SeriesGroup and converts the stringmap + indexes into actual Labels.
 func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*types.Metrics, *types.Metrics, error) {

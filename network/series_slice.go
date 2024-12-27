@@ -11,10 +11,11 @@ type seriesSlice struct {
 }
 
 func (ss *seriesSlice) Add(t *types.Metric, external map[string]string) {
-
 	if len(ss.m) <= ss.index {
 		ss.m = append(ss.m, prompb.TimeSeries{})
 	}
+	// Why not pass the prompb.TimeSeries directly, this is because we want to reuse the prompb.timeseries in the slice
+	// to reduce allocations.
 	ss.m[ss.index] = toSeries(t, ss.m[ss.index], external)
 	ss.index++
 }
@@ -24,6 +25,7 @@ func (ss *seriesSlice) Len() int {
 }
 
 func (ss *seriesSlice) Reset() {
+	// Its possible we want to roll reset into slice.
 	ss.index = 0
 }
 

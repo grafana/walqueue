@@ -66,8 +66,7 @@ func PutMetricIntoPool(m *Metric) {
 	m.Hash = 0
 	m.TS = 0
 	m.Value = 0
-	// We explicitly need this to be nil since labels are not safe to reuse.
-	m.Labels = nil
+	m.Labels = m.Labels[:0]
 	m.Histogram = nil
 	m.FloatHistogram = nil
 

@@ -66,7 +66,7 @@ func PutMetricIntoPool(m *Metric) {
 	m.Hash = 0
 	m.TS = 0
 	m.Value = 0
-	m.Labels = nil
+	m.Labels = m.Labels[:0]
 	m.Histogram = nil
 	m.FloatHistogram = nil
 

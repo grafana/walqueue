@@ -81,7 +81,11 @@ func TestMetadata(t *testing.T) {
 func BenchmarkDeserialize(b *testing.B) {
 	// NOTE there can be a fair amount of variance in these, +-200 is easily observable.
 	// cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-	// 2024-12-26 BenchmarkDeserialize-20    	     616	   2322859 ns/op
+	// 2024-12-17 BenchmarkDeserialize-24    	     909	   1234031 ns/op after some optimization on pools
+	// 2024-12-17 BenchmarkDeserialize-24    	    1308	    858204 ns/op further optimizations on allocs
+	// 2023-12-17 BenchmarkDeserialize-24    	    1508	    811829 ns/op after switching to swiss map
+	// 2023-12-26 BenchmarkDeserialize-24    	    1382	    838942 ns/op after refactoring
+	// 2023-12-26 BenchmarkDeserialize-24    	    1538	    769432 ns/op	  548035 B/op	      39 allocs/op
 	metrics := &types.Metrics{M: make([]*types.Metric, 0)}
 	for k := 0; k < 1_000; k++ {
 		lblsMap := make(map[string]string)
@@ -95,6 +99,7 @@ func BenchmarkDeserialize(b *testing.B) {
 		metrics.M = append(metrics.M, m)
 	}
 	var err error
+
 	for i := 0; i < b.N; i++ {
 		sg := GetSerializer()
 		var newMetrics *types.Metrics
@@ -109,12 +114,8 @@ func BenchmarkDeserialize(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		for _, m := range newMetrics.M {
-			types.PutMetricIntoPool(m)
-		}
-		for _, m := range newMeta.M {
-			types.PutMetricIntoPool(m)
-		}
+		types.PutMetricSliceIntoPool(newMetrics.M)
+		types.PutMetricSliceIntoPool(newMeta.M)
 	}
 }
 

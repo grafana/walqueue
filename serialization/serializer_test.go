@@ -38,7 +38,7 @@ func TestRoundTripSerialization(t *testing.T) {
 	s.Start()
 	defer s.Stop()
 	for i := 0; i < 10; i++ {
-		tss := types.GetMetricFromPool()
+		tss := types.GetMetricFromPool(true)
 		tss.Labels = make(labels.Labels, 10)
 		for j := 0; j < 10; j++ {
 			tss.Labels[j] = labels.Label{
@@ -101,7 +101,7 @@ func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) e
 	metrics, _, err := v2.DeserializeToSeriesGroup(sg, f.buf)
 	require.NoError(f.t, err)
 	require.Len(f.t, sg.Series, 10)
-	for _, series := range metrics {
+	for _, series := range metrics.M {
 		require.Len(f.t, series.Labels, 10)
 		for j := 0; j < 10; j++ {
 			series.Labels[j].Name = fmt.Sprintf("name_%d_%d", int(series.Value), j)

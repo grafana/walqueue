@@ -21,20 +21,21 @@ type Metrics struct {
 	M []*Metric
 }
 
-func (m *Metrics) Resize(length int) {
+func (m *Metrics) Resize(length int, canLabelsBeReused bool) {
 	m.M = make([]*Metric, length)
 	for i := range m.M {
-		m.M[i] = GetMetricFromPool()
+		m.M[i] = GetMetricFromPool(canLabelsBeReused)
 	}
 }
 
 type Metric struct {
-	Labels         labels.Labels
-	TS             int64
-	Value          float64
-	Hash           uint64
-	Histogram      *histogram.Histogram
-	FloatHistogram *histogram.FloatHistogram
+	Labels            labels.Labels
+	TS                int64
+	Value             float64
+	Hash              uint64
+	Histogram         *histogram.Histogram
+	FloatHistogram    *histogram.FloatHistogram
+	canLabelsBeReused bool
 }
 
 // IsMetadata is used because it's easier to store metadata as a set of labels.
@@ -43,15 +44,28 @@ func (m Metric) IsMetadata() bool {
 }
 
 var OutstandingIndividualMetrics = atomic.Int32{}
-var metricSinglePool = sync.Pool{
+var metricReusableLabelPool = sync.Pool{
 	New: func() any {
 		return &Metric{}
 	},
 }
 
-func GetMetricFromPool() *Metric {
+var metricNonReusablePool = sync.Pool{
+	New: func() any {
+		return &Metric{}
+	},
+}
+
+func GetMetricFromPool(canLabelsBeReused bool) *Metric {
 	OutstandingIndividualMetrics.Inc()
-	return metricSinglePool.Get().(*Metric)
+	var m *Metric
+	if canLabelsBeReused {
+		m = metricReusableLabelPool.Get().(*Metric)
+	} else {
+		m = metricNonReusablePool.Get().(*Metric)
+	}
+	m.canLabelsBeReused = canLabelsBeReused
+	return m
 }
 
 func PutMetricSliceIntoPool(m []*Metric) {
@@ -66,9 +80,17 @@ func PutMetricIntoPool(m *Metric) {
 	m.Hash = 0
 	m.TS = 0
 	m.Value = 0
-	m.Labels = m.Labels[:0]
+	if m.canLabelsBeReused {
+		m.Labels = m.Labels[:0]
+	} else {
+		m.Labels = nil
+	}
 	m.Histogram = nil
 	m.FloatHistogram = nil
 
-	metricSinglePool.Put(m)
+	if m.canLabelsBeReused {
+		metricReusableLabelPool.Put(m)
+	} else {
+		metricNonReusablePool.Put(m)
+	}
 }

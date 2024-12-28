@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/grafana/walqueue/types/v2"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -14,6 +15,34 @@ import (
 	"github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/storage"
 )
+
+var metricSinglePool = sync.Pool{
+	New: func() any {
+		return &types.Metric{}
+	},
+}
+
+func GetMetricFromPool() *types.Metric {
+	return metricSinglePool.Get().(*types.Metric)
+}
+
+func PutMetricSliceIntoPool(m []*types.Metric) {
+	for _, mt := range m {
+		PutMetricIntoPool(mt)
+	}
+}
+
+func PutMetricIntoPool(m *types.Metric) {
+	m.Hash = 0
+	m.TS = 0
+	m.Value = 0
+	// We dont reuse these labels since they are owned by the scraper.
+	m.Labels = nil
+	m.Histogram = nil
+	m.FloatHistogram = nil
+
+	metricSinglePool.Put(m)
+}
 
 type appender struct {
 	ctx          context.Context
@@ -42,8 +71,8 @@ func NewAppender(ctx context.Context, ttl time.Duration, s types.Serializer, log
 
 // Append metric
 func (a *appender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
-	ts := types.GetMetricFromPool()
-	ts.Labels = l.Copy()
+	ts := types.GetMetricFromPool(false)
+	ts.Labels = l
 	ts.TS = t
 	ts.Value = v
 	ts.Hash = l.Hash()
@@ -67,7 +96,7 @@ func (a *appender) AppendExemplar(ref storage.SeriesRef, _ labels.Labels, e exem
 	if e.HasTs && e.Ts < endTime {
 		return ref, nil
 	}
-	ts := types.GetMetricFromPool()
+	ts := types.GetMetricFromPool(false)
 	ts.Hash = e.Labels.Hash()
 	ts.TS = e.Ts
 	ts.Labels = e.Labels.Copy()
@@ -82,7 +111,7 @@ func (a *appender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int
 	if t < endTime {
 		return ref, nil
 	}
-	ts := types.GetMetricFromPool()
+	ts := types.GetMetricFromPool(false)
 	ts.Labels = l.Copy()
 	ts.TS = t
 	if h != nil {

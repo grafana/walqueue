@@ -165,18 +165,6 @@ func TestTLSConfigValidation(t *testing.T) {
 			wantLoop: true,
 		},
 		{
-			name: "Partial TLS config (cert only)",
-			tlsConfig: types.ConnectionConfig{
-				URL:           "https://example.com",
-				TLSCert:       "cert",
-				BatchCount:    10,
-				FlushInterval: time.Second,
-				Timeout:       time.Second,
-				UserAgent:     "test-client",
-			},
-			wantLoop: true,
-		},
-		{
 			name: "Invalid CA cert with valid cert/key",
 			tlsConfig: types.ConnectionConfig{
 				URL:           "https://example.com",

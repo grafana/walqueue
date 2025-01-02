@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +16,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
+	"github.com/prometheus/common/config"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/vladopajic/go-actor/actor"
 	"go.uber.org/atomic"
@@ -46,40 +45,21 @@ type loop struct {
 }
 
 func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop, error) {
-	transport := &http.Transport{}
-
-	// Configure TLS if certificate and key are provided
-	if cc.TLSCert != "" && cc.TLSKey != "" {
-		cert, err := tls.X509KeyPair([]byte(cc.TLSCert), []byte(cc.TLSKey))
-		if err != nil {
-			return nil, fmt.Errorf("failed to load TLS certificate and key: %w", err)
-		}
-
-		tlsConfig := &tls.Config{
-			Certificates:       []tls.Certificate{cert},
-			InsecureSkipVerify: cc.InsecureSkipVerify,
-		}
-
-		// Add CA cert to the cert pool if provided
-		if cc.TLSCACert != "" {
-			caCertPool := x509.NewCertPool()
-			if !caCertPool.AppendCertsFromPEM([]byte(cc.TLSCACert)) {
-				return nil, fmt.Errorf("failed to append CA certificate")
-			}
-			tlsConfig.RootCAs = caCertPool
-		}
-
-		transport.TLSClientConfig = tlsConfig
+	var httpOpts []config.HTTPClientOption
+	if cc.UseRoundRobin {
+		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}
 	}
 
-	client := &http.Client{
-		Transport: transport,
-	}
+	cfg := cc.ToPrometheusConfig()
+	httpClient, err := config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
 
+	if err != nil {
+		return nil, err
+	}
 	return &loop{
 		isMeta:         isMetaData,
 		seriesMbx:      actor.NewMailbox[*types.TimeSeriesBinary](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
-		client:         client,
+		client:         httpClient,
 		cfg:            cc,
 		log:            log.With(l, "name", "loop", "url", cc.URL),
 		statsFunc:      stats,

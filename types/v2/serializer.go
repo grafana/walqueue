@@ -1,102 +1,84 @@
 package v2
 
 import (
+	"bytes"
 	"sync"
-	"unsafe"
 
-	"github.com/dolthub/swiss"
 	"github.com/grafana/walqueue/types"
+	"github.com/mus-format/mus-go/raw"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/prompb"
 )
 
-var bufPool = sync.Pool{New: func() interface{} {
-	return make([]byte, 0)
-}}
-
-var sgPool = sync.Pool{New: func() interface{} {
-	return &SeriesGroup{}
-}}
-
-func getSeriesGroup() *SeriesGroup {
-	return sgPool.Get().(*SeriesGroup)
+type Serialization struct {
+	buf *bytes.Buffer
 }
 
-func putSeriesGroup(sg *SeriesGroup) {
-	sg.Series = sg.Series[:0]
-	sg.Metadata = sg.Metadata[:0]
-	sg.Strings = sg.Strings[:0]
+const PrometheusMetric = uint8(1)
 
-	sgPool.Put(sg)
+func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels) error {
+	series := prompb.TimeSeries{}
+	series.Labels = make([]prompb.Label, len(lbls))
+	series.Samples = make([]prompb.Sample, 1)
+	series.Samples[0].Value = value
+	series.Samples[0].Timestamp = ts
+	for i, l := range lbls {
+		series.Labels[i].Name = l.Name
+		series.Labels[i].Value = l.Value
+	}
+	size := 4 + 8 + 8 + 1 + series.Size() // Total Size + Timestamp + Hash + Type + Byte Represenation
+	bbPtr := smallBB.Get().(*[]byte)
+	buf := *bbPtr
+	defer func() {
+		buf = buf[:0]
+		smallBB.Put(bbPtr)
+	}()
+	if cap(buf) < size {
+		buf = make([]byte, size)
+	} else {
+		buf = buf[:size]
+	}
+
+	index := 0
+	raw.MarshalUint32(uint32(size), buf[index:4])
+	index += 4
+	// Generate hash, ts, type, then bytes
+	hash := lbls.Hash()
+	raw.MarshalInt64(ts, buf[index:8])
+	index += 8
+	raw.MarshalUint64(hash, buf[index:8])
+	index += 8
+	raw.MarshalUint8(PrometheusMetric, buf[index:1])
+	index += 1
+	series.MarshalTo(buf[index:])
+	_, err := s.buf.Write(buf)
+	return err
 }
 
-type Serialization struct{}
+func (Serialization) Deserialize(_ []byte) (items []types.Datum, err error) {
+	panic("not implemented") // TODO: Implement
+}
+func (Serialization) Count() (_ int) {
+	panic("not implemented") // TODO: Implement
+}
+func (Serialization) Serialize(handle func([]byte)) {
+	panic("not implemented") // TODO: Implement
+}
 
 func GetSerializer() types.Serialization {
-	return &Serialization{}
+	bb := bufPool.Get().(*bytes.Buffer)
+	return &Serialization{buf: bb}
 }
 
-func (s *Serialization) Serialize(metrics *types.Metrics, metadata *types.Metrics, handler func([]byte)) error {
-	sg := getSeriesGroup()
-	defer putSeriesGroup(sg)
-
-	if metrics == nil {
-		metrics = &types.Metrics{M: make([]*types.Metric, 0)}
-	}
-	if metadata == nil {
-		metadata = &types.Metrics{M: make([]*types.Metric, 0)}
-	}
-
-	if cap(sg.Series) < len(metrics.M) {
-		sg.Series = make([]*TimeSeriesBinary, len(metrics.M))
-		for i := range sg.Series {
-			sg.Series[i] = &TimeSeriesBinary{}
-		}
-	} else {
-		sg.Series = sg.Series[:len(metrics.M)]
-	}
-
-	if cap(sg.Metadata) < len(metadata.M) {
-		sg.Metadata = make([]*TimeSeriesBinary, len(metadata.M))
-		for i := 0; i < len(metadata.M); i++ {
-			sg.Metadata[i] = &TimeSeriesBinary{}
-		}
-	} else {
-		sg.Metadata = sg.Metadata[:len(metadata.M)]
-	}
-	// Swissmap was a 25% improvement over normal maps. At some point go will adopt swiss maps and this
-	// might be able to be removed.
-	strMapToIndex := swiss.NewMap[string, uint32](uint32((len(metrics.M) + len(metadata.M)) * 10))
-
-	for index, m := range metrics.M {
-		sg.Series[index] = fillTimeSeries(sg.Series[index], m, strMapToIndex)
-	}
-	for index, m := range metadata.M {
-		sg.Metadata[index] = fillTimeSeries(sg.Metadata[index], m, strMapToIndex)
-	}
-	if cap(sg.Strings) < strMapToIndex.Count() {
-		sg.Strings = make([]ByteString, strMapToIndex.Count())
-	} else {
-		sg.Strings = sg.Strings[:strMapToIndex.Count()]
-	}
-	strMapToIndex.Iter(func(k string, v uint32) (stop bool) {
-		d := unsafe.StringData(k)
-		sg.Strings[v] = unsafe.Slice(d, len(k))
-		return false
-	})
-
-	buf := bufPool.Get().([]byte)
-	defer bufPool.Put(buf)
-
-	buf, err := sg.MarshalMsg(buf)
-	if err != nil {
-		return err
-	}
-	// Pass the buffer in with the knowledge that it should not be reused.
-	handler(buf)
-	return nil
+var bufPool = sync.Pool{
+	New: func() any {
+		return &bytes.Buffer{}
+	},
 }
 
-func (s *Serialization) Deserialize(bytes []byte) (*types.Metrics, *types.Metrics, error) {
-	sg := getSeriesGroup()
-	defer putSeriesGroup(sg)
-	return DeserializeToSeriesGroup(sg, bytes)
+var smallBB = sync.Pool{
+	New: func() any {
+		bb := make([]byte, 0)
+		return &bb
+	},
 }

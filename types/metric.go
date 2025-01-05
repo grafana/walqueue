@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 )
 
@@ -29,10 +30,11 @@ type Datum interface {
 
 // Serialization provides the ability to read and write for a given schema defined by the FileFormat.
 type Serialization interface {
-	AddPrometheusMetric(ts int64, value float64, lbls labels.Labels) error
+	AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram) error
+
 	Deserialize([]byte) (items []Datum, err error)
 	Count() int
-	Serialize(handle func([]byte))
+	Serialize(handle func(map[string]string, []byte))
 }
 
 func BuildPrometheusTimeSeries(d Datum) ([]byte, error) {

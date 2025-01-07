@@ -64,7 +64,7 @@ type ConnectionConfig struct {
 }
 
 // ToPrometheusConfig converts a ConnectionConfig to a config.HTTPClientConfig
-func (c ConnectionConfig) ToPrometheusConfig() config.HTTPClientConfig {
+func (cc ConnectionConfig) ToPrometheusConfig() config.HTTPClientConfig {
 	var cfg config.HTTPClientConfig
 	if c.BasicAuth != nil {
 		cfg.BasicAuth = &config.BasicAuth{

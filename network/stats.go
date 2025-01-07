@@ -1,7 +1,6 @@
 package network
 
 import (
-	"github.com/prometheus/prometheus/prompb"
 	"net/http"
 	"time"
 
@@ -10,10 +9,11 @@ import (
 
 // recordStats determines what values to send to the stats function. This allows for any
 // number of metrics/signals libraries to be used. Prometheus, OTel, and any other.
-func recordStats(series []prompb.TimeSeries, meta []prompb.MetricMetadata, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
+func recordStats[T types.Datum](series []T, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
 	seriesCount := getSeriesCount(series)
 	histogramCount := getHistogramCount(series)
-	metadataCount := len(meta)
+	metadataCount := getMetaDataCount(series)
+
 	switch {
 	case r.networkError:
 		stats(types.NetworkStats{
@@ -31,11 +31,14 @@ func recordStats(series []prompb.TimeSeries, meta []prompb.MetricMetadata, isMet
 		// Need to grab the newest series.
 		var newestTS int64
 		for _, ts := range series {
-			if len(ts.Samples) > 0 {
-				if ts.Samples[0].Timestamp > newestTS {
-					newestTS = ts.Samples[0].Timestamp
-				}
+			mm, valid := interface{}(ts).(types.MetricDatum)
+			if !valid {
+				continue
 			}
+			if mm.TimeStampMS() > newestTS {
+				newestTS = mm.TimeStampMS()
+			}
+
 		}
 		var sampleBytesSent int
 		var metaBytesSent int
@@ -102,20 +105,42 @@ func recordStats(series []prompb.TimeSeries, meta []prompb.MetricMetadata, isMet
 
 }
 
-func getSeriesCount(tss []prompb.TimeSeries) int {
+func getSeriesCount[T types.Datum](tss []T) int {
 	cnt := 0
 	for _, ts := range tss {
-		if len(ts.Samples) > 0 {
+		mm, valid := interface{}(ts).(types.MetricDatum)
+		if !valid {
+			continue
+		}
+		if !mm.IsHistogram() {
 			cnt++
 		}
 	}
 	return cnt
 }
 
-func getHistogramCount(tss []prompb.TimeSeries) int {
+func getHistogramCount[T types.Datum](tss []T) int {
 	cnt := 0
 	for _, ts := range tss {
-		cnt = cnt + len(ts.Histograms)
+		mm, valid := interface{}(ts).(types.MetricDatum)
+		if !valid {
+			continue
+		}
+		if mm.IsHistogram() {
+			cnt++
+		}
+	}
+	return cnt
+}
+
+func getMetaDataCount[T types.Datum](tss []T) int {
+	cnt := 0
+	for _, ts := range tss {
+		_, valid := interface{}(ts).(types.MetadataDatum)
+		if !valid {
+			continue
+		}
+		cnt++
 	}
 	return cnt
 }

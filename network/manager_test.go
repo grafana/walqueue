@@ -12,7 +12,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
-	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -246,9 +245,9 @@ func TestNonRecoverable(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		send(t, wr, ctx)
 	}
-	require.Eventually(t, func() bool {
+	require.Eventuallyf(t, func() bool {
 		return nonRecoverable.Load() == 10
-	}, 2*time.Second, 100*time.Millisecond)
+	}, 2*time.Second, 100*time.Millisecond, "non recoverable should be 10 but is %d", nonRecoverable.Load())
 	time.Sleep(2 * time.Second)
 	// Ensure we dont get any more.
 	require.True(t, nonRecoverable.Load() == 10)
@@ -277,18 +276,25 @@ func handler(t *testing.T, code int, callback func(wr *prompb.WriteRequest)) htt
 	})
 }
 
-func createSeries(_ *testing.T) *types.Metric {
-	ts := &types.Metric{
-		TS:    time.Now().Unix(),
-		Value: 1,
-		Labels: []labels.Label{
-			{
-				Name:  "__name__",
-				Value: randSeq(10),
-			},
-		},
+func createSeries(_ *testing.T) types.MetricDatum {
+	ts := &prompb.TimeSeries{}
+	ts.Samples = make([]prompb.Sample, 1)
+	ts.Samples[0] = prompb.Sample{
+		Timestamp: time.Now().Unix(),
+		Value:     1,
 	}
-	return ts
+	ts.Labels = make([]prompb.Label, 1)
+	ts.Labels[0] = prompb.Label{
+		Name:  "__name__",
+		Value: randSeq(10),
+	}
+	bb, _ := ts.Marshal()
+	return &metric{
+		hash:        1,
+		ts:          ts.Samples[0].Timestamp,
+		buf:         bb,
+		isHistogram: false,
+	}
 }
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -299,4 +305,42 @@ func randSeq(n int) string {
 		b[i] = letters[rand.Intn(len(letters))]
 	}
 	return string(b)
+}
+
+var _ types.MetricDatum = (*metric)(nil)
+
+type metric struct {
+	hash        uint64
+	ts          int64
+	buf         []byte
+	isHistogram bool
+}
+
+func (m metric) Hash() uint64 {
+	return m.hash
+}
+
+func (m metric) TimeStampMS() int64 {
+	return m.ts
+}
+
+func (m metric) IsHistogram() bool {
+	return m.isHistogram
+}
+
+// Bytes represents the underlying data and should not be handled aside from
+// Build* functions that understand the Type.
+func (m metric) Bytes() []byte {
+	return m.buf
+}
+
+func (m metric) Type() types.Type {
+	return types.PrometheusMetricV1
+}
+
+func (m metric) FileFormat() types.FileFormat {
+	return types.AlloyFileVersionV2
+}
+
+func (m *metric) Free() {
 }

@@ -2,14 +2,14 @@ package v1
 
 import (
 	"fmt"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/prompb"
 	"math/rand"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/grafana/walqueue/types"
-
-	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,60 +24,31 @@ func TestLabels(t *testing.T) {
 		unique[v] = struct{}{}
 	}
 
-	metrics := make([]*types.Metric, 1)
-	metrics[0] = &types.Metric{}
-
-	metrics[0].Labels = labels.FromMap(lblsMap)
+	lbls := labels.FromMap(lblsMap)
 
 	serializer := GetSerializer()
-	var newMetrics *types.Metrics
 	var err error
-	err = serializer.Serialize(&types.Metrics{M: metrics}, nil, func(buf []byte) {
-		newMetrics, _, err = serializer.Deserialize(buf)
-		require.NoError(t, err)
+	err = serializer.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, nil)
+	require.NoError(t, err)
+	var bb []byte
+	err = serializer.Serialize(func(_ map[string]string, bytes []byte) error {
+		bb = make([]byte, len(bytes))
+		copy(bb, bytes)
+		return nil
 	})
 	require.NoError(t, err)
-	series1 := newMetrics.M[0]
-	series2 := metrics[0]
-	require.Len(t, series2.Labels, len(series1.Labels))
-	// Ensure we were able to convert back and forth properly.
-	for i, lbl := range series2.Labels {
-		require.Equal(t, lbl.Name, series1.Labels[i].Name)
-		require.Equal(t, lbl.Value, series1.Labels[i].Value)
-	}
-}
+	deserial := GetSerializer()
+	items, err := deserial.Deserialize(nil, bb)
+	require.NoError(t, err)
+	pm := prompb.TimeSeries{}
+	err = pm.Unmarshal(items[0].Bytes())
+	require.NoError(t, err)
 
-func BenchmarkDeserialize(b *testing.B) {
-	// 2024-12-26 BenchmarkDeserialize-20    	     226	   5447446 ns/op
-	metrics := make([]*types.Metric, 0)
-	for k := 0; k < 1_000; k++ {
-		lblsMap := make(map[string]string)
-		for j := 0; j < 10; j++ {
-			key := fmt.Sprintf("key_%d", j)
-			v := randString()
-			lblsMap[key] = v
-		}
-		m := &types.Metric{}
-		m.Labels = labels.FromMap(lblsMap)
-		metrics = append(metrics, m)
-	}
-	for i := 0; i < b.N; i++ {
-		sg := GetSerializer()
-		var newMetrics *types.Metrics
-		var err error
-		err = sg.Serialize(&types.Metrics{M: metrics}, nil, func(buf []byte) {
-			newMetrics, _, err = sg.Deserialize(buf)
-			if err != nil {
-				b.Fatal(err)
-			}
-		})
-		if err != nil {
-			b.Fatal(err)
-		}
-		if err != nil {
-			panic(err.Error())
-		}
-		types.PutMetricSliceIntoPool(newMetrics.M)
+	require.Len(t, lbls, len(pm.Labels))
+	// Ensure we were able to convert back and forth properly.
+	for i, lbl := range pm.Labels {
+		require.Equal(t, lbl.Name, lbls[i].Name)
+		require.Equal(t, lbl.Value, lbls[i].Value)
 	}
 }
 
@@ -85,13 +56,15 @@ func TestBackwardsCompatability(t *testing.T) {
 	buf, err := os.ReadFile("v1.bin")
 	require.NoError(t, err)
 	sg := GetSerializer()
-	metrics, meta, err := sg.Deserialize(buf)
+	metrics, err := sg.Deserialize(nil, buf)
 	require.NoError(t, err)
-	require.Len(t, metrics.M, 1_000)
-	require.Len(t, meta.M, 0)
-	for _, m := range metrics.M {
-		require.Len(t, m.Labels, 10)
-		for _, lbl := range m.Labels {
+	require.Len(t, metrics, 1_000)
+	for _, m := range metrics {
+		pm := prompb.TimeSeries{}
+		err = pm.Unmarshal(m.Bytes())
+		require.NoError(t, err)
+		require.Len(t, pm.Labels, 10)
+		for _, lbl := range pm.Labels {
 			require.True(t, strings.HasPrefix(lbl.Name, "key"))
 		}
 	}

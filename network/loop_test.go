@@ -121,7 +121,7 @@ func TestTLSConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := log.NewNopLogger()
-			l, newErr := newLoop(tt.tlsConfig, false, logger, func(s types.NetworkStats) {})
+			l, newErr := newLoop[types.MetricDatum](tt.tlsConfig, false, logger, func(s types.NetworkStats) {})
 
 			if tt.wantErr {
 				require.Error(t, newErr)
@@ -133,12 +133,12 @@ func TestTLSConnection(t *testing.T) {
 			require.NotNil(t, l, "newLoop should not return nil for valid TLS config")
 
 			// Create a test series for sending
-			pending := make([]prompb.TimeSeries, 1)
-			pending[0] = toSeries(createSeries(t), pending[0], nil)
+			pending := make([]types.MetricDatum, 1)
+			pending[0] = createSeries(t)
 
 			// Test connection by sending a request
 			ctx := context.Background()
-			result := l.send(pending, nil, ctx, 0)
+			result := l.send(pending, ctx, 0)
 			if !tt.wantErr {
 				require.True(t, result.successful, "request should be successful")
 				require.NoError(t, result.err, "request should not return error")
@@ -195,7 +195,7 @@ func TestTLSConfigValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l, newErr := newLoop(tt.tlsConfig, false, logger, func(s types.NetworkStats) {})
+			l, newErr := newLoop[types.MetricDatum](tt.tlsConfig, false, logger, func(s types.NetworkStats) {})
 			if tt.wantLoop {
 				require.NoError(t, newErr)
 				require.NotNil(t, l, "newLoop should return a valid loop")

@@ -67,7 +67,11 @@ func TestV2E2E(b *testing.T) {
 
 	metricCount := 100
 	sends := 2
-	metrics := make([]*types.Metric, 0)
+	type mm struct {
+		Labels labels.Labels
+		TS     int64
+	}
+	metrics := make([]mm, 0)
 	for k := 0; k < metricCount; k++ {
 		lblsMap := make(map[string]string)
 		for j := 0; j < 10; j++ {
@@ -75,7 +79,7 @@ func TestV2E2E(b *testing.T) {
 			v := randString()
 			lblsMap[key] = v
 		}
-		m := &types.Metric{}
+		m := mm{}
 		m.Labels = labels.FromMap(lblsMap)
 		m.TS = time.Now().UnixMilli()
 		metrics = append(metrics, m)
@@ -84,7 +88,8 @@ func TestV2E2E(b *testing.T) {
 	for n := 0; n < sends; n++ {
 		app := q.Appender(context.Background())
 		for _, m := range metrics {
-			app.Append(0, m.Labels, m.TS, float64(index))
+			_, err = app.Append(0, m.Labels, m.TS, float64(index))
+			require.NoError(b, err)
 			index++
 		}
 		app.Commit()
@@ -92,7 +97,6 @@ func TestV2E2E(b *testing.T) {
 	require.Eventually(b, func() bool {
 		return totalSeries.Load() == int32(metricCount*sends)
 	}, 50*time.Second, 50*time.Millisecond)
-	require.Truef(b, types.OutstandingIndividualMetrics.Load() == 0, "outstanding indicidual metrics are %d", types.OutstandingIndividualMetrics.Load())
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")

@@ -7,13 +7,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/grafana/walqueue/types/v2"
-	"github.com/prometheus/prometheus/model/histogram"
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -21,19 +17,18 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
-	"github.com/prometheus/prometheus/prompb"
 	"github.com/vladopajic/go-actor/actor"
 	"go.uber.org/atomic"
 )
 
-var _ actor.Worker = (*loop)(nil)
+var _ actor.Worker = (*loop[types.MetricDatum])(nil)
 
 // loop handles the low level sending of data. It's conceptually a queue.
 // loop makes no attempt to save or restore signals in the queue.
 // loop config cannot be updated, it is easier to recreate. This does mean we lose any signals in the queue.
-type loop struct {
+type loop[T types.Datum] struct {
 	isMeta         bool
-	seriesMbx      actor.Mailbox[*types.Metric]
+	seriesMbx      actor.Mailbox[T]
 	client         *http.Client
 	cfg            types.ConnectionConfig
 	log            log.Logger
@@ -45,11 +40,10 @@ type loop struct {
 	ticker         *time.Ticker
 	buf            *proto.Buffer
 	sendBuffer     []byte
-	series         *seriesSlice
-	metaSlice      *metaSlice
+	items          *datumSlice[T]
 }
 
-func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop, error) {
+func newLoop[T types.Datum](cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop[T], error) {
 	transport := &http.Transport{}
 
 	// Configure TLS if certificate and key are provided
@@ -80,9 +74,9 @@ func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats fun
 		Transport: transport,
 	}
 
-	return &loop{
+	return &loop[T]{
 		isMeta:         isMetaData,
-		seriesMbx:      actor.NewMailbox[*types.Metric](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
+		seriesMbx:      actor.NewMailbox[T](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
 		client:         client,
 		cfg:            cc,
 		log:            log.With(l, "name", "loop", "url", cc.URL),
@@ -91,44 +85,34 @@ func newLoop(cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats fun
 		ticker:         time.NewTicker(1 * time.Second),
 		buf:            proto.NewBuffer(nil),
 		sendBuffer:     make([]byte, 0),
-		series:         &seriesSlice{m: make([]prompb.TimeSeries, 0)},
-		metaSlice:      &metaSlice{m: make([]prompb.MetricMetadata, 0)},
+		items:          &datumSlice[T]{m: make([]T, 0)},
 	}, nil
 }
 
-func (l *loop) Start() {
+func (l *loop[T]) Start() {
 	l.self = actor.Combine(l.actors()...).Build()
 	l.self.Start()
 }
 
-func (l *loop) Stop() {
+func (l *loop[T]) Stop() {
 	l.stopCalled.Store(true)
 	l.self.Stop()
 }
 
-func (l *loop) actors() []actor.Actor {
+func (l *loop[T]) actors() []actor.Actor {
 	return []actor.Actor{
 		actor.New(l),
 		l.seriesMbx,
 	}
 }
 
-func (l *loop) DoWork(ctx actor.Context) actor.WorkerStatus {
-	send := func(series *types.Metric) {
-		defer types.PutMetricIntoPool(series)
-		if l.isMeta {
-			l.metaSlice.Add(toMetadata(series))
-			if l.metaSlice.Len() >= l.cfg.BatchCount {
-				l.trySend(nil, l.metaSlice.Slice(), ctx)
-				l.metaSlice.Reset()
-			}
-		} else {
-			l.series.Add(series, l.externalLabels)
-			if l.series.Len() >= l.cfg.BatchCount {
-				l.trySend(l.series.Slice(), nil, ctx)
-				l.series.Reset()
-			}
+func (l *loop[T]) DoWork(ctx actor.Context) actor.WorkerStatus {
+	send := func(series T) {
+		l.items.Add(series)
+		if l.items.Len() >= l.cfg.BatchCount {
+			l.trySend(l.items.SliceAndReset(), ctx)
 		}
+
 	}
 	// Main select loop
 	select {
@@ -136,21 +120,11 @@ func (l *loop) DoWork(ctx actor.Context) actor.WorkerStatus {
 		return actor.WorkerEnd
 	// Ticker is to ensure the flush timer is called.
 	case <-l.ticker.C:
-		if l.series.Len() == 0 && !l.isMeta {
+		if l.items.Len() == 0 && !l.isMeta {
 			return actor.WorkerContinue
 		}
-		if l.metaSlice.Len() == 0 && l.isMeta {
-			return actor.WorkerContinue
-		}
-		if time.Since(l.lastSend) > l.cfg.FlushInterval {
-			if l.isMeta {
-				l.trySend(nil, l.metaSlice.Slice(), ctx)
-				l.metaSlice.Reset()
-			} else {
-				l.trySend(l.series.Slice(), nil, ctx)
-				l.series.Reset()
-			}
-
+		if time.Since(l.lastSend) > l.cfg.FlushInterval && l.items.Len() > 0 {
+			l.trySend(l.items.SliceAndReset(), ctx)
 		}
 		return actor.WorkerContinue
 	case series, ok := <-l.seriesMbx.ReceiveC():
@@ -163,12 +137,19 @@ func (l *loop) DoWork(ctx actor.Context) actor.WorkerStatus {
 }
 
 // trySend is the core functionality for sending data to a endpoint. It will attempt retries as defined in MaxRetryAttempts.
-func (l *loop) trySend(series []prompb.TimeSeries, meta []prompb.MetricMetadata, ctx context.Context) {
+func (l *loop[T]) trySend(series []T, ctx context.Context) {
+
 	attempts := 0
+	// Ensure we return any items back to the pools they belong to.
+	defer func() {
+		for _, s := range series {
+			s.Free()
+		}
+	}()
 	defer l.sendingCleanup()
 	for {
 		start := time.Now()
-		result := l.send(series, meta, ctx, attempts)
+		result := l.send(series, ctx, attempts)
 		duration := time.Since(start)
 		l.statsFunc(types.NetworkStats{
 			SendDuration: duration,
@@ -205,27 +186,21 @@ type sendResult struct {
 	networkError     bool
 }
 
-func (l *loop) sendingCleanup() {
+func (l *loop[T]) sendingCleanup() {
 	l.sendBuffer = l.sendBuffer[:0]
 	l.lastSend = time.Now()
 }
 
 // send is the main work loop of the loop.
-func (l *loop) send(series []prompb.TimeSeries, meta []prompb.MetricMetadata, ctx context.Context, retryCount int) sendResult {
+func (l *loop[T]) send(series []T, ctx context.Context, retryCount int) sendResult {
 	result := sendResult{}
 	defer func() {
-		recordStats(series, meta, l.isMeta, l.statsFunc, result, len(l.sendBuffer))
+		recordStats(series, l.isMeta, l.statsFunc, result, len(l.sendBuffer))
 	}()
 	// Check to see if this is a retry and we can reuse the buffer.
 	// I wonder if we should do this, its possible we are sending things that have exceeded the TTL.
 	if len(l.sendBuffer) == 0 {
-		var data []byte
-		var wrErr error
-		if l.isMeta {
-			data, wrErr = createWriteRequestMetadata(meta, l.buf)
-		} else {
-			data, wrErr = createWriteRequest(series, l.buf)
-		}
+		data, wrErr := generateWriteRequest[T](series)
 		if wrErr != nil {
 			result.err = wrErr
 			result.recoverableError = false
@@ -289,98 +264,6 @@ func (l *loop) send(series []prompb.TimeSeries, meta []prompb.MetricMetadata, ct
 	return result
 }
 
-func toSeries(m *types.Metric, ts prompb.TimeSeries, externalLabels map[string]string) prompb.TimeSeries {
-	if cap(ts.Labels) < len(m.Labels) {
-		ts.Labels = make([]prompb.Label, 0, len(m.Labels))
-	}
-	ts.Labels = ts.Labels[:len(m.Labels)]
-	for k, v := range m.Labels {
-		ts.Labels[k].Name = v.Name
-		ts.Labels[k].Value = v.Value
-	}
-
-	// By default each sample only has a histogram, float histogram or sample.
-	if cap(ts.Histograms) == 0 {
-		ts.Histograms = make([]prompb.Histogram, 1)
-	} else {
-		ts.Histograms = ts.Histograms[:0]
-	}
-	if m.Histogram != nil {
-		ts.Histograms = ts.Histograms[:1]
-		ts.Histograms[0] = FromIntHistogram(m.TS, m.Histogram)
-	}
-	if m.FloatHistogram != nil {
-		ts.Histograms = ts.Histograms[:1]
-		ts.Histograms[0] = FromFloatHistogram(m.TS, m.FloatHistogram)
-
-	}
-
-	if m.Histogram == nil && m.FloatHistogram == nil {
-		ts.Histograms = ts.Histograms[:0]
-	}
-
-	// Encode the external labels inside if needed.
-	for k, v := range externalLabels {
-		found := false
-		for j, lbl := range ts.Labels {
-			if lbl.Name == k {
-				ts.Labels[j].Value = v
-				found = true
-				break
-			}
-		}
-		if !found {
-			ts.Labels = append(ts.Labels, prompb.Label{
-				Name:  k,
-				Value: v,
-			})
-		}
-	}
-	// By default each TimeSeries only has one sample.
-	if len(ts.Samples) == 0 {
-		ts.Samples = make([]prompb.Sample, 1)
-	}
-	ts.Samples[0].Value = m.Value
-	ts.Samples[0].Timestamp = m.TS
-	return ts
-}
-
-func createWriteRequest(series []prompb.TimeSeries, data *proto.Buffer) ([]byte, error) {
-	wr := &prompb.WriteRequest{
-		Timeseries: series,
-	}
-
-	// Reset the buffer for reuse.
-	data.Reset()
-	err := data.Marshal(wr)
-	return data.Bytes(), err
-}
-
-func createWriteRequestMetadata(meta []prompb.MetricMetadata, data *proto.Buffer) ([]byte, error) {
-	wr := &prompb.WriteRequest{
-		Metadata: meta,
-	}
-	data.Reset()
-	err := data.Marshal(wr)
-	return data.Bytes(), err
-}
-
-func isMetadata(ts *types.Metric) bool {
-	return ts.Labels.Has(v2.MetaType) &&
-		ts.Labels.Has(v2.MetaUnit) &&
-		ts.Labels.Has(v2.MetaHelp)
-}
-
-func toMetadata(ts *types.Metric) prompb.MetricMetadata {
-
-	return prompb.MetricMetadata{
-		Type:             prompb.MetricMetadata_MetricType(prompb.MetricMetadata_MetricType_value[strings.ToUpper(ts.Labels.Get(v2.MetaType))]),
-		Help:             ts.Labels.Get(v2.MetaHelp),
-		Unit:             ts.Labels.Get(v2.MetaUnit),
-		MetricFamilyName: ts.Labels.Get("__name__"),
-	}
-}
-
 func retryAfterDuration(defaultDuration time.Duration, t string) time.Duration {
 	if parsedTime, err := time.Parse(http.TimeFormat, t); err == nil {
 		return time.Until(parsedTime)
@@ -392,48 +275,3 @@ func retryAfterDuration(defaultDuration time.Duration, t string) time.Duration {
 	}
 	return time.Duration(d) * time.Second
 }
-
-// FromIntHistogram returns remote Histogram from the integer Histogram.
-func FromIntHistogram(timestamp int64, h *histogram.Histogram) prompb.Histogram {
-	return prompb.Histogram{
-		Count:          &prompb.Histogram_CountInt{CountInt: h.Count},
-		Sum:            h.Sum,
-		Schema:         h.Schema,
-		ZeroThreshold:  h.ZeroThreshold,
-		ZeroCount:      &prompb.Histogram_ZeroCountInt{ZeroCountInt: h.ZeroCount},
-		NegativeSpans:  spansToSpansProto(h.NegativeSpans),
-		NegativeDeltas: h.NegativeBuckets,
-		PositiveSpans:  spansToSpansProto(h.PositiveSpans),
-		PositiveDeltas: h.PositiveBuckets,
-		ResetHint:      prompb.Histogram_ResetHint(h.CounterResetHint),
-		Timestamp:      timestamp,
-	}
-}
-
-// FromFloatHistogram returns remote Histogram from the float Histogram.
-func FromFloatHistogram(timestamp int64, fh *histogram.FloatHistogram) prompb.Histogram {
-	return prompb.Histogram{
-		Count:          &prompb.Histogram_CountFloat{CountFloat: fh.Count},
-		Sum:            fh.Sum,
-		Schema:         fh.Schema,
-		ZeroThreshold:  fh.ZeroThreshold,
-		ZeroCount:      &prompb.Histogram_ZeroCountFloat{ZeroCountFloat: fh.ZeroCount},
-		NegativeSpans:  spansToSpansProto(fh.NegativeSpans),
-		NegativeCounts: fh.NegativeBuckets,
-		PositiveSpans:  spansToSpansProto(fh.PositiveSpans),
-		PositiveCounts: fh.PositiveBuckets,
-		ResetHint:      prompb.Histogram_ResetHint(fh.CounterResetHint),
-		Timestamp:      timestamp,
-	}
-}
-
-func spansToSpansProto(s []histogram.Span) []prompb.BucketSpan {
-	spans := make([]prompb.BucketSpan, len(s))
-	for i := 0; i < len(s); i++ {
-		spans[i] = prompb.BucketSpan{Offset: s[i].Offset, Length: s[i].Length}
-	}
-
-	return spans
-}
-
-var tsPool = sync.Pool{New: func() interface{} { return &prompb.WriteRequest{} }}

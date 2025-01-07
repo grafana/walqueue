@@ -39,15 +39,16 @@ type Queue interface {
 
 // queue is a simple example of using the wal queue.
 type queue struct {
-	network    types.NetworkClient
-	queue      types.FileStorage
-	logger     log.Logger
-	serializer types.Serializer
-	self       actor.Actor
-	ttl        time.Duration
-	incoming   actor.Mailbox[types.DataHandle]
-	stats      *PrometheusStats
-	metaStats  *PrometheusStats
+	network        types.NetworkClient
+	queue          types.FileStorage
+	logger         log.Logger
+	serializer     types.PrometheusSerializer
+	self           actor.Actor
+	ttl            time.Duration
+	incoming       actor.Mailbox[types.DataHandle]
+	stats          *PrometheusStats
+	metaStats      *PrometheusStats
+	externalLabels map[string]string
 }
 
 // NewQueue creates and returns a new Queue instance, initializing its components
@@ -81,12 +82,13 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		return nil, err
 	}
 	q := &queue{
-		incoming:  actor.NewMailbox[types.DataHandle](),
-		stats:     stats,
-		metaStats: meta,
-		network:   networkClient,
-		logger:    logger,
-		ttl:       ttl,
+		incoming:       actor.NewMailbox[types.DataHandle](),
+		stats:          stats,
+		metaStats:      meta,
+		network:        networkClient,
+		logger:         logger,
+		ttl:            ttl,
+		externalLabels: cc.ExternalLabels,
 	}
 	fq, err := filequeue.NewQueue(directory, func(ctx context.Context, dh types.DataHandle) {
 		sendErr := q.incoming.Send(ctx, dh)
@@ -115,7 +117,7 @@ func (q *queue) Start() {
 	q.incoming.Start()
 	q.network.Start()
 	q.queue.Start()
-	q.serializer.Start()
+	q.serializer.Start(context.TODO())
 }
 
 func (q *queue) Stop() {
@@ -149,7 +151,7 @@ func (q *queue) DoWork(ctx actor.Context) actor.WorkerStatus {
 
 // Appender returns a new appender for the storage.
 func (q *queue) Appender(ctx context.Context) storage.Appender {
-	return serialization.NewAppender(ctx, 0, q.serializer, q.logger)
+	return serialization.NewAppender(ctx, 0, q.serializer, q.externalLabels, q.logger)
 }
 
 func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, buf []byte) {
@@ -170,15 +172,15 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		level.Error(q.logger).Log("msg", "version not found for deserialization")
 		return
 	}
-	var metrics *types.Metrics
-	var metadata *types.Metrics
+	var items []types.Datum
 	switch types.FileFormat(version) {
 	case types.AlloyFileVersionV2:
-		s := v2.GetSerializer()
-		metrics, metadata, err = s.Deserialize(uncompressedBuf)
+		// ExternalLabels are not needed for deserialization.
+		s := v2.NewSerialization()
+		items, err = s.Deserialize(meta, uncompressedBuf)
 	case types.AlloyFileVersionV1:
 		s := v1.GetSerializer()
-		metrics, metadata, err = s.Deserialize(uncompressedBuf)
+		items, err = s.Deserialize(meta, uncompressedBuf)
 	default:
 		level.Error(q.logger).Log("msg", "invalid version found for deserialization", "version", version)
 		return
@@ -187,27 +189,29 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
 
-	for _, series := range metrics.M {
+	for _, series := range items {
 		// Check that the TTL.
-		seriesAge := time.Since(time.UnixMilli(series.TS))
-		// For any series that exceeds the time to live (ttl) based on its timestamp we do not want to push it to the networking layer
-		// but instead drop it here by continuing.
-		if seriesAge > q.ttl {
-			// Since we arent pushing the TS forward we should put it back into the pool.
-			types.PutMetricIntoPool(series)
-			q.stats.NetworkTTLDrops.Inc()
+		mm, valid := interface{}(series).(types.MetricDatum)
+		if valid {
+			seriesAge := time.Since(time.UnixMilli(mm.TimeStampMS()))
+			// For any series that exceeds the time to live (ttl) based on its timestamp we do not want to push it to the networking layer
+			// but instead drop it here by continuing.
+			if seriesAge > q.ttl {
+				mm.Free()
+				q.stats.NetworkTTLDrops.Inc()
+				continue
+			}
+			sendErr := q.network.SendSeries(ctx, mm)
+			if sendErr != nil {
+				level.Error(q.logger).Log("msg", "error sending to write client", "err", sendErr)
+			}
 			continue
 		}
-		sendErr := q.network.SendSeries(ctx, series)
-		if sendErr != nil {
-			level.Error(q.logger).Log("msg", "error sending to write client", "err", sendErr)
-		}
-	}
-
-	for _, md := range metadata.M {
+		md, valid := interface{}(series).(types.MetadataDatum)
 		sendErr := q.network.SendMetadata(ctx, md)
 		if sendErr != nil {
 			level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)
 		}
+
 	}
 }

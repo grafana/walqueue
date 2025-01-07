@@ -66,25 +66,25 @@ type ConnectionConfig struct {
 // ToPrometheusConfig converts a ConnectionConfig to a config.HTTPClientConfig
 func (cc ConnectionConfig) ToPrometheusConfig() config.HTTPClientConfig {
 	var cfg config.HTTPClientConfig
-	if c.BasicAuth != nil {
+	if cc.BasicAuth != nil {
 		cfg.BasicAuth = &config.BasicAuth{
-			Username: c.BasicAuth.Username,
-			Password: config.Secret(c.BasicAuth.Password),
+			Username: cc.BasicAuth.Username,
+			Password: config.Secret(cc.BasicAuth.Password),
 		}
 	}
-	if len(c.BearerToken) > 0 {
-		cfg.BearerToken = config.Secret(c.BearerToken)
+	if len(cc.BearerToken) > 0 {
+		cfg.BearerToken = config.Secret(cc.BearerToken)
 	}
-	if c.TLSCert != "" {
-		cfg.TLSConfig.Cert = c.TLSCert
+	if cc.TLSCert != "" {
+		cfg.TLSConfig.Cert = cc.TLSCert
 	}
-	if c.TLSKey != "" {
-		cfg.TLSConfig.Key = config.Secret(c.TLSKey)
+	if cc.TLSKey != "" {
+		cfg.TLSConfig.Key = config.Secret(cc.TLSKey)
 	}
-	if c.TLSCACert != "" {
-		cfg.TLSConfig.CA = c.TLSCACert
+	if cc.TLSCACert != "" {
+		cfg.TLSConfig.CA = cc.TLSCACert
 	}
-	cfg.TLSConfig.InsecureSkipVerify = c.InsecureSkipVerify
+	cfg.TLSConfig.InsecureSkipVerify = cc.InsecureSkipVerify
 	return cfg
 }
 

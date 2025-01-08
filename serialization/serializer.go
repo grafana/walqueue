@@ -48,7 +48,7 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		stats:               stats,
 		fileFormat:          ff,
 		// For now we only support writing v2. Note we fully support reading either version.
-		ser: v2.NewSerialization(),
+		ser: v2.NewMarshaller(),
 	}
 
 	return s, nil

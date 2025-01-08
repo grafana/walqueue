@@ -95,7 +95,7 @@ func (f *fqq) Stop() {
 
 func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) error {
 	f.buf, _ = snappy.Decode(nil, value)
-	sg := v2.NewSerialization()
+	sg := v2.NewMarshaller()
 	items, err := sg.Unmarshal(meta, f.buf)
 	require.NoError(f.t, err)
 	f.total.Add(int64(len(items)))

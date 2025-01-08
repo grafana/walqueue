@@ -42,7 +42,7 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 		},
 		{
 			name: "v2",
-			s:    v2.NewSerialization(),
+			s:    v2.NewMarshaller(),
 		},
 	}
 

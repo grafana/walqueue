@@ -21,7 +21,7 @@ type Marshaller interface {
 type PrometheusMarshaller interface {
 	Marshaller
 	// AddPrometheusMetric adds a metric to the list of metrics. External Labels are passed in and added to the raw byte representation.
-	// They are not added to lbls since that array may not be owned by the caller.
+	// They are not added to lbls since that array may not be owned by the caller. Metric labels will override external labels.
 	AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error
 	AddPrometheusMetadata(name string, unit string, help string, pType string) error
 }

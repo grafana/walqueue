@@ -361,8 +361,6 @@ func (m metric) IsHistogram() bool {
 	return m.isHistogram
 }
 
-// Bytes represents the underlying data and should not be handled aside from
-// Build* functions that understand the Type.
 func (m metric) Bytes() []byte {
 	return m.buf
 }

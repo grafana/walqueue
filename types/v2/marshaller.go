@@ -14,7 +14,7 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 )
 
-type Serialization struct {
+type Marshaller struct {
 	series      *prompb.TimeSeries
 	seriesBuf   []byte
 	buf         *bytes.Buffer
@@ -27,8 +27,8 @@ const PrometheusMetric = uint8(1)
 const PrometheusExemplar = uint8(2)
 const PrometheusMetadata = uint8(3)
 
-func NewSerialization() types.PrometheusMarshaller {
-	return &Serialization{
+func NewMarshaller() types.PrometheusMarshaller {
+	return &Marshaller{
 		buf: bytes.NewBuffer(nil),
 		series: &prompb.TimeSeries{
 			Samples:   make([]prompb.Sample, 0),
@@ -40,7 +40,8 @@ func NewSerialization() types.PrometheusMarshaller {
 	}
 }
 
-func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error {
+// AddPrometheusMetric marshals a prometheus metric to its prombpb.TimeSeries representation and writes it to the buffer.
+func (s *Marshaller) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error {
 	defer func() {
 		s.series.Labels = s.series.Labels[:0]
 		s.series.Samples = s.series.Samples[:0]
@@ -49,7 +50,7 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 		s.seriesBuf = s.seriesBuf[:0]
 		s.metricBuf = s.metricBuf[:0]
 	}()
-	// Need to find any similar labels.
+	// Need to find any similar labels, if there is overlap.
 	totalLabels := len(lbls)
 	for k, _ := range externalLabels {
 		if !lbls.Has(k) {
@@ -68,6 +69,8 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 		s.series.Labels[lblIndex].Value = l.Value
 		lblIndex++
 	}
+	// Technically external labels do NOT apply to the hash but since the rule is applied evenly it works out.
+	// This works because external labels do not override metric labels, and the actual hash is not sent.
 	for k, v := range externalLabels {
 		if lbls.Has(k) {
 			continue
@@ -76,6 +79,7 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 		s.series.Labels[lblIndex].Value = v
 	}
 
+	// A series can either be a Sample (normal metric) or a Histogram (histogram metric).
 	if h == nil && fh == nil {
 		if cap(s.series.Samples) == 0 {
 			s.series.Samples = make([]prompb.Sample, 1)
@@ -89,6 +93,7 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 	if h != nil || fh != nil {
 		isHistogram = true
 		s.series.Histograms = make([]prompb.Histogram, 1)
+		// These FromIntHistograms and FromFloatHistograms were copied from prometheus because Alloy custom fork does not have them yet.
 		if h != nil {
 			s.series.Histograms[0] = FromIntHistogram(ts, h)
 		}
@@ -96,6 +101,7 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 			s.series.Histograms[0] = FromFloatHistogram(ts, fh)
 		}
 	}
+	// Figure out the size of the series so we can allocate a big enough buffer.
 	seriesSize := s.series.Size()
 	if cap(s.seriesBuf) < seriesSize {
 		s.seriesBuf = make([]byte, seriesSize)
@@ -107,6 +113,7 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 		return err
 	}
 
+	// Finally fill in our working metric datum.
 	s.metric.Hashvalue = lbls.Hash()
 	s.metric.IsHistogramvalue = isHistogram
 	s.metric.Timestampmsvalue = ts
@@ -119,7 +126,9 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 	} else {
 		s.metricBuf = s.metricBuf[:metricSize]
 	}
+	// Marshal the datum.
 	s.metric.Marshal(s.metricBuf)
+	// Write out the record type.
 	err = s.buf.WriteByte(PrometheusMetric)
 	if err != nil {
 		return err
@@ -132,7 +141,7 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 	return nil
 }
 
-func (s *Serialization) AddPrometheusMetadata(name string, unit string, help string, pType string) error {
+func (s *Marshaller) AddPrometheusMetadata(name string, unit string, help string, pType string) error {
 	theType := FromMetadataType(model.MetricType(pType))
 	md := &prompb.MetricMetadata{
 		Type:             theType,
@@ -158,7 +167,7 @@ func (s *Serialization) AddPrometheusMetadata(name string, unit string, help str
 	return nil
 }
 
-func (s *Serialization) Unmarshal(meta map[string]string, buf []byte) (items []types.Datum, err error) {
+func (s *Marshaller) Unmarshal(meta map[string]string, buf []byte) (items []types.Datum, err error) {
 	strCount, found := meta["record_count"]
 	if !found {
 		return nil, fmt.Errorf("missing record count")
@@ -173,6 +182,7 @@ func (s *Serialization) Unmarshal(meta map[string]string, buf []byte) (items []t
 		recordType := buf[index]
 		index++
 		if recordType == PrometheusMetric {
+			// These are pooled for performance. Whenever they are no longer needed they are returned to the pool via the Free method.
 			m := metricPool.Get().(*Metric)
 			size, err := m.Unmarshal(buf[index:])
 			if err != nil {
@@ -195,7 +205,7 @@ func (s *Serialization) Unmarshal(meta map[string]string, buf []byte) (items []t
 	return datums, nil
 }
 
-func (s *Serialization) Marshal(handle func(map[string]string, []byte) error) error {
+func (s *Marshaller) Marshal(handle func(map[string]string, []byte) error) error {
 	defer func() {
 		s.buf.Reset()
 		s.recordCount = 0

@@ -177,7 +177,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	switch types.FileFormat(version) {
 	case types.AlloyFileVersionV2:
 		// ExternalLabels are not needed for deserialization.
-		s := v2.NewSerialization()
+		s := v2.NewMarshaller()
 		items, err = s.Unmarshal(meta, uncompressedBuf)
 	case types.AlloyFileVersionV1:
 		s := v1.GetSerializer()

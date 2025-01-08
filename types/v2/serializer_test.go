@@ -2,12 +2,13 @@ package v2
 
 import (
 	"fmt"
-	"github.com/grafana/walqueue/types"
 	"math/rand"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/grafana/walqueue/types"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
@@ -31,13 +32,13 @@ func TestDeserializeAndSerialize(t *testing.T) {
 	}
 	kv := make(map[string]string)
 	var bb []byte
-	err := s.Serialize(func(meta map[string]string, buf []byte) error {
+	err := s.Marshal(func(meta map[string]string, buf []byte) error {
 		bb = buf
 		kv = meta
 		return nil
 	})
 	require.NoError(t, err)
-	items, err := s.Deserialize(kv, bb)
+	items, err := s.Unmarshal(kv, bb)
 	require.NoError(t, err)
 	require.Len(t, items, 200)
 	for _, item := range items {
@@ -84,13 +85,13 @@ func TestExternalLabels(t *testing.T) {
 	}
 	kv := make(map[string]string)
 	var bb []byte
-	err := s.Serialize(func(meta map[string]string, buf []byte) error {
+	err := s.Marshal(func(meta map[string]string, buf []byte) error {
 		bb = buf
 		kv = meta
 		return nil
 	})
 	require.NoError(t, err)
-	items, err := s.Deserialize(kv, bb)
+	items, err := s.Unmarshal(kv, bb)
 	require.NoError(t, err)
 	require.Len(t, items, 100)
 	for _, item := range items {
@@ -115,7 +116,7 @@ func TestBackwardsCompatability(t *testing.T) {
 	buf, err := os.ReadFile("v2.bin")
 	require.NoError(t, err)
 	sg := NewSerialization()
-	metrics, err := sg.Deserialize(map[string]string{"record_count": "200"}, buf)
+	metrics, err := sg.Unmarshal(map[string]string{"record_count": "200"}, buf)
 	require.NoError(t, err)
 	require.Len(t, metrics, 200)
 	for _, item := range metrics {

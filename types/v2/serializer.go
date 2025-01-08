@@ -3,12 +3,12 @@ package v2
 import (
 	"bytes"
 	"fmt"
-	"github.com/prometheus/common/model"
 	"strconv"
 	"sync"
 
+	"github.com/prometheus/common/model"
+
 	"github.com/grafana/walqueue/types"
-	"github.com/mus-format/mus-go/raw"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
@@ -16,21 +16,38 @@ import (
 
 type Serialization struct {
 	series      *prompb.TimeSeries
-	meta        *prompb.MetricMetadata
+	seriesBuf   []byte
 	buf         *bytes.Buffer
 	recordCount uint32
+	metric      *Metric
+	metricBuf   []byte
 }
 
 const PrometheusMetric = uint8(1)
 const PrometheusExemplar = uint8(2)
 const PrometheusMetadata = uint8(3)
 
+func NewSerialization() types.PrometheusMarshaller {
+	return &Serialization{
+		buf: bytes.NewBuffer(nil),
+		series: &prompb.TimeSeries{
+			Samples:   make([]prompb.Sample, 0),
+			Exemplars: make([]prompb.Exemplar, 0),
+		},
+		metric:    &Metric{},
+		metricBuf: make([]byte, 0),
+		seriesBuf: make([]byte, 0),
+	}
+}
+
 func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error {
 	defer func() {
-		s.series.Exemplars = s.series.Exemplars[:0]
-		s.series.Samples = s.series.Samples[:0]
 		s.series.Labels = s.series.Labels[:0]
-		s.series.Histograms = nil
+		s.series.Samples = s.series.Samples[:0]
+		s.series.Exemplars = s.series.Exemplars[:0]
+		s.series.Histograms = s.series.Histograms[:0]
+		s.seriesBuf = s.seriesBuf[:0]
+		s.metricBuf = s.metricBuf[:0]
 	}()
 	// Need to find any similar labels.
 	totalLabels := len(lbls)
@@ -68,9 +85,9 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 		s.series.Samples[0].Value = value
 		s.series.Samples[0].Timestamp = ts
 	}
-	var isHistogram int8
+	var isHistogram bool
 	if h != nil || fh != nil {
-		isHistogram = 1
+		isHistogram = true
 		s.series.Histograms = make([]prompb.Histogram, 1)
 		if h != nil {
 			s.series.Histograms[0] = FromIntHistogram(ts, h)
@@ -79,33 +96,35 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 			s.series.Histograms[0] = FromFloatHistogram(ts, fh)
 		}
 	}
-	size := 4 + 1 + 8 + 8 + 1 + s.series.Size() // Total Size + Type  + Timestamp + Hash + IsHistogram + Byte Representation
-	bbPtr := smallBB.Get().(*[]byte)
-	buf := *bbPtr
-	if cap(buf) < size {
-		buf = make([]byte, size)
+	seriesSize := s.series.Size()
+	if cap(s.seriesBuf) < seriesSize {
+		s.seriesBuf = make([]byte, seriesSize)
 	} else {
-		buf = buf[:size]
+		s.seriesBuf = s.seriesBuf[:seriesSize]
 	}
-	defer func() {
-		buf = buf[:0]
-		*bbPtr = buf
-		smallBB.Put(bbPtr)
-	}()
-	hash := lbls.Hash()
-
-	index := 0
-	index += raw.MarshalUint32(uint32(size), buf[index:])
-	index += raw.MarshalUint8(PrometheusMetric, buf[index:])
-	index += raw.MarshalInt64(ts, buf[index:])
-	index += raw.MarshalUint64(hash, buf[index:])
-	index += raw.MarshalInt8(isHistogram, buf[index:])
-
-	_, err := s.series.MarshalTo(buf[index:])
+	_, err := s.series.MarshalTo(s.seriesBuf)
 	if err != nil {
 		return err
 	}
-	_, err = s.buf.Write(buf)
+
+	s.metric.Hashvalue = lbls.Hash()
+	s.metric.IsHistogramvalue = isHistogram
+	s.metric.Timestampmsvalue = ts
+	s.metric.Buf = s.seriesBuf
+
+	metricSize := s.metric.Size()
+
+	if cap(s.metricBuf) < metricSize {
+		s.metricBuf = make([]byte, metricSize)
+	} else {
+		s.metricBuf = s.metricBuf[:metricSize]
+	}
+	s.metric.Marshal(s.metricBuf)
+	err = s.buf.WriteByte(PrometheusMetric)
+	if err != nil {
+		return err
+	}
+	_, err = s.buf.Write(s.metricBuf)
 	if err != nil {
 		return err
 	}
@@ -122,31 +141,24 @@ func (s *Serialization) AddPrometheusMetadata(name string, unit string, help str
 		Unit:             unit,
 	}
 
-	size := md.Size()
-
-	index := 0
-	// Total Size + Type + Buffer
-	totalSize := 4 + 1 + size
-	mdBuf := make([]byte, totalSize)
-	raw.MarshalUint32(uint32(totalSize), mdBuf[index:])
-	index += 4
-
-	raw.MarshalUint8(PrometheusMetadata, mdBuf[index:])
-	index += 1
-
-	_, err := md.MarshalTo(mdBuf[index:])
+	bb, err := md.Marshal()
 	if err != nil {
 		return err
 	}
-	_, err = s.buf.Write(mdBuf)
-	if err != nil {
-		return err
-	}
+
+	mdd := &Metadata{Buf: bb}
+	size := mdd.Size()
+	buf := make([]byte, size)
+	mdd.Marshal(buf)
+
+	s.buf.WriteByte(PrometheusMetadata)
+	s.buf.Write(buf)
+
 	s.recordCount++
 	return nil
 }
 
-func (s *Serialization) Deserialize(meta map[string]string, buf []byte) (items []types.Datum, err error) {
+func (s *Serialization) Unmarshal(meta map[string]string, buf []byte) (items []types.Datum, err error) {
 	strCount, found := meta["record_count"]
 	if !found {
 		return nil, fmt.Errorf("missing record count")
@@ -156,53 +168,26 @@ func (s *Serialization) Deserialize(meta map[string]string, buf []byte) (items [
 		return nil, err
 	}
 	datums := make([]types.Datum, seriesCount)
-
 	index := 0
 	for i := range datums {
-		size, s, err := raw.UnmarshalUint32(buf[index:])
-		if err != nil {
-			return nil, err
-		}
-		index += s
-		recordType, s, err := raw.UnmarshalUint8(buf[index:])
-		if err != nil {
-			return nil, err
-		}
-		index += s
+		recordType := buf[index]
+		index++
 		if recordType == PrometheusMetric {
-			t, s, err := raw.UnmarshalInt64(buf[index:])
+			m := metricPool.Get().(*Metric)
+			size, err := m.Unmarshal(buf[index:])
 			if err != nil {
 				return nil, err
 			}
-			index += s
+			index += size
 
-			hash, s, err := raw.UnmarshalUint64(buf[index:])
-			if err != nil {
-				return nil, err
-			}
-			index += s
-
-			isHistogram, s, err := raw.UnmarshalInt8(buf[index:])
-			if err != nil {
-				return nil, err
-			}
-			index += s
-
-			leftoverSize := size - 4 - 1 - 8 - 8 - 1
-			bb := buf[index : index+int(leftoverSize)]
-			index += int(leftoverSize)
-
-			m := datumPool.Get().(*metric)
-			m.hash = hash
-			m.ts = t
-			m.buf = bb
-			m.isHistogram = isHistogram == 1
 			datums[i] = m
 		} else if recordType == PrometheusMetadata {
-			leftoverSize := size - 4 - 1
-			bb := buf[index : index+int(leftoverSize)]
-			index += int(leftoverSize)
-			md := &metadata{buf: bb}
+			md := &Metadata{}
+			size, err := md.Unmarshal(buf[index:])
+			if err != nil {
+				return nil, err
+			}
+			index += size
 			datums[i] = md
 		}
 
@@ -210,10 +195,9 @@ func (s *Serialization) Deserialize(meta map[string]string, buf []byte) (items [
 	return datums, nil
 }
 
-func (s *Serialization) Serialize(handle func(map[string]string, []byte) error) error {
+func (s *Serialization) Marshal(handle func(map[string]string, []byte) error) error {
 	defer func() {
 		s.buf.Reset()
-		bufPool.Put(s.buf)
 		s.recordCount = 0
 	}()
 	buf := s.buf.Bytes()
@@ -222,32 +206,8 @@ func (s *Serialization) Serialize(handle func(map[string]string, []byte) error) 
 	return handle(meta, buf)
 }
 
-func NewSerialization() types.PrometheusSerialization {
-	bb := bufPool.Get().(*bytes.Buffer)
-	return &Serialization{
-		buf: bb,
-		series: &prompb.TimeSeries{
-			Samples:   make([]prompb.Sample, 0),
-			Exemplars: make([]prompb.Exemplar, 0),
-		},
-	}
-}
-
-var bufPool = sync.Pool{
+var metricPool = sync.Pool{
 	New: func() any {
-		return &bytes.Buffer{}
-	},
-}
-
-var smallBB = sync.Pool{
-	New: func() any {
-		bb := make([]byte, 0)
-		return &bb
-	},
-}
-
-var datumPool = sync.Pool{
-	New: func() any {
-		return &metric{}
+		return &Metric{}
 	},
 }

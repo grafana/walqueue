@@ -2,13 +2,14 @@ package v1
 
 import (
 	"fmt"
-	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/prompb"
 	"math/rand"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/prompb"
 
 	"github.com/stretchr/testify/require"
 )
@@ -31,14 +32,14 @@ func TestLabels(t *testing.T) {
 	err = serializer.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, nil)
 	require.NoError(t, err)
 	var bb []byte
-	err = serializer.Serialize(func(_ map[string]string, bytes []byte) error {
+	err = serializer.Marshal(func(_ map[string]string, bytes []byte) error {
 		bb = make([]byte, len(bytes))
 		copy(bb, bytes)
 		return nil
 	})
 	require.NoError(t, err)
 	deserial := GetSerializer()
-	items, err := deserial.Deserialize(nil, bb)
+	items, err := deserial.Unmarshal(nil, bb)
 	require.NoError(t, err)
 	pm := prompb.TimeSeries{}
 	err = pm.Unmarshal(items[0].Bytes())
@@ -56,7 +57,7 @@ func TestBackwardsCompatability(t *testing.T) {
 	buf, err := os.ReadFile("v1.bin")
 	require.NoError(t, err)
 	sg := GetSerializer()
-	metrics, err := sg.Deserialize(nil, buf)
+	metrics, err := sg.Unmarshal(nil, buf)
 	require.NoError(t, err)
 	require.Len(t, metrics, 1_000)
 	for _, m := range metrics {

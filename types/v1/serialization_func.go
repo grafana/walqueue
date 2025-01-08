@@ -16,7 +16,7 @@ import (
 	"go.uber.org/atomic"
 )
 
-func GetSerializer() types.PrometheusSerialization {
+func GetSerializer() types.PrometheusMarshaller {
 	return &Serialization{
 		sg: &SeriesGroup{
 			Series:   make([]*TimeSeriesBinary, 0),
@@ -42,12 +42,12 @@ func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels
 	return nil
 }
 
-func (s *Serialization) Deserialize(_ map[string]string, buf []byte) (items []types.Datum, err error) {
+func (s *Serialization) Unmarshal(_ map[string]string, buf []byte) (items []types.Datum, err error) {
 	sg := &SeriesGroup{}
 	return DeserializeToSeriesGroup(sg, buf)
 }
 
-func (s *Serialization) Serialize(handle func(map[string]string, []byte) error) error {
+func (s *Serialization) Marshal(handle func(map[string]string, []byte) error) error {
 	defer func() {
 		PutTimeSeriesSliceIntoPool(s.sg.Series)
 		PutTimeSeriesSliceIntoPool(s.sg.Metadata)

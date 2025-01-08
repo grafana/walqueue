@@ -5,7 +5,6 @@ package serialization
 import (
 	"context"
 	"fmt"
-	"github.com/grafana/walqueue/types/v2"
 	"math/rand"
 	"sync/atomic"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
+	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
@@ -96,7 +96,7 @@ func (f *fqq) Stop() {
 func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) error {
 	f.buf, _ = snappy.Decode(nil, value)
 	sg := v2.NewSerialization()
-	items, err := sg.Deserialize(meta, f.buf)
+	items, err := sg.Unmarshal(meta, f.buf)
 	require.NoError(f.t, err)
 	f.total.Add(int64(len(items)))
 	return nil

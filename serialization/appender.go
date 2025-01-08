@@ -79,6 +79,7 @@ func (a *appender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int
 
 // UpdateMetadata updates metadata.
 func (a *appender) UpdateMetadata(ref storage.SeriesRef, l labels.Labels, m md.Metadata) (_ storage.SeriesRef, _ error) {
+	// NOTE: This will never get called unless a hidden non exposed setting is enabled in the scraper to send metadata via the appender.
 	if !l.Has("__name__") {
 		return ref, fmt.Errorf("missing __name__ label for metadata")
 	}

@@ -3,13 +3,18 @@ package network
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/grafana/walqueue/types"
 )
 
+// generateWriteRequest creates a proto prombpb.WriteRequest from manual bytes. Since
+// the data is already serialized and we just need to wrap it in a proto message.
 func generateWriteRequest[T any](series []T) ([]byte, error) {
+	// TODO: making this use a byte pool or passed in value would be more efficient.
 	bb := bytes.Buffer{}
 	for _, t := range series {
+		// This conversion is necessary to test for a specific interface.
 		mm, valid := interface{}(t).(types.MetricDatum)
 		if valid {
 			buf := mm.Bytes()

@@ -2,11 +2,12 @@ package prometheus
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	v1 "github.com/grafana/walqueue/types/v1"
 	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/client_golang/prometheus"
-	"sync"
-	"time"
 
 	snappy "github.com/eapache/go-xerial-snappy"
 
@@ -177,10 +178,10 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	case types.AlloyFileVersionV2:
 		// ExternalLabels are not needed for deserialization.
 		s := v2.NewSerialization()
-		items, err = s.Deserialize(meta, uncompressedBuf)
+		items, err = s.Unmarshal(meta, uncompressedBuf)
 	case types.AlloyFileVersionV1:
 		s := v1.GetSerializer()
-		items, err = s.Deserialize(meta, uncompressedBuf)
+		items, err = s.Unmarshal(meta, uncompressedBuf)
 	default:
 		level.Error(q.logger).Log("msg", "invalid version found for deserialization", "version", version)
 		return

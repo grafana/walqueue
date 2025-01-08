@@ -2,28 +2,26 @@ package serialization
 
 import (
 	"context"
-	"github.com/prometheus/prometheus/model/histogram"
-	"github.com/prometheus/prometheus/model/labels"
-	"go.uber.org/atomic"
 	"sync"
 	"time"
 
-	v2 "github.com/grafana/walqueue/types/v2"
-
-	"github.com/go-kit/log/level"
-
 	snappy "github.com/eapache/go-xerial-snappy"
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
+	v2 "github.com/grafana/walqueue/types/v2"
+	"github.com/prometheus/prometheus/model/histogram"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/vladopajic/go-actor/actor"
+	"go.uber.org/atomic"
 )
 
 // serializer collects data from multiple appenders in-memory and will periodically flush the data to file.Storage.
 // serializer will flush based on configured time duration OR if it hits a certain number of items.
+// Because of how it interacts with an appender this is not an actor so all calls need to be wrapped with a mutex.
 type serializer struct {
 	mut                 sync.Mutex
-	ser                 types.PrometheusSerialization
-	cfgInbox            *types.SyncMailbox[types.SerializerConfig, bool]
+	ser                 types.PrometheusMarshaller
 	maxItemsBeforeFlush int
 	flushFrequency      time.Duration
 	queue               types.FileStorage
@@ -39,6 +37,25 @@ type serializer struct {
 	metadataCount  int
 }
 
+func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(stats types.SerializerStats), ff types.FileFormat, l log.Logger) (types.PrometheusSerializer, error) {
+	s := &serializer{
+		maxItemsBeforeFlush: int(cfg.MaxSignalsInBatch),
+		flushFrequency:      cfg.FlushFrequency,
+		queue:               q,
+		logger:              l,
+		flushTestTimer:      time.NewTicker(1 * time.Second),
+		lastFlush:           time.Now(),
+		stats:               stats,
+		fileFormat:          ff,
+		// For now we only support writing v2. Note we fully support reading either version.
+		ser: v2.NewSerialization(),
+	}
+
+	return s, nil
+}
+
+// SendMetric adds a metric to the serializer. Note that we need to inject external labels here since once they are written to disk the prompb.TimeSeries bytes should be treated
+// as immutable.
 func (s *serializer) SendMetric(ctx context.Context, l labels.Labels, t int64, v float64, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
@@ -47,7 +64,6 @@ func (s *serializer) SendMetric(ctx context.Context, l labels.Labels, t int64, v
 		s.newestTS = t
 	}
 
-	// This needs to be synchronous.
 	err := s.ser.AddPrometheusMetric(t, v, l, h, fh, externalLabels)
 	if err != nil {
 		return err
@@ -67,34 +83,24 @@ func (s *serializer) SendMetric(ctx context.Context, l labels.Labels, t int64, v
 func (s *serializer) SendMetadata(_ context.Context, name string, unit string, help string, pType string) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
-	s.metadataCount++
 
-	return s.ser.AddPrometheusMetadata(name, unit, help, pType)
-}
-
-func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(stats types.SerializerStats), ff types.FileFormat, l log.Logger) (types.PrometheusSerializer, error) {
-	s := &serializer{
-		maxItemsBeforeFlush: int(cfg.MaxSignalsInBatch),
-		flushFrequency:      cfg.FlushFrequency,
-		queue:               q,
-		logger:              l,
-		cfgInbox:            types.NewSyncMailbox[types.SerializerConfig, bool](),
-		flushTestTimer:      time.NewTicker(1 * time.Second),
-		lastFlush:           time.Now(),
-		stats:               stats,
-		fileFormat:          ff,
-		// For now we only support writing v2. Note we fully support reading either version.
-		ser: v2.NewSerialization(),
+	err := s.ser.AddPrometheusMetadata(name, unit, help, pType)
+	if err != nil {
+		return err
 	}
-
-	return s, nil
+	// Theoretically we should check for flushing to disk but not concerned with it for metadata.
+	s.metadataCount++
+	return nil
 }
+
+// Start will start a go routine to handle writing data and checking if a flush needs to occur.
 func (s *serializer) Start(ctx context.Context) error {
 	check := func() {
 		s.mut.Lock()
 		defer s.mut.Unlock()
 		if time.Since(s.lastFlush) > s.flushFrequency && (s.seriesCount+s.metadataCount) > 0 {
 			err := s.flushToDisk(ctx)
+			// We explicitly dont want to return an error here since we want things to keep running.
 			if err != nil {
 				level.Error(s.logger).Log("msg", "unable to store data", "err", err)
 			}
@@ -106,7 +112,6 @@ func (s *serializer) Start(ctx context.Context) error {
 				return
 			}
 			select {
-
 			case <-s.flushTestTimer.C:
 				check()
 			case <-ctx.Done():
@@ -124,6 +129,7 @@ func (s *serializer) Stop() {
 func (s *serializer) UpdateConfig(_ context.Context, cfg types.SerializerConfig) (bool, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
+
 	s.maxItemsBeforeFlush = int(cfg.MaxSignalsInBatch)
 	s.flushFrequency = cfg.FlushFrequency
 	return true, nil
@@ -137,9 +143,10 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 	}()
 
 	var out []byte
-	err = s.ser.Serialize(func(meta map[string]string, buf []byte) error {
+	err = s.ser.Marshal(func(meta map[string]string, buf []byte) error {
 		meta["version"] = string(types.AlloyFileVersionV2)
 		meta["compression"] = "snappy"
+		// TODO: reusing a buffer here likely increases performance.
 		out = snappy.Encode(buf)
 		return s.queue.Store(ctx, meta, out)
 	})

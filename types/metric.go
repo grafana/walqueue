@@ -1,10 +1,5 @@
 package types
 
-import (
-	"github.com/prometheus/prometheus/model/histogram"
-	"github.com/prometheus/prometheus/model/labels"
-)
-
 type FileFormat string
 
 const AlloyFileVersionV1 = FileFormat("alloy.metrics.queue.v1")
@@ -38,22 +33,4 @@ type MetricDatum interface {
 type MetadataDatum interface {
 	Datum
 	IsMeta() bool
-}
-
-// Marshaller provides the ability to read and write for a given schema defined by the FileFormat.
-type Marshaller interface {
-	// Unmarshal is called to create a list of datums.
-	// Metadata will be passed via the map.
-	// The buffer passed in is SAFE for reuse/unsafe strings.
-	Unmarshal(map[string]string, []byte) (items []Datum, err error)
-	// Marshal handler passes in the buffer to be written. The buffer is only valid for the lifecycle of the function call.
-	// Metadata is passed via the map and should be encoded into the underlying storage. The same keys and values should be returned
-	// on Deserialize.
-	Marshal(handle func(map[string]string, []byte) error) error
-}
-
-type PrometheusMarshaller interface {
-	Marshaller
-	AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error
-	AddPrometheusMetadata(name string, unit string, help string, pType string) error
 }

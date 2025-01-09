@@ -192,7 +192,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 
 	for _, series := range items {
 		// Check that the TTL.
-		mm, valid := interface{}(series).(types.MetricDatum)
+		mm, valid := series.(types.MetricDatum)
 		if valid {
 			seriesAge := time.Since(time.UnixMilli(mm.TimeStampMS()))
 			// For any series that exceeds the time to live (ttl) based on its timestamp we do not want to push it to the networking layer
@@ -208,7 +208,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 			}
 			continue
 		}
-		md, valid := interface{}(series).(types.MetadataDatum)
+		md, valid := series.(types.MetadataDatum)
 		sendErr := q.network.SendMetadata(ctx, md)
 		if sendErr != nil {
 			level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)

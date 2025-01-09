@@ -9,7 +9,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
-	v2 "github.com/grafana/walqueue/types/v2"
+	v1 "github.com/grafana/walqueue/types/v1"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/vladopajic/go-actor/actor"
@@ -37,7 +37,7 @@ type serializer struct {
 	metadataCount  int
 }
 
-func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(stats types.SerializerStats), ff types.FileFormat, l log.Logger) (types.PrometheusSerializer, error) {
+func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(stats types.SerializerStats), l log.Logger) (types.PrometheusSerializer, error) {
 	s := &serializer{
 		maxItemsBeforeFlush: int(cfg.MaxSignalsInBatch),
 		flushFrequency:      cfg.FlushFrequency,
@@ -46,9 +46,8 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		flushTestTimer:      time.NewTicker(1 * time.Second),
 		lastFlush:           time.Now(),
 		stats:               stats,
-		fileFormat:          ff,
-		// For now we only support writing v2. Note we fully support reading either version.
-		ser: v2.NewMarshaller(),
+		fileFormat:          types.AlloyFileVersionV1,
+		ser:                 v1.GetSerializer(),
 	}
 
 	return s, nil
@@ -144,7 +143,7 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 
 	var out []byte
 	err = s.ser.Marshal(func(meta map[string]string, buf []byte) error {
-		meta["version"] = string(types.AlloyFileVersionV2)
+		meta["version"] = string(types.AlloyFileVersionV1)
 		meta["compression"] = "snappy"
 		// TODO: reusing a buffer here likely increases performance.
 		out = snappy.Encode(buf)

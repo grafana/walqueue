@@ -5,18 +5,15 @@ import (
 	"sync"
 	"time"
 
-	v1 "github.com/grafana/walqueue/types/v1"
-	v2 "github.com/grafana/walqueue/types/v2"
-	"github.com/prometheus/client_golang/prometheus"
-
 	snappy "github.com/eapache/go-xerial-snappy"
-
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/filequeue"
 	"github.com/grafana/walqueue/network"
 	"github.com/grafana/walqueue/serialization"
 	"github.com/grafana/walqueue/types"
+	v1 "github.com/grafana/walqueue/types/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/vladopajic/go-actor/actor"
 )
@@ -104,7 +101,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	serial, err := serialization.NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: maxSignalsToBatch,
 		FlushFrequency:    flushInterval,
-	}, q.queue, stats.UpdateSerializer, types.AlloyFileVersionV2, logger)
+	}, q.queue, stats.UpdateSerializer, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -175,10 +172,6 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	}
 	var items []types.Datum
 	switch types.FileFormat(version) {
-	case types.AlloyFileVersionV2:
-		// ExternalLabels are not needed for deserialization.
-		s := v2.NewMarshaller()
-		items, err = s.Unmarshal(meta, uncompressedBuf)
 	case types.AlloyFileVersionV1:
 		s := v1.GetSerializer()
 		items, err = s.Unmarshal(meta, uncompressedBuf)

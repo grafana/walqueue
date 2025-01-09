@@ -9,7 +9,6 @@ import (
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	v1 "github.com/grafana/walqueue/types/v1"
-	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +18,6 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 		go test -bench="BenchmarkDeserializeAndSerialize" -benchmem -benchtime "5s"
 		cpu: 13th Gen Intel(R) Core(TM) i5-13500
 		BenchmarkDeserializeAndSerialize/v1-20       100         273894233 ns/op              8491 compressed_KB            106723 uncompressed_KB      455318762 B/op   1904711 allocs/op
-		BenchmarkDeserializeAndSerialize/v2-20       798           7529099 ns/op               228 compressed_KB              2949 uncompressed_KB        9792104 B/op        14 allocs/op
 	*/
 	lbls := make(labels.Labels, 0)
 	for i := 0; i < 10; i++ {
@@ -39,10 +37,6 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 			// tuple/index based.
 			name: "v1",
 			s:    v1.GetSerializer(),
-		},
-		{
-			name: "v2",
-			s:    v2.NewMarshaller(),
 		},
 	}
 

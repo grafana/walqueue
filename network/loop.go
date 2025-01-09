@@ -16,7 +16,6 @@ import (
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/common/config"
-	"github.com/prometheus/prometheus/prompb"
 	"github.com/vladopajic/go-actor/actor"
 	"go.uber.org/atomic"
 )
@@ -43,7 +42,7 @@ type loop[T types.Datum] struct {
 	items          *datumSlice[T]
 }
 
-func newLoop[T types.Datum](cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop, error) {
+func newLoop[T types.Datum](cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop[T], error) {
 	var httpOpts []config.HTTPClientOption
 	if cc.UseRoundRobin {
 		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}

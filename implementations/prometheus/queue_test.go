@@ -104,8 +104,7 @@ func TestQueue_Appender(t *testing.T) {
 			tt.testFunc(t, ctx, app)
 			require.Eventually(t, func() bool {
 				return recordsFound.Load() == tt.metricCount
-			}, 10*time.Second, 100*time.Millisecond)
-			//require.True(t, v2.OutStandingTimeSeriesBinary.Load() == 0)
+			}, 10*time.Second, 1*time.Second)
 		})
 	}
 }

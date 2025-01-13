@@ -3,6 +3,7 @@ package types
 type FileFormat string
 
 const AlloyFileVersionV1 = FileFormat("alloy.metrics.queue.v1")
+const AlloyFileVersionV2 = FileFormat("alloy.metrics.queue.v2")
 
 type Type string
 

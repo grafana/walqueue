@@ -339,7 +339,7 @@ func (m metric) Type() types.Type {
 }
 
 func (m metric) FileFormat() types.FileFormat {
-	return types.AlloyFileVersionV1
+	return types.AlloyFileVersionV2
 }
 
 func (m *metric) Free() {

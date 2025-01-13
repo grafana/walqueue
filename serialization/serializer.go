@@ -9,7 +9,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
-	v1 "github.com/grafana/walqueue/types/v1"
+	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/vladopajic/go-actor/actor"
@@ -46,8 +46,8 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		flushTestTimer:      time.NewTicker(1 * time.Second),
 		lastFlush:           time.Now(),
 		stats:               stats,
-		fileFormat:          types.AlloyFileVersionV1,
-		ser:                 v1.GetSerializer(),
+		fileFormat:          types.AlloyFileVersionV2,
+		ser:                 v2.NewFormat(),
 	}
 
 	return s, nil
@@ -143,7 +143,7 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 
 	var out []byte
 	err = s.ser.Marshal(func(meta map[string]string, buf []byte) error {
-		meta["version"] = string(types.AlloyFileVersionV1)
+		meta["version"] = string(types.AlloyFileVersionV2)
 		meta["compression"] = "snappy"
 		// TODO: reusing a buffer here likely increases performance.
 		out = snappy.Encode(buf)

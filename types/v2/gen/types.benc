@@ -1,0 +1,15 @@
+// to generate run `bencgen --in types.benc --lang go`
+// https://github.com/deneonet/benc/blob/main/cmd/bencgen/README.md
+
+header v2;
+
+ctr metric {
+    int64 timestampmsvalue = 1;
+    uint64 hashvalue = 2;
+    bool isHistogramvalue = 3;
+    bytes buf = 4;
+}
+
+ctr metadata {
+    bytes buf = 1;
+}

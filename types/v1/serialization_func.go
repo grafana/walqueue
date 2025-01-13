@@ -16,7 +16,7 @@ import (
 	"go.uber.org/atomic"
 )
 
-func GetSerializer() types.PrometheusMarshaller {
+func GetSerializer() *Serialization {
 	return &Serialization{
 		sg: &SeriesGroup{
 			Series:   make([]*TimeSeriesBinary, 0),

@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
-
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,13 +55,14 @@ func TestLabels(t *testing.T) {
 }
 
 func TestBackwardsCompatability(t *testing.T) {
-	buf, err := os.ReadFile("v1.bin")
+	buf, err := os.ReadFile(filepath.Join("testdata", "v1.bin"))
 	require.NoError(t, err)
 	sg := GetSerializer()
 	metrics, err := sg.Unmarshal(nil, buf)
 	require.NoError(t, err)
 	require.Len(t, metrics, 1_000)
 	for _, m := range metrics {
+		require.True(t, m.FileFormat() == types.AlloyFileVersionV1)
 		pm := prompb.TimeSeries{}
 		err = pm.Unmarshal(m.Bytes())
 		require.NoError(t, err)

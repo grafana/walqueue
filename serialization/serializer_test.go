@@ -5,7 +5,7 @@ package serialization
 import (
 	"context"
 	"fmt"
-	v1 "github.com/grafana/walqueue/types/v1"
+	v2 "github.com/grafana/walqueue/types/v2"
 	"math/rand"
 	"sync/atomic"
 	"testing"
@@ -95,7 +95,7 @@ func (f *fqq) Stop() {
 
 func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) error {
 	f.buf, _ = snappy.Decode(nil, value)
-	sg := v1.GetSerializer()
+	sg := v2.NewFormat()
 	items, err := sg.Unmarshal(meta, f.buf)
 	require.NoError(f.t, err)
 	f.total.Add(int64(len(items)))

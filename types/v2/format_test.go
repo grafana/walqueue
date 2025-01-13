@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -113,7 +114,7 @@ func TestExternalLabels(t *testing.T) {
 }
 
 func TestBackwardsCompatability(t *testing.T) {
-	buf, err := os.ReadFile("v2.bin")
+	buf, err := os.ReadFile(filepath.Join("testdata", "v2.bin"))
 	require.NoError(t, err)
 	sg := NewFormat()
 	metrics, err := sg.Unmarshal(map[string]string{"record_count": "200"}, buf)
@@ -121,6 +122,7 @@ func TestBackwardsCompatability(t *testing.T) {
 	require.Len(t, metrics, 200)
 	for _, item := range metrics {
 		ppb := item.Bytes()
+		require.True(t, item.FileFormat() == types.AlloyFileVersionV2)
 		if item.Type() == types.PrometheusMetricV1 {
 			met := &prompb.TimeSeries{}
 			unErr := met.Unmarshal(ppb)

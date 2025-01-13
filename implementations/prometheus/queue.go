@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	v2 "github.com/grafana/walqueue/types/v2"
 	"sync"
 	"time"
 
@@ -174,6 +175,9 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	switch types.FileFormat(version) {
 	case types.AlloyFileVersionV1:
 		s := v1.GetSerializer()
+		items, err = s.Unmarshal(meta, uncompressedBuf)
+	case types.AlloyFileVersionV2:
+		s := v2.NewMarshaller()
 		items, err = s.Unmarshal(meta, uncompressedBuf)
 	default:
 		level.Error(q.logger).Log("msg", "invalid version found for deserialization", "version", version)

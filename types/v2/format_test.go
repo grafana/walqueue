@@ -39,7 +39,6 @@ func TestDeserializeAndSerialize(t *testing.T) {
 	})
 	require.NoError(t, err)
 	items, err := s.Unmarshal(kv, bb)
-	os.WriteFile("v2.bin", bb, 0644)
 	require.NoError(t, err)
 	require.Len(t, items, 200)
 	for _, item := range items {

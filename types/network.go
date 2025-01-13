@@ -4,6 +4,8 @@ import (
 	"context"
 	"reflect"
 	"time"
+
+	"github.com/prometheus/common/config"
 )
 
 type NetworkClient interface {
@@ -57,6 +59,33 @@ type ConnectionConfig struct {
 	TLSCACert string
 	// InsecureSkipVerify controls whether the client verifies the server's certificate chain and host name
 	InsecureSkipVerify bool
+	// UseRoundRobin
+	UseRoundRobin bool
+}
+
+// ToPrometheusConfig converts a ConnectionConfig to a config.HTTPClientConfig
+func (cc ConnectionConfig) ToPrometheusConfig() config.HTTPClientConfig {
+	var cfg config.HTTPClientConfig
+	if cc.BasicAuth != nil {
+		cfg.BasicAuth = &config.BasicAuth{
+			Username: cc.BasicAuth.Username,
+			Password: config.Secret(cc.BasicAuth.Password),
+		}
+	}
+	if len(cc.BearerToken) > 0 {
+		cfg.BearerToken = config.Secret(cc.BearerToken)
+	}
+	if cc.TLSCert != "" {
+		cfg.TLSConfig.Cert = cc.TLSCert
+	}
+	if cc.TLSKey != "" {
+		cfg.TLSConfig.Key = config.Secret(cc.TLSKey)
+	}
+	if cc.TLSCACert != "" {
+		cfg.TLSConfig.CA = cc.TLSCACert
+	}
+	cfg.TLSConfig.InsecureSkipVerify = cc.InsecureSkipVerify
+	return cfg
 }
 
 type BasicAuth struct {

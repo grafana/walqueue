@@ -5,6 +5,7 @@ package serialization
 import (
 	"context"
 	"fmt"
+	v1 "github.com/grafana/walqueue/types/v1"
 	"math/rand"
 	"sync/atomic"
 	"testing"
@@ -13,7 +14,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
-	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +33,7 @@ func TestRoundTripSerialization(t *testing.T) {
 		require.True(t, stats.Errors == 0)
 		require.True(t, stats.MetadataStored == 0)
 		require.True(t, stats.NewestTimestampSeconds > start)
-	}, types.AlloyFileVersionV2, l)
+	}, l)
 	require.NoError(t, err)
 
 	s.Start(context.TODO())
@@ -62,7 +62,7 @@ func TestUpdateConfig(t *testing.T) {
 	s, err := NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: 10,
 		FlushFrequency:    5 * time.Second,
-	}, f, func(stats types.SerializerStats) {}, types.AlloyFileVersionV2, l)
+	}, f, func(stats types.SerializerStats) {}, l)
 	require.NoError(t, err)
 	s.Start(context.TODO())
 	defer s.Stop()
@@ -95,7 +95,7 @@ func (f *fqq) Stop() {
 
 func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) error {
 	f.buf, _ = snappy.Decode(nil, value)
-	sg := v2.NewMarshaller()
+	sg := v1.GetSerializer()
 	items, err := sg.Unmarshal(meta, f.buf)
 	require.NoError(f.t, err)
 	f.total.Add(int64(len(items)))

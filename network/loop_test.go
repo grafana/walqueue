@@ -8,8 +8,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"github.com/golang/snappy"
-	"github.com/prometheus/prometheus/prompb"
 	"io"
 	"math/big"
 	"net"
@@ -17,6 +15,9 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/golang/snappy"
+	"github.com/prometheus/prometheus/prompb"
 
 	"github.com/go-kit/log"
 	"github.com/grafana/walqueue/types"
@@ -133,8 +134,7 @@ func TestTLSConnection(t *testing.T) {
 			require.NotNil(t, l, "newLoop should not return nil for valid TLS config")
 
 			// Create a test series for sending
-			pending := make([]types.MetricDatum, 1)
-			pending[0] = createSeries(t)
+			pending := []types.MetricDatum{createSeries(t)}
 
 			// Test connection by sending a request
 			ctx := context.Background()
@@ -158,18 +158,6 @@ func TestTLSConfigValidation(t *testing.T) {
 			name: "No TLS config",
 			tlsConfig: types.ConnectionConfig{
 				URL:           "http://example.com",
-				BatchCount:    10,
-				FlushInterval: time.Second,
-				Timeout:       time.Second,
-				UserAgent:     "test-client",
-			},
-			wantLoop: true,
-		},
-		{
-			name: "Partial TLS config (cert only)",
-			tlsConfig: types.ConnectionConfig{
-				URL:           "https://example.com",
-				TLSCert:       "cert",
 				BatchCount:    10,
 				FlushInterval: time.Second,
 				Timeout:       time.Second,

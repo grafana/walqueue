@@ -202,9 +202,12 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 			continue
 		}
 		md, valid := series.(types.MetadataDatum)
-		sendErr := q.network.SendMetadata(ctx, md)
-		if sendErr != nil {
-			level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)
+		if valid {
+
+			sendErr := q.network.SendMetadata(ctx, md)
+			if sendErr != nil {
+				level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)
+			}
 		}
 
 	}

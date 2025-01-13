@@ -68,7 +68,7 @@ func (s *serializer) SendMetric(ctx context.Context, l labels.Labels, t int64, v
 		return err
 	}
 	s.seriesCount++
-	// If we would go over the max size then send, or if we have hit the flush duration then send.
+	// If we would go over the max size then send.
 	if (s.seriesCount + s.metadataCount) > s.maxItemsBeforeFlush {
 		err = s.flushToDisk(ctx)
 		if err != nil {

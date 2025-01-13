@@ -1,7 +1,5 @@
 //go:generate msgp
-package types
-
-import "github.com/prometheus/prometheus/model/labels"
+package v1
 
 const MetaType = "__alloy_metadata_type__"
 const MetaUnit = "__alloy_metadata_unit__"
@@ -22,7 +20,6 @@ type SeriesGroup struct {
 // allocations.
 type TimeSeriesBinary struct {
 	// Labels are not serialized to msgp, instead we store separately a dictionary of strings and use `LabelNames` and `LabelValues` to refer to the dictionary by ID.
-	Labels       labels.Labels `msg:"-"`
 	LabelsNames  []uint32
 	LabelsValues []uint32
 	// TS is unix milliseconds.

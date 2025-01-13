@@ -1,10 +1,13 @@
-package types
+package v1
 
 import (
 	"bytes"
+	"strconv"
 	"sync"
 	"unique"
 	"unsafe"
+
+	"github.com/grafana/walqueue/types"
 
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -12,6 +15,93 @@ import (
 	"github.com/tinylib/msgp/msgp"
 	"go.uber.org/atomic"
 )
+
+func GetSerializer() types.PrometheusMarshaller {
+	return &Serialization{
+		sg: &SeriesGroup{
+			Series:   make([]*TimeSeriesBinary, 0),
+			Metadata: make([]*TimeSeriesBinary, 0),
+		},
+		strMap: make(map[string]uint32),
+	}
+}
+
+type Serialization struct {
+	sg     *SeriesGroup
+	strMap map[string]uint32
+}
+
+func (s *Serialization) AddPrometheusMetadata(name string, unit string, help string, pType string) error {
+	// Metadata in v1 is not supported. Technically the plumbing was there but it required additional code changes to support.
+	return nil
+}
+
+func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, _ map[string]string) error {
+	tss := s.createTimeSeries(ts, value, lbls, h, fh)
+	s.sg.Series = append(s.sg.Series, tss)
+	return nil
+}
+
+func (s *Serialization) Unmarshal(_ map[string]string, buf []byte) (items []types.Datum, err error) {
+	sg := &SeriesGroup{}
+	return DeserializeToSeriesGroup(sg, buf)
+}
+
+func (s *Serialization) Marshal(handle func(map[string]string, []byte) error) error {
+	defer func() {
+		PutTimeSeriesSliceIntoPool(s.sg.Series)
+		PutTimeSeriesSliceIntoPool(s.sg.Metadata)
+	}()
+	s.sg.Strings = make([]ByteString, len(s.strMap))
+	for k, v := range s.strMap {
+		s.sg.Strings[v] = ByteString(k)
+	}
+	meta := make(map[string]string)
+	meta["series_count"] = strconv.Itoa(len(s.sg.Series))
+	meta["meta_count"] = strconv.Itoa(len(s.sg.Metadata))
+	meta["strings_count"] = strconv.Itoa(len(s.sg.Strings))
+	buf, err := s.sg.MarshalMsg(nil)
+	if err != nil {
+		return err
+	}
+	return handle(meta, buf)
+}
+
+// createTimeSeries is what does the conversion from labels.Labels to LabelNames and
+// LabelValues while filling in the string map, that is later converted to []string.
+func (s *Serialization) createTimeSeries(t int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram) *TimeSeriesBinary {
+	ts := GetTimeSeriesFromPool()
+	ts.LabelsNames = setSliceLength(ts.LabelsNames, len(lbls))
+	ts.LabelsValues = setSliceLength(ts.LabelsValues, len(lbls))
+	ts.TS = t
+	ts.Value = value
+	ts.Hash = lbls.Hash()
+	if h != nil {
+		ts.FromHistogram(t, h)
+	}
+	if fh != nil {
+		ts.FromFloatHistogram(t, fh)
+	}
+
+	// This is where we deduplicate the ts.Labels into uint32 values
+	// that map to a string in the strings slice via the index.
+	for i, v := range lbls {
+		val, found := s.strMap[v.Name]
+		if !found {
+			val = uint32(len(s.strMap))
+			s.strMap[v.Name] = val
+		}
+		ts.LabelsNames[i] = val
+
+		val, found = s.strMap[v.Value]
+		if !found {
+			val = uint32(len(s.strMap))
+			s.strMap[v.Value] = val
+		}
+		ts.LabelsValues[i] = val
+	}
+	return ts
+}
 
 // String returns the underlying bytes as a string without copying.
 // This is a huge performance win with no side effect as long as
@@ -40,22 +130,6 @@ func (lh LabelHandles) Get(name string) string {
 		}
 	}
 	return ""
-}
-
-func MakeHandles(lbls labels.Labels) LabelHandles {
-	lhs := make([]LabelHandle, len(lbls))
-	for i, lbl := range lbls {
-		lhs[i] = LabelHandle{
-			Name:  unique.Make(lbl.Name),
-			Value: unique.Make(lbl.Value),
-		}
-	}
-	return lhs
-}
-
-// IsMetadata is used because it's easier to store metadata as a set of labels.
-func (ts TimeSeriesBinary) IsMetadata() bool {
-	return ts.Labels.Has("__alloy_metadata_type__")
 }
 
 func (h *Histogram) ToPromHistogram() prompb.Histogram {
@@ -143,32 +217,6 @@ func FromPromSpan(spans []histogram.Span) []BucketSpan {
 	return bs
 }
 
-// FillLabelMapping is what does the conversion from labels.Labels to LabelNames and
-// LabelValues while filling in the string map, that is later converted to []string.
-func (ts *TimeSeriesBinary) FillLabelMapping(strMapToInt map[string]uint32) {
-	ts.LabelsNames = setSliceLength(ts.LabelsNames, len(ts.Labels))
-	ts.LabelsValues = setSliceLength(ts.LabelsValues, len(ts.Labels))
-
-	// This is where we deduplicate the ts.Labels into uint32 values
-	// that map to a string in the strings slice via the index.
-	for i, v := range ts.Labels {
-		val, found := strMapToInt[v.Name]
-		if !found {
-			val = uint32(len(strMapToInt))
-			strMapToInt[v.Name] = val
-		}
-		ts.LabelsNames[i] = val
-
-		val, found = strMapToInt[v.Value]
-		if !found {
-			val = uint32(len(strMapToInt))
-			strMapToInt[v.Value] = val
-		}
-		ts.LabelsValues[i] = val
-	}
-
-}
-
 func setSliceLength(lbls []uint32, length int) []uint32 {
 	if cap(lbls) <= length {
 		lbls = make([]uint32, length)
@@ -214,7 +262,6 @@ func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
 	OutStandingTimeSeriesBinary.Dec()
 	ts.LabelsNames = ts.LabelsNames[:0]
 	ts.LabelsValues = ts.LabelsValues[:0]
-	ts.Labels = nil
 	ts.TS = 0
 	ts.Value = 0
 	ts.Hash = 0
@@ -224,48 +271,134 @@ func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
 }
 
 // DeserializeToSeriesGroup transforms a buffer to a SeriesGroup and converts the stringmap + indexes into actual Labels.
-func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) (*SeriesGroup, []byte, error) {
-
+func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]types.Datum, error) {
 	nr := msgp.NewReader(bytes.NewReader(buf))
 	err := sg.DecodeMsg(nr)
 	if err != nil {
-		return sg, nil, err
+		return nil, err
 	}
-	// Need to fill in the labels.
+	metrics := make([]types.Datum, 0, len(sg.Series)+len(sg.Metadata))
 	for _, series := range sg.Series {
-		if cap(series.Labels) < len(series.LabelsNames) {
-			series.Labels = make(labels.Labels, len(series.LabelsNames))
-		} else {
-			series.Labels = series.Labels[:len(series.LabelsNames)]
+		pm := prompb.TimeSeries{
+			Labels: make([]prompb.Label, len(series.LabelsNames)),
 		}
-		// Since the LabelNames/LabelValues are indexes into the Strings slice we can access it like the below.
-		// 1 Label corresponds to two entries, one in LabelsNames and one in LabelsValues.
 		for i := range series.LabelsNames {
-			series.Labels[i] = labels.Label{
-				Name:  sg.Strings[series.LabelsNames[i]].String(),
-				Value: sg.Strings[series.LabelsValues[i]].String(),
+			pm.Labels[i].Name = sg.Strings[series.LabelsNames[i]].String()
+			pm.Labels[i].Value = sg.Strings[series.LabelsValues[i]].String()
+		}
+
+		if series.Histograms.Histogram == nil && series.Histograms.FloatHistogram == nil {
+			pm.Samples = make([]prompb.Sample, 1)
+			pm.Samples[0].Value = series.Value
+			pm.Samples[0].Timestamp = series.TS
+		}
+		var isHistogram bool
+		if series.Histograms.Histogram != nil || series.Histograms.FloatHistogram != nil {
+			isHistogram = true
+			pm.Histograms = make([]prompb.Histogram, 1)
+			if series.Histograms.Histogram != nil {
+				pm.Histograms[0] = series.Histograms.Histogram.ToPromHistogram()
+			}
+			if series.Histograms.FloatHistogram != nil {
+				pm.Histograms[0] = series.Histograms.FloatHistogram.ToPromFloatHistogram()
 			}
 		}
-		series.LabelsNames = series.LabelsNames[:0]
-		series.LabelsValues = series.LabelsValues[:0]
+		buf, err = pm.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		metrics = append(metrics, &metric{
+			hash:        series.Hash,
+			ts:          series.TS,
+			buf:         buf,
+			isHistogram: isHistogram,
+		})
+
 	}
 	for _, series := range sg.Metadata {
-		if cap(series.Labels) < len(series.LabelsNames) {
-			series.Labels = make([]labels.Label, len(series.LabelsNames))
-		} else {
-			series.Labels = series.Labels[:len(series.LabelsNames)]
-		}
+		pmm := prompb.MetricMetadata{}
 		for i := range series.LabelsNames {
-			series.Labels[i] = labels.Label{
-				Name:  sg.Strings[series.LabelsNames[i]].String(),
-				Value: sg.Strings[series.LabelsValues[i]].String(),
+			name := sg.Strings[series.LabelsNames[i]].String()
+			value := sg.Strings[series.LabelsValues[i]].String()
+			switch name {
+			case MetaUnit:
+				pmm.Unit = value
+			case MetaHelp:
+				pmm.Help = value
+			case MetaType:
+				pmm.Unit = value
+			case "__name__":
+				pmm.MetricFamilyName = value
 			}
 		}
-		// Finally ensure we reset the labelnames and labelvalues.
-		series.LabelsNames = series.LabelsNames[:0]
-		series.LabelsValues = series.LabelsValues[:0]
+		metaBuf, err := pmm.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		metrics = append(metrics, &metadata{buf: metaBuf})
 	}
+	return metrics, nil
+}
 
-	sg.Strings = sg.Strings[:0]
-	return sg, buf, err
+var _ types.MetricDatum = (*metric)(nil)
+
+type metric struct {
+	hash        uint64
+	ts          int64
+	buf         []byte
+	isHistogram bool
+}
+
+func (m metric) Hash() uint64 {
+	return m.hash
+}
+
+func (m metric) TimeStampMS() int64 {
+	return m.ts
+}
+
+func (m metric) IsHistogram() bool {
+	return m.isHistogram
+}
+
+func (m metric) Bytes() []byte {
+	return m.buf
+}
+
+func (m metric) Type() types.Type {
+	return types.PrometheusMetricV1
+}
+
+func (m metric) FileFormat() types.FileFormat {
+	return types.AlloyFileVersionV1
+}
+
+func (m metric) Free() {
+}
+
+var _ types.MetadataDatum = (*metadata)(nil)
+
+type metadata struct {
+	buf []byte
+}
+
+func (m metadata) IsMeta() bool {
+	return true
+}
+
+// Bytes represents the underlying data and should not be handled aside from
+// Build* functions that understand the Type.
+func (m metadata) Bytes() []byte {
+	return m.buf
+}
+
+func (m metadata) Type() types.Type {
+	return types.PrometheusMetadataV1
+}
+
+func (m metadata) FileFormat() types.FileFormat {
+	return types.AlloyFileVersionV1
+}
+
+func (m metadata) Free() {
 }

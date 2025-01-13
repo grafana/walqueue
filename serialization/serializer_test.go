@@ -5,6 +5,8 @@ package serialization
 import (
 	"context"
 	"fmt"
+	v1 "github.com/grafana/walqueue/types/v1"
+	"math/rand"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,27 +36,24 @@ func TestRoundTripSerialization(t *testing.T) {
 	}, l)
 	require.NoError(t, err)
 
-	s.Start()
+	s.Start(context.TODO())
 	defer s.Stop()
 	for i := 0; i < 10; i++ {
-		tss := types.GetTimeSeriesFromPool()
-		tss.Labels = make(labels.Labels, 10)
+		lbls := make(labels.Labels, 10)
 		for j := 0; j < 10; j++ {
-			tss.Labels[j] = labels.Label{
+			lbls[j] = labels.Label{
 				Name:  fmt.Sprintf("name_%d_%d", i, j),
 				Value: fmt.Sprintf("value_%d_%d", i, j),
 			}
-			tss.Value = float64(i)
-			tss.TS = time.Now().UnixMilli()
 		}
-		sendErr := s.SendSeries(context.Background(), tss)
+		sendErr := s.SendMetric(context.Background(), lbls, time.Now().UnixMilli(), rand.Float64(), nil, nil, nil)
 		require.NoError(t, sendErr)
 	}
 	require.Eventually(t, func() bool {
 		return f.total.Load() == 10
-	}, 5*time.Second, 100*time.Millisecond)
-	// 100 series send from the above for loop
-	require.True(t, totalSeries.Load() == 10)
+	}, 10*time.Second, 1*time.Second)
+	// 10 series send from the above for loop
+	require.Truef(t, totalSeries.Load() == 10, "total series load does not equal 10 currently %d", totalSeries.Load())
 }
 
 func TestUpdateConfig(t *testing.T) {
@@ -65,7 +64,7 @@ func TestUpdateConfig(t *testing.T) {
 		FlushFrequency:    5 * time.Second,
 	}, f, func(stats types.SerializerStats) {}, l)
 	require.NoError(t, err)
-	s.Start()
+	s.Start(context.TODO())
 	defer s.Stop()
 	success, err := s.UpdateConfig(context.Background(), types.SerializerConfig{
 		MaxSignalsInBatch: 1,
@@ -96,19 +95,9 @@ func (f *fqq) Stop() {
 
 func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) error {
 	f.buf, _ = snappy.Decode(nil, value)
-	sg := &types.SeriesGroup{}
-	sg, _, err := types.DeserializeToSeriesGroup(sg, f.buf)
+	sg := v1.GetSerializer()
+	items, err := sg.Unmarshal(meta, f.buf)
 	require.NoError(f.t, err)
-	require.Len(f.t, sg.Series, 10)
-	for _, series := range sg.Series {
-		require.Len(f.t, series.LabelsNames, 0)
-		require.Len(f.t, series.LabelsValues, 0)
-		require.Len(f.t, series.Labels, 10)
-		for j := 0; j < 10; j++ {
-			series.Labels[j].Name = fmt.Sprintf("name_%d_%d", int(series.Value), j)
-			series.Labels[j].Value = fmt.Sprintf("value_%d_%d", int(series.Value), j)
-		}
-	}
-	f.total.Add(int64(len(sg.Series)))
+	f.total.Add(int64(len(items)))
 	return nil
 }

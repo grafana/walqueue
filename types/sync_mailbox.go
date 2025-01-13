@@ -2,6 +2,7 @@ package types
 
 import (
 	gocontext "context"
+
 	"github.com/vladopajic/go-actor/actor"
 )
 

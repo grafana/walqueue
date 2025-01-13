@@ -3,20 +3,19 @@ package network
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/log/level"
-
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
 	"github.com/vladopajic/go-actor/actor"
 )
 
 // manager manages loops. Mostly it exists to control their lifecycle and send work to them.
 type manager struct {
-	loops       []*loop
-	metadata    *loop
+	loops       []*loop[types.MetricDatum]
+	metadata    *loop[types.MetadataDatum]
 	logger      log.Logger
-	inbox       actor.Mailbox[*types.TimeSeriesBinary]
-	metaInbox   actor.Mailbox[*types.TimeSeriesBinary]
+	inbox       actor.Mailbox[types.MetricDatum]
+	metaInbox   actor.Mailbox[types.MetadataDatum]
 	configInbox *types.SyncMailbox[types.ConnectionConfig, bool]
 	self        actor.Actor
 	cfg         types.ConnectionConfig
@@ -30,12 +29,12 @@ var _ actor.Worker = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStats func(types.NetworkStats)) (types.NetworkClient, error) {
 	s := &manager{
-		loops:  make([]*loop, 0, cc.Connections),
+		loops:  make([]*loop[types.MetricDatum], 0, cc.Connections),
 		logger: logger,
 		// This provides blocking to only handle one at a time, so that if a queue blocks
 		// it will stop the filequeue from feeding more. Without passing true the minimum is actually 64 instead of 1.
-		inbox:       actor.NewMailbox[*types.TimeSeriesBinary](actor.OptCapacity(1), actor.OptAsChan()),
-		metaInbox:   actor.NewMailbox[*types.TimeSeriesBinary](actor.OptCapacity(1), actor.OptAsChan()),
+		inbox:       actor.NewMailbox[types.MetricDatum](actor.OptCapacity(1), actor.OptAsChan()),
+		metaInbox:   actor.NewMailbox[types.MetadataDatum](actor.OptCapacity(1), actor.OptAsChan()),
 		configInbox: types.NewSyncMailbox[types.ConnectionConfig, bool](),
 		stats:       seriesStats,
 		metaStats:   metadataStats,
@@ -44,7 +43,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.cfg.Connections; i++ {
-		l, err := newLoop(cc, false, logger, seriesStats)
+		l, err := newLoop[types.MetricDatum](cc, false, logger, seriesStats)
 		if err != nil {
 			level.Error(logger).Log("msg", "failed to create series loop", "err", err)
 			return nil, fmt.Errorf("failed to create series loop: %w", err)
@@ -53,7 +52,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 		s.loops = append(s.loops, l)
 	}
 
-	metadata, err := newLoop(cc, true, logger, metadataStats)
+	metadata, err := newLoop[types.MetadataDatum](cc, true, logger, metadataStats)
 	if err != nil {
 		level.Error(logger).Log("msg", "failed to create metadata loop", "err", err)
 		return nil, fmt.Errorf("failed to create metadata loop: %w", err)
@@ -72,11 +71,11 @@ func (s *manager) Start() {
 	s.self.Start()
 }
 
-func (s *manager) SendSeries(ctx context.Context, data *types.TimeSeriesBinary) error {
+func (s *manager) SendSeries(ctx context.Context, data types.MetricDatum) error {
 	return s.inbox.Send(ctx, data)
 }
 
-func (s *manager) SendMetadata(ctx context.Context, data *types.TimeSeriesBinary) error {
+func (s *manager) SendMetadata(ctx context.Context, data types.MetadataDatum) error {
 	return s.metaInbox.Send(ctx, data)
 }
 
@@ -154,9 +153,9 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) error {
 	// For the moment we will stop all the items and recreate them.
 	level.Debug(s.logger).Log("msg", "dropping all series in loops and creating queue due to config change")
 	s.stopLoops()
-	s.loops = make([]*loop, 0, s.cfg.Connections)
+	s.loops = make([]*loop[types.MetricDatum], 0, s.cfg.Connections)
 	for i := uint(0); i < s.cfg.Connections; i++ {
-		l, err := newLoop(cc, false, s.logger, s.stats)
+		l, err := newLoop[types.MetricDatum](cc, false, s.logger, s.stats)
 		if err != nil {
 			level.Error(s.logger).Log("msg", "failed to create series loop during config update", "err", err)
 			return err
@@ -165,7 +164,7 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) error {
 		s.loops = append(s.loops, l)
 	}
 
-	metadata, err := newLoop(cc, true, s.logger, s.metaStats)
+	metadata, err := newLoop[types.MetadataDatum](cc, true, s.logger, s.metaStats)
 	if err != nil {
 		level.Error(s.logger).Log("msg", "failed to create metadata loop during config update", "err", err)
 		return err
@@ -201,9 +200,9 @@ func (s *manager) startLoops() {
 }
 
 // Queue adds anything thats not metadata to the queue.
-func (s *manager) queue(ctx context.Context, ts *types.TimeSeriesBinary) {
+func (s *manager) queue(ctx context.Context, ts types.MetricDatum) {
 	// Based on a hash which is the label hash add to the queue.
-	queueNum := ts.Hash % uint64(s.cfg.Connections)
+	queueNum := ts.Hash() % uint64(s.cfg.Connections)
 	// This will block if the queue is full.
 	err := s.loops[queueNum].seriesMbx.Send(ctx, ts)
 	if err != nil {

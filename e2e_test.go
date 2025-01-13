@@ -22,9 +22,8 @@ import (
 	"time"
 )
 
-func TestV2E2E(b *testing.T) {
-	// BenchmarkV2E2E-20    	    2504	    451484 ns/op
-	dir := b.TempDir()
+func TestV2E2E(t *testing.T) {
+	dir := t.TempDir()
 	totalSeries := atomic.NewInt32(0)
 	mut := sync.Mutex{}
 	set := make(map[float64]struct{})
@@ -33,13 +32,13 @@ func TestV2E2E(b *testing.T) {
 		defer mut.Unlock()
 		defer r.Body.Close()
 		data, err := io.ReadAll(r.Body)
-		require.NoError(b, err)
+		require.NoError(t, err)
 		data, err = snappy.Decode(nil, data)
-		require.NoError(b, err)
+		require.NoError(t, err)
 
 		var req prompb.WriteRequest
 		err = req.Unmarshal(data)
-		require.NoError(b, err)
+		require.NoError(t, err)
 
 		for _, x := range req.GetTimeseries() {
 			totalSeries.Add(int32(len(x.Samples)))
@@ -61,7 +60,7 @@ func TestV2E2E(b *testing.T) {
 	}
 	q, err := prom.NewQueue("test", cc, dir, 10000, 1*time.Second, 1*time.Hour, prometheus.NewRegistry(), "alloy", log.NewLogfmtLogger(os.Stderr))
 
-	require.NoError(b, err)
+	require.NoError(t, err)
 	go q.Start()
 	defer q.Stop()
 
@@ -89,14 +88,14 @@ func TestV2E2E(b *testing.T) {
 		app := q.Appender(context.Background())
 		for _, m := range metrics {
 			_, err = app.Append(0, m.Labels, m.TS, float64(index))
-			require.NoError(b, err)
+			require.NoError(t, err)
 			index++
 		}
 		app.Commit()
 	}
-	require.Eventually(b, func() bool {
+	require.Eventually(t, func() bool {
 		return totalSeries.Load() == int32(metricCount*sends)
-	}, 50*time.Second, 50*time.Millisecond)
+	}, 50*time.Second, 1*time.Second)
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")

@@ -9,7 +9,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
-	v1 "github.com/grafana/walqueue/types/v1"
+	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/vladopajic/go-actor/actor"
@@ -47,7 +47,7 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		lastFlush:           time.Now(),
 		stats:               stats,
 		fileFormat:          types.AlloyFileVersionV2,
-		ser:                 v1.GetSerializer(),
+		ser:                 v2.NewMarshaller(),
 	}
 
 	return s, nil

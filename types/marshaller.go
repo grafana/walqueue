@@ -5,7 +5,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 )
 
-// Marshaller provides the ability to read and write for a given schema defined by the FileFormat.;
+// Marshaller provides the ability to write for a given schema defined by the FileFormat.
 // These are NOT threadsafe.
 type Marshaller interface {
 
@@ -23,6 +23,7 @@ type PrometheusMarshaller interface {
 	AddPrometheusMetadata(name string, unit string, help string, pType string) error
 }
 
+// Unmarshaller allows reading of a given FileFormat.
 type Unmarshaller interface {
 	// Unmarshal is called to create a list of datums.
 	// Metadata will be passed via the map.

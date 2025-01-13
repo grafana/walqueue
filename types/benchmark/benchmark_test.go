@@ -30,7 +30,8 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 	}
 	b.ResetTimer()
 	type test struct {
-		s    types.PrometheusMarshaller
+		m    types.PrometheusMarshaller
+		u    types.Unmarshaller
 		name string
 	}
 	tests := []test{
@@ -38,18 +39,20 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 			// The issue the large size in V1 is the fact I messed up and used string keys (the default) instead of
 			// tuple/index based.
 			name: "v1",
-			s:    v1.GetSerializer(),
+			m:    v1.GetSerializer(),
+			u:    v1.GetSerializer(),
 		},
 		{
 			name: "v2",
-			s:    v2.NewMarshaller(),
+			m:    v2.NewFormat(),
+			u:    v2.NewFormat(),
 		},
 	}
 
 	for _, tt := range tests {
 		b.Run(tt.name, func(t *testing.B) {
 			for n := 0; n < t.N; n++ {
-				s := tt.s
+				s := tt.m
 
 				for i := 0; i < 10_000; i++ {
 					aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, nil)
@@ -70,7 +73,7 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 
 				uncompressed, err := snappy.Decode(nil, compressed)
 				require.NoError(t, err)
-				items, _ := s.Unmarshal(kv, uncompressed)
+				items, _ := tt.u.Unmarshal(kv, uncompressed)
 				for _, item := range items {
 					item.Free()
 				}

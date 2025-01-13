@@ -13,7 +13,8 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 )
 
-type Marshaller struct {
+// Format describe the v2 data format.
+type Format struct {
 	series      *prompb.TimeSeries
 	seriesBuf   []byte
 	buf         *bytes.Buffer
@@ -26,8 +27,8 @@ const PrometheusMetric = uint8(1)
 const PrometheusExemplar = uint8(2)
 const PrometheusMetadata = uint8(3)
 
-func NewMarshaller() types.PrometheusMarshaller {
-	return &Marshaller{
+func NewFormat() *Format {
+	return &Format{
 		buf: bytes.NewBuffer(nil),
 		series: &prompb.TimeSeries{
 			Samples:   make([]prompb.Sample, 0),
@@ -40,7 +41,7 @@ func NewMarshaller() types.PrometheusMarshaller {
 }
 
 // AddPrometheusMetric marshals a prometheus metric to its prombpb.TimeSeries representation and writes it to the buffer.
-func (s *Marshaller) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error {
+func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error {
 	defer func() {
 		s.series.Labels = s.series.Labels[:0]
 		s.series.Samples = s.series.Samples[:0]
@@ -140,7 +141,7 @@ func (s *Marshaller) AddPrometheusMetric(ts int64, value float64, lbls labels.La
 	return nil
 }
 
-func (s *Marshaller) AddPrometheusMetadata(name string, unit string, help string, pType string) error {
+func (s *Format) AddPrometheusMetadata(name string, unit string, help string, pType string) error {
 	theType := FromMetadataType(model.MetricType(pType))
 	md := &prompb.MetricMetadata{
 		Type:             theType,
@@ -166,7 +167,7 @@ func (s *Marshaller) AddPrometheusMetadata(name string, unit string, help string
 	return nil
 }
 
-func (s *Marshaller) Unmarshal(meta map[string]string, buf []byte) (items []types.Datum, err error) {
+func (s *Format) Unmarshal(meta map[string]string, buf []byte) (items []types.Datum, err error) {
 	strCount, found := meta["record_count"]
 	if !found {
 		return nil, fmt.Errorf("missing record count")
@@ -204,7 +205,7 @@ func (s *Marshaller) Unmarshal(meta map[string]string, buf []byte) (items []type
 	return datums, nil
 }
 
-func (s *Marshaller) Marshal(handle func(map[string]string, []byte) error) error {
+func (s *Format) Marshal(handle func(map[string]string, []byte) error) error {
 	defer func() {
 		s.buf.Reset()
 		s.recordCount = 0

@@ -16,7 +16,7 @@ import (
 )
 
 func TestDeserializeAndSerialize(t *testing.T) {
-	s := NewMarshaller()
+	s := NewFormat()
 	lbls := make(labels.Labels, 0)
 	for i := 0; i < 10; i++ {
 		lbls = append(lbls, labels.Label{
@@ -72,7 +72,7 @@ func TestExternalLabels(t *testing.T) {
 		"foo":     "bar",
 		"label_1": "bad_value",
 	}
-	s := NewMarshaller()
+	s := NewFormat()
 	lbls := make(labels.Labels, 0)
 	for i := 0; i < 10; i++ {
 		lbls = append(lbls, labels.Label{
@@ -116,7 +116,7 @@ func TestExternalLabels(t *testing.T) {
 func TestBackwardsCompatability(t *testing.T) {
 	buf, err := os.ReadFile("v2.bin")
 	require.NoError(t, err)
-	sg := NewMarshaller()
+	sg := NewFormat()
 	metrics, err := sg.Unmarshal(map[string]string{"record_count": "200"}, buf)
 	require.NoError(t, err)
 	require.Len(t, metrics, 200)

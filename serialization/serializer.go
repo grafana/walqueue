@@ -47,7 +47,7 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		lastFlush:           time.Now(),
 		stats:               stats,
 		fileFormat:          types.AlloyFileVersionV2,
-		ser:                 v2.NewMarshaller(),
+		ser:                 v2.NewFormat(),
 	}
 
 	return s, nil

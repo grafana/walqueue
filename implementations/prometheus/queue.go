@@ -172,12 +172,13 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		return
 	}
 	var items []types.Datum
+	var s types.Unmarshaller
 	switch types.FileFormat(version) {
 	case types.AlloyFileVersionV1:
-		s := v1.GetSerializer()
+		s = v1.GetSerializer()
 		items, err = s.Unmarshal(meta, uncompressedBuf)
 	case types.AlloyFileVersionV2:
-		s := v2.NewMarshaller()
+		s = v2.NewFormat()
 		items, err = s.Unmarshal(meta, uncompressedBuf)
 	default:
 		level.Error(q.logger).Log("msg", "invalid version found for deserialization", "version", version)

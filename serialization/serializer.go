@@ -46,7 +46,7 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		flushTestTimer:      time.NewTicker(1 * time.Second),
 		lastFlush:           time.Now(),
 		stats:               stats,
-		fileFormat:          types.AlloyFileVersionV1,
+		fileFormat:          types.AlloyFileVersionV2,
 		ser:                 v1.GetSerializer(),
 	}
 
@@ -143,7 +143,7 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 
 	var out []byte
 	err = s.ser.Marshal(func(meta map[string]string, buf []byte) error {
-		meta["version"] = string(types.AlloyFileVersionV1)
+		meta["version"] = string(types.AlloyFileVersionV2)
 		meta["compression"] = "snappy"
 		// TODO: reusing a buffer here likely increases performance.
 		out = snappy.Encode(buf)

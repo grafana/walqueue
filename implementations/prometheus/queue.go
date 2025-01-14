@@ -187,7 +187,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	if err != nil {
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
-	level.Debug(q.logger).Log("found file format %s to unmarshal", version)
+	level.Debug(q.logger).Log("found file format to unmarshal", version)
 
 	for _, series := range items {
 		// Check that the TTL.

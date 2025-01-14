@@ -26,20 +26,21 @@ var _ actor.Worker = (*loop[types.MetricDatum])(nil)
 // loop makes no attempt to save or restore signals in the queue.
 // loop config cannot be updated, it is easier to recreate. This does mean we lose any signals in the queue.
 type loop[T types.Datum] struct {
-	isMeta         bool
-	seriesMbx      actor.Mailbox[T]
-	client         *http.Client
-	cfg            types.ConnectionConfig
-	log            log.Logger
-	lastSend       time.Time
-	statsFunc      func(s types.NetworkStats)
-	stopCalled     atomic.Bool
-	externalLabels map[string]string
-	self           actor.Actor
-	ticker         *time.Ticker
-	buf            *proto.Buffer
-	sendBuffer     []byte
-	items          *datumSlice[T]
+	isMeta             bool
+	seriesMbx          actor.Mailbox[T]
+	client             *http.Client
+	cfg                types.ConnectionConfig
+	log                log.Logger
+	lastSend           time.Time
+	statsFunc          func(s types.NetworkStats)
+	stopCalled         atomic.Bool
+	externalLabels     map[string]string
+	self               actor.Actor
+	ticker             *time.Ticker
+	buf                *proto.Buffer
+	sendBuffer         []byte
+	items              *datumSlice[T]
+	writeRequestBuffer *bytes.Buffer
 }
 
 func newLoop[T types.Datum](cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop[T], error) {
@@ -55,17 +56,18 @@ func newLoop[T types.Datum](cc types.ConnectionConfig, isMetaData bool, l log.Lo
 		return nil, err
 	}
 	return &loop[T]{
-		isMeta:         isMetaData,
-		seriesMbx:      actor.NewMailbox[T](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
-		client:         httpClient,
-		cfg:            cc,
-		log:            log.With(l, "name", "loop", "url", cc.URL),
-		statsFunc:      stats,
-		externalLabels: cc.ExternalLabels,
-		ticker:         time.NewTicker(1 * time.Second),
-		buf:            proto.NewBuffer(nil),
-		sendBuffer:     make([]byte, 0),
-		items:          &datumSlice[T]{m: make([]T, 0)},
+		isMeta:             isMetaData,
+		seriesMbx:          actor.NewMailbox[T](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
+		client:             httpClient,
+		cfg:                cc,
+		log:                log.With(l, "name", "loop", "url", cc.URL),
+		statsFunc:          stats,
+		externalLabels:     cc.ExternalLabels,
+		ticker:             time.NewTicker(1 * time.Second),
+		buf:                proto.NewBuffer(nil),
+		sendBuffer:         make([]byte, 0),
+		items:              &datumSlice[T]{m: make([]T, 0)},
+		writeRequestBuffer: bytes.NewBuffer(nil),
 	}, nil
 }
 
@@ -176,11 +178,12 @@ func (l *loop[T]) send(series []T, ctx context.Context, retryCount int) sendResu
 	result := sendResult{}
 	defer func() {
 		recordStats(series, l.isMeta, l.statsFunc, result, len(l.sendBuffer))
+		l.writeRequestBuffer.Reset()
 	}()
 	// Check to see if this is a retry and we can reuse the buffer.
 	// I wonder if we should do this, its possible we are sending things that have exceeded the TTL.
 	if len(l.sendBuffer) == 0 {
-		data, wrErr := generateWriteRequest[T](series)
+		data, wrErr := generateWriteRequest[T](series, l.writeRequestBuffer)
 		if wrErr != nil {
 			result.err = wrErr
 			result.recoverableError = false

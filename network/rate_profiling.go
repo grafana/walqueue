@@ -2,47 +2,51 @@ package network
 
 import (
 	"context"
-	"sync"
+	"github.com/grafana/walqueue/types"
+	"slices"
 	"time"
 
 	"go.uber.org/atomic"
 )
 
 type profiler struct {
-	mut           sync.Mutex
-	interval      time.Duration
+	configInbox   *types.SyncMailbox[config, bool]
 	resetInterval time.Duration
 	// networkErrors is any 4xx,5xx.
 	networkErrors         []time.Time
 	timestampDriftSeconds int
-	allowedDriftSeconds   atomic.Int64
-	maxLoops              int
-	minLoops              int
-	currentLoops          int
 	loopBatch             int
 	out                   chan int
+	currentLoops          int
+	cfg                   config
+	// Whenever a new point is calculated it is added to here. This is used
+	// to reduce flapping behavior. So if the lookback is 5m then the
+	// find the max number of records for the past 5 minutes when it needs to downgrade
+	// and use those. This is only used when scaling down.
+	past []pastPoints
 }
 
-func newProfiler(interval time.Duration, resetInterval time.Duration, allowedDriftSeconds int, maxLoops int, minLoops int, loopBatch int, out chan int) *profiler {
+type pastPoints struct {
+	desiredLoops int
+	ts           time.Time
+}
+
+type config struct {
+	maxLoops            int
+	minLoops            int
+	allowedDriftSeconds int
+	interval            time.Duration
+}
+
+func newProfiler(cfg config, out chan int) *profiler {
 	return &profiler{
-		interval:            interval,
-		resetInterval:       resetInterval,
-		maxLoops:            maxLoops,
-		minLoops:            minLoops,
-		loopBatch:           loopBatch,
-		currentLoops:        minLoops,
-		out:                 out,
-		allowedDriftSeconds: *atomic.NewInt64(int64(allowedDriftSeconds)),
+		cfg: cfg,
+		out: out,
 	}
 }
 
-func (p *profiler) updateConfig(maxLoops int, minLoops int, loopBatch int) {
-	p.mut.Lock()
-	defer p.mut.Unlock()
-
-	p.maxLoops = maxLoops
-	p.minLoops = minLoops
-	p.loopBatch = loopBatch
+func (p *profiler) updateConfig(ctx context.Context, cfg config) (bool, error) {
+	return p.configInbox.Send(ctx, cfg)
 }
 
 func (p *profiler) run(ctx context.Context) {
@@ -57,8 +61,6 @@ func (p *profiler) run(ctx context.Context) {
 }
 
 func (p *profiler) desiredLoops() {
-	p.mut.Lock()
-	defer p.mut.Unlock()
 
 	// Dont bother calculating if loops are the same value.
 	if p.minLoops == p.maxLoops {
@@ -74,6 +76,17 @@ func (p *profiler) desiredLoops() {
 
 	// If we have network errors then ramp down the number of loops.
 	if len(p.networkErrors) > 0 {
+		maxPast := p.highestDesiredLast()
+		if maxPast > p.currentLoops-1 {
+			// Need to append last point
+			p.past = append(p.past, pastPoints{
+				desiredLoops: p.currentLoops - 1,
+				ts:           time.Now(),
+			})
+			p.out <- p.currentLoops - 1
+			return
+
+		}
 		// Need to keep the value between min and max.
 		if p.currentLoops-1 >= p.minLoops {
 			p.currentLoops--
@@ -90,4 +103,42 @@ func (p *profiler) desiredLoops() {
 		p.out <- p.currentLoops
 		return
 	}
+	// If we are drifting too much then ramp up the number of loops.
+	if p.timestampDriftSeconds < int(p.allowedDriftSeconds.Load()) {
+		// refactor this.
+		maxPast := p.highestDesiredLast()
+		if maxPast > p.currentLoops-1 {
+			// Need to append last point
+			p.past = append(p.past, pastPoints{
+				desiredLoops: p.currentLoops - 1,
+				ts:           time.Now(),
+			})
+			p.out <- p.currentLoops - 1
+			return
+		}
+		// Need to keep the value between min and max.
+		if p.currentLoops-1 >= p.minLoops {
+			p.currentLoops--
+		}
+		p.out <- p.currentLoops
+		return
+	}
+}
+
+func (p *profiler) highestDesiredLast() int {
+	if len(p.past) == 0 {
+		return 0
+	}
+	for _, ts := range p.past {
+		if time.Since(ts.ts) > 5*time.Minute {
+			p.past = p.past[1:]
+		}
+	}
+	maxValue := slices.MaxFunc(p.past, func(a, b pastPoints) int {
+		if a.desiredLoops > b.desiredLoops {
+			return a.desiredLoops
+		}
+		return b.desiredLoops
+	})
+	return maxValue.desiredLoops
 }

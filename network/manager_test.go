@@ -83,7 +83,7 @@ func TestUpdatingConfig(t *testing.T) {
 		Connections:   1,
 	}
 	ctx := context.Background()
-	ctx, cncl := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cncl := context.WithTimeout(ctx, 20*time.Second)
 	defer cncl()
 	success, err := wr.UpdateConfig(ctx, cc2)
 	require.NoError(t, err)

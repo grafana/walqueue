@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
+	"go.uber.org/goleak"
 	"io"
 	"math/rand"
 	"net/http"
@@ -23,6 +24,8 @@ import (
 )
 
 func TestV2E2E(t *testing.T) {
+	goleak.VerifyNone(t)
+
 	dir := t.TempDir()
 	totalSeries := atomic.NewInt32(0)
 	mut := sync.Mutex{}
@@ -61,8 +64,7 @@ func TestV2E2E(t *testing.T) {
 	q, err := prom.NewQueue("test", cc, dir, 10000, 1*time.Second, 1*time.Hour, prometheus.NewRegistry(), "alloy", log.NewLogfmtLogger(os.Stderr))
 
 	require.NoError(t, err)
-	go q.Start()
-	defer q.Stop()
+	go q.Start(context.Background())
 
 	metricCount := 100
 	sends := 2
@@ -96,6 +98,8 @@ func TestV2E2E(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return totalSeries.Load() == int32(metricCount*sends)
 	}, 50*time.Second, 1*time.Second)
+	q.Stop()
+	srv.Close()
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")

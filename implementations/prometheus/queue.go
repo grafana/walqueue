@@ -2,7 +2,6 @@ package prometheus
 
 import (
 	"context"
-	v2 "github.com/grafana/walqueue/types/v2"
 	"sync"
 	"time"
 
@@ -14,9 +13,9 @@ import (
 	"github.com/grafana/walqueue/serialization"
 	"github.com/grafana/walqueue/types"
 	v1 "github.com/grafana/walqueue/types/v1"
+	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/vladopajic/go-actor/actor"
 )
 
 var pool = sync.Pool{New: func() interface{} { return make([]byte, 0) }}
@@ -31,7 +30,7 @@ var _ Queue = (*queue)(nil)
 //
 // Appender returns an Appender that writes to the queue.
 type Queue interface {
-	Start()
+	Start(ctx context.Context)
 	Stop()
 	Appender(ctx context.Context) storage.Appender
 }
@@ -42,9 +41,8 @@ type queue struct {
 	queue          types.FileStorage
 	logger         log.Logger
 	serializer     types.PrometheusSerializer
-	self           actor.Actor
 	ttl            time.Duration
-	incoming       actor.Mailbox[types.DataHandle]
+	incoming       *types.Mailbox[types.DataHandle]
 	stats          *PrometheusStats
 	metaStats      *PrometheusStats
 	externalLabels map[string]string
@@ -81,7 +79,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		return nil, err
 	}
 	q := &queue{
-		incoming:       actor.NewMailbox[types.DataHandle](),
+		incoming:       types.NewMailbox[types.DataHandle](),
 		stats:          stats,
 		metaStats:      meta,
 		network:        networkClient,
@@ -90,9 +88,9 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		externalLabels: cc.ExternalLabels,
 	}
 	fq, err := filequeue.NewQueue(directory, func(ctx context.Context, dh types.DataHandle) {
-		sendErr := q.incoming.Send(ctx, dh)
-		if sendErr != nil {
-			level.Error(logger).Log("msg", "failed to send to incoming", "err", sendErr)
+		err := q.incoming.Send(ctx, dh)
+		if err != nil {
+			level.Error(logger).Log("msg", "failed to send to incoming", "err", err)
 		}
 	}, logger)
 	if err != nil {
@@ -110,18 +108,14 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	return q, nil
 }
 
-func (q *queue) Start() {
-	q.self = actor.New(q)
-	q.self.Start()
-	q.incoming.Start()
-	q.network.Start()
-	q.queue.Start()
-	q.serializer.Start(context.TODO())
+func (q *queue) Start(ctx context.Context) {
+	q.network.Start(ctx)
+	q.queue.Start(ctx)
+	q.serializer.Start(ctx)
+	go q.run(ctx)
 }
 
 func (q *queue) Stop() {
-	q.self.Stop()
-	q.incoming.Stop()
 	q.network.Stop()
 	q.queue.Stop()
 	q.serializer.Stop()
@@ -130,21 +124,22 @@ func (q *queue) Stop() {
 	q.metaStats.Unregister()
 }
 
-func (q *queue) DoWork(ctx actor.Context) actor.WorkerStatus {
-	select {
-	case <-ctx.Done():
-		return actor.WorkerEnd
-	case file, ok := <-q.incoming.ReceiveC():
-		if !ok {
-			return actor.WorkerEnd
+func (q *queue) run(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case file, ok := <-q.incoming.Receive():
+			if !ok {
+				return
+			}
+			meta, buf, err := file.Pop()
+			if err != nil {
+				level.Error(q.logger).Log("msg", "unable to get file contents", "name", file.Name, "err", err)
+				continue
+			}
+			q.deserializeAndSend(ctx, meta, buf)
 		}
-		meta, buf, err := file.Pop()
-		if err != nil {
-			level.Error(q.logger).Log("msg", "unable to get file contents", "name", file.Name, "err", err)
-			return actor.WorkerContinue
-		}
-		q.deserializeAndSend(ctx, meta, buf)
-		return actor.WorkerContinue
 	}
 }
 
@@ -187,7 +182,6 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	if err != nil {
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
-	level.Debug(q.logger).Log("found file format %s to unmarshal", version)
 
 	for _, series := range items {
 		// Check that the TTL.

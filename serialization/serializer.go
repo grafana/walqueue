@@ -12,7 +12,6 @@ import (
 	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/vladopajic/go-actor/actor"
 	"go.uber.org/atomic"
 )
 
@@ -134,7 +133,7 @@ func (s *serializer) UpdateConfig(_ context.Context, cfg types.SerializerConfig)
 	return true, nil
 }
 
-func (s *serializer) flushToDisk(ctx actor.Context) error {
+func (s *serializer) flushToDisk(ctx context.Context) error {
 	var err error
 	defer func() {
 		s.lastFlush = time.Now()

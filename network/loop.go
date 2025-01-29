@@ -16,30 +16,28 @@ import (
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/common/config"
-	"github.com/vladopajic/go-actor/actor"
 	"go.uber.org/atomic"
+	"golang.design/x/chann"
 )
-
-var _ actor.Worker = (*loop[types.MetricDatum])(nil)
 
 // loop handles the low level sending of data. It's conceptually a queue.
 // loop makes no attempt to save or restore signals in the queue.
 // loop config cannot be updated, it is easier to recreate. This does mean we lose any signals in the queue.
 type loop[T types.Datum] struct {
-	isMeta         bool
-	seriesMbx      actor.Mailbox[T]
-	client         *http.Client
-	cfg            types.ConnectionConfig
-	log            log.Logger
-	lastSend       time.Time
-	statsFunc      func(s types.NetworkStats)
-	stopCalled     atomic.Bool
-	externalLabels map[string]string
-	self           actor.Actor
-	ticker         *time.Ticker
-	buf            *proto.Buffer
-	sendBuffer     []byte
-	items          *datumSlice[T]
+	isMeta     bool
+	seriesMbx  *types.Mailbox[T]
+	client     *http.Client
+	cfg        types.ConnectionConfig
+	log        log.Logger
+	lastSend   time.Time
+	statsFunc  func(s types.NetworkStats)
+	stopCalled atomic.Bool
+	drainStop  atomic.Bool
+	ticker     *time.Ticker
+	buf        *proto.Buffer
+	sendBuffer []byte
+	items      *datumSlice[T]
+	done       chan struct{}
 }
 
 func newLoop[T types.Datum](cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop[T], error) {
@@ -55,64 +53,78 @@ func newLoop[T types.Datum](cc types.ConnectionConfig, isMetaData bool, l log.Lo
 		return nil, err
 	}
 	return &loop[T]{
-		isMeta:         isMetaData,
-		seriesMbx:      actor.NewMailbox[T](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
-		client:         httpClient,
-		cfg:            cc,
-		log:            log.With(l, "name", "loop", "url", cc.URL),
-		statsFunc:      stats,
-		externalLabels: cc.ExternalLabels,
-		ticker:         time.NewTicker(1 * time.Second),
-		buf:            proto.NewBuffer(nil),
-		sendBuffer:     make([]byte, 0),
-		items:          &datumSlice[T]{m: make([]T, 0)},
+		isMeta:     isMetaData,
+		seriesMbx:  types.NewMailbox[T](chann.Cap(cc.BatchCount)),
+		client:     httpClient,
+		cfg:        cc,
+		log:        log.With(l, "name", "loop", "url", cc.URL),
+		statsFunc:  stats,
+		ticker:     time.NewTicker(1 * time.Second),
+		buf:        proto.NewBuffer(nil),
+		sendBuffer: make([]byte, 0),
+		items:      &datumSlice[T]{m: make([]T, 0)},
+		done:       make(chan struct{}),
 	}, nil
 }
 
-func (l *loop[T]) Start() {
-	l.self = actor.Combine(l.actors()...).Build()
-	l.self.Start()
+func (l *loop[T]) Start(ctx context.Context) {
+	go l.run(ctx)
 }
 
+// Stop this should be called when you need to stop the loop without allowing the queue to empty.
 func (l *loop[T]) Stop() {
 	l.stopCalled.Store(true)
-	l.self.Stop()
+	<-l.done
 }
 
-func (l *loop[T]) actors() []actor.Actor {
-	return []actor.Actor{
-		actor.New(l),
-		l.seriesMbx,
-	}
+// DrainStop will send all the samples currently enqueued but will not longer accept new work.
+// This will allow a graceful stopping of the loop.
+func (l *loop[T]) DrainStop() {
+	l.drainStop.Store(true)
 }
 
-func (l *loop[T]) DoWork(ctx actor.Context) actor.WorkerStatus {
+func (l *loop[T]) run(ctx context.Context) {
+	defer func() {
+		l.done <- struct{}{}
+	}()
 	send := func(series T) {
 		l.items.Add(series)
 		if l.items.Len() >= l.cfg.BatchCount {
 			l.trySend(l.items.SliceAndReset(), ctx)
 		}
-
 	}
-	// Main select loop
-	select {
-	case <-ctx.Done():
-		return actor.WorkerEnd
-	// Ticker is to ensure the flush timer is called.
-	case <-l.ticker.C:
-		if l.items.Len() == 0 && !l.isMeta {
-			return actor.WorkerContinue
+
+	for {
+		// Stop is hard stop.
+		if l.stopCalled.Load() {
+			return
 		}
-		if time.Since(l.lastSend) > l.cfg.FlushInterval && l.items.Len() > 0 {
-			l.trySend(l.items.SliceAndReset(), ctx)
+		// If drain stop has been called and the queue is empty then we can stop.
+		// Though length is an approximation, once drain stop has been called no work should be coming through.
+		// There is a chance of samples being dropped due to OOO but this at least gives them a chance.
+		if l.drainStop.Load() && l.seriesMbx.AproxLen() == 0 {
+			return
 		}
-		return actor.WorkerContinue
-	case series, ok := <-l.seriesMbx.ReceiveC():
-		if !ok {
-			return actor.WorkerEnd
+		// Main select loop
+		select {
+		case <-ctx.Done():
+			return
+		// Ticker is to ensure the flush timer is called.
+		case <-l.ticker.C:
+			if l.items.Len() == 0 && !l.isMeta {
+				continue
+			}
+			if time.Since(l.lastSend) > l.cfg.FlushInterval && l.items.Len() > 0 {
+				l.trySend(l.items.SliceAndReset(), ctx)
+			}
+			continue
+		case series, ok := <-l.seriesMbx.Receive():
+			if !ok {
+				return
+			}
+			send(series)
+			continue
 		}
-		send(series)
-		return actor.WorkerContinue
 	}
 }
 

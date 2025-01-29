@@ -7,6 +7,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
 	"github.com/vladopajic/go-actor/actor"
+	"golang.design/x/chann"
 )
 
 // manager manages loops. Mostly it exists to control their lifecycle and send work to them.
@@ -14,10 +15,9 @@ type manager struct {
 	loops       []*loop[types.MetricDatum]
 	metadata    *loop[types.MetadataDatum]
 	logger      log.Logger
-	inbox       actor.Mailbox[types.MetricDatum]
-	metaInbox   actor.Mailbox[types.MetadataDatum]
+	inbox       *types.Mailbox[types.MetricDatum]
+	metaInbox   *types.Mailbox[types.MetadataDatum]
 	configInbox *types.SyncMailbox[types.ConnectionConfig, bool]
-	self        actor.Actor
 	cfg         types.ConnectionConfig
 	stats       func(types.NetworkStats)
 	metaStats   func(types.NetworkStats)
@@ -25,17 +25,15 @@ type manager struct {
 
 var _ types.NetworkClient = (*manager)(nil)
 
-var _ actor.Worker = (*manager)(nil)
-
 func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStats func(types.NetworkStats)) (types.NetworkClient, error) {
 	s := &manager{
 		loops:  make([]*loop[types.MetricDatum], 0, cc.Connections),
 		logger: logger,
 		// This provides blocking to only handle one at a time, so that if a queue blocks
-		// it will stop the filequeue from feeding more. Without passing true the minimum is actually 64 instead of 1.
-		inbox:       actor.NewMailbox[types.MetricDatum](actor.OptCapacity(1), actor.OptAsChan()),
-		metaInbox:   actor.NewMailbox[types.MetadataDatum](actor.OptCapacity(1), actor.OptAsChan()),
-		configInbox: types.NewSyncMailbox[types.ConnectionConfig, bool](),
+		// it will stop the filequeue from feeding more.
+		inbox:       types.NewMailbox[types.MetricDatum](chann.Cap(1)),
+		metaInbox:   types.NewMailbox[types.MetadataDatum](chann.Cap(1)),
+		configInbox: types.NewSyncMailbox[types.ConnectionConfig, bool](chann.Cap(1)),
 		stats:       seriesStats,
 		metaStats:   metadataStats,
 		cfg:         cc,
@@ -48,7 +46,6 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 			level.Error(logger).Log("msg", "failed to create series loop", "err", err)
 			return nil, fmt.Errorf("failed to create series loop: %w", err)
 		}
-		l.self = actor.New(l)
 		s.loops = append(s.loops, l)
 	}
 
@@ -58,17 +55,12 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 		return nil, fmt.Errorf("failed to create metadata loop: %w", err)
 	}
 	s.metadata = metadata
-	s.metadata.self = actor.New(s.metadata)
 	return s, nil
 }
 
-func (s *manager) Start() {
-	s.startLoops()
-	s.configInbox.Start()
-	s.metaInbox.Start()
-	s.inbox.Start()
-	s.self = actor.New(s)
-	s.self.Start()
+func (s *manager) Start(ctx context.Context) {
+	s.startLoops(ctx)
+	go s.run(ctx)
 }
 
 func (s *manager) SendSeries(ctx context.Context, data types.MetricDatum) error {
@@ -80,68 +72,80 @@ func (s *manager) SendMetadata(ctx context.Context, data types.MetadataDatum) er
 }
 
 func (s *manager) UpdateConfig(ctx context.Context, cc types.ConnectionConfig) (bool, error) {
-	return s.configInbox.Send(ctx, cc)
+	return s.configInbox.In(ctx, cc)
 }
 
-func (s *manager) DoWork(ctx actor.Context) actor.WorkerStatus {
+func (s *manager) run(ctx actor.Context) {
+	for {
+		// checkConfig returns a value if we should continue the loop or can we exit early.
+		cont := s.checkConfig(ctx)
+		if !cont {
+			return
+		}
+		cont = s.mainWork(ctx)
+		if !cont {
+			return
+		}
+	}
+}
+
+func (s *manager) checkConfig(ctx context.Context) bool {
 	// This acts as a priority queue, always check for configuration changes first.
 	select {
-	case cfg, ok := <-s.configInbox.ReceiveC():
+	case cfg, ok := <-s.configInbox.Out():
 		var successful bool
 		if !ok {
 			level.Debug(s.logger).Log("msg", "config inbox closed")
-			return actor.WorkerEnd
+			return false
 		}
 		var err error
-		defer func() {
-			cfg.Notify(successful, err)
-		}()
-		if err = s.updateConfig(cfg.Value); err == nil {
+		if err = s.updateConfig(ctx, cfg.Value); err == nil {
 			successful = true
 		}
-		return actor.WorkerContinue
+		cfg.Notify(successful, err)
+		return true
 	default:
 	}
+	return true
+}
 
+func (s *manager) mainWork(ctx context.Context) bool {
 	// main work queue.
 	select {
 	case <-ctx.Done():
-		return actor.WorkerEnd
-	case ts, ok := <-s.inbox.ReceiveC():
+		return false
+	case ts, ok := <-s.inbox.Receive():
 		if !ok {
 			level.Debug(s.logger).Log("msg", "series inbox closed")
-			return actor.WorkerEnd
+			return false
 		}
 		s.queue(ctx, ts)
-		return actor.WorkerContinue
-	case ts, ok := <-s.metaInbox.ReceiveC():
+		return true
+	case ts, ok := <-s.metaInbox.Receive():
 		if !ok {
 			level.Debug(s.logger).Log("msg", "meta inbox closed")
-			return actor.WorkerEnd
+			return false
 		}
 		err := s.metadata.seriesMbx.Send(ctx, ts)
 		if err != nil {
-			level.Error(s.logger).Log("msg", "failed to send to metadata loop", "err", err)
+			level.Error(s.logger).Log("msg", "failed to send metadata", "err", err)
 		}
-		return actor.WorkerContinue
-	case cfg, ok := <-s.configInbox.ReceiveC():
+	case cfg, ok := <-s.configInbox.Out():
 		var successful bool
 		if !ok {
 			level.Debug(s.logger).Log("msg", "config inbox closed")
-			return actor.WorkerEnd
+			return false
 		}
 		var err error
-		defer func() {
-			cfg.Notify(successful, err)
-		}()
-		if err = s.updateConfig(cfg.Value); err == nil {
+		if err = s.updateConfig(ctx, cfg.Value); err == nil {
 			successful = true
 		}
-		return actor.WorkerContinue
+		cfg.Notify(successful, err)
 	}
+	return true
 }
 
-func (s *manager) updateConfig(cc types.ConnectionConfig) error {
+func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig) error {
 	// No need to do anything if the configuration is the same.
 	if s.cfg.Equals(cc) {
 		return nil
@@ -152,7 +156,7 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) error {
 	// In practice this shouldn't change often so data loss should be minimal.
 	// For the moment we will stop all the items and recreate them.
 	level.Debug(s.logger).Log("msg", "dropping all series in loops and creating queue due to config change")
-	s.stopLoops()
+	s.drainLoops()
 	s.loops = make([]*loop[types.MetricDatum], 0, s.cfg.Connections)
 	for i := uint(0); i < s.cfg.Connections; i++ {
 		l, err := newLoop[types.MetricDatum](cc, false, s.logger, s.stats)
@@ -160,7 +164,6 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) error {
 			level.Error(s.logger).Log("msg", "failed to create series loop during config update", "err", err)
 			return err
 		}
-		l.self = actor.New(l)
 		s.loops = append(s.loops, l)
 	}
 
@@ -170,19 +173,15 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) error {
 		return err
 	}
 	s.metadata = metadata
-	s.metadata.self = actor.New(s.metadata)
 	level.Debug(s.logger).Log("msg", "starting loops")
-	s.startLoops()
+	s.startLoops(ctx)
 	level.Debug(s.logger).Log("msg", "loops started")
 	return nil
 }
 
+// Stop is hard stop on the manager and all the loops.
 func (s *manager) Stop() {
 	s.stopLoops()
-	s.configInbox.Stop()
-	s.metaInbox.Stop()
-	s.inbox.Stop()
-	s.self.Stop()
 }
 
 func (s *manager) stopLoops() {
@@ -192,11 +191,18 @@ func (s *manager) stopLoops() {
 	s.metadata.Stop()
 }
 
-func (s *manager) startLoops() {
+func (s *manager) drainLoops() {
 	for _, l := range s.loops {
-		l.Start()
+		l.DrainStop()
 	}
-	s.metadata.Start()
+	s.metadata.DrainStop()
+}
+
+func (s *manager) startLoops(ctx context.Context) {
+	for _, l := range s.loops {
+		l.Start(ctx)
+	}
+	s.metadata.Start(ctx)
 }
 
 // Queue adds anything thats not metadata to the queue.
@@ -206,6 +212,6 @@ func (s *manager) queue(ctx context.Context, ts types.MetricDatum) {
 	// This will block if the queue is full.
 	err := s.loops[queueNum].seriesMbx.Send(ctx, ts)
 	if err != nil {
-		level.Error(s.logger).Log("msg", "failed to send to loop", "err", err)
+		level.Error(s.logger).Log("msg", "failed to send series", "err", err)
 	}
 }

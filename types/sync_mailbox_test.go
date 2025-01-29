@@ -4,18 +4,14 @@ import (
 	gocontext "context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func Test_SyncMailbox_Basic(t *testing.T) {
-	t.Parallel()
-
 	m := NewSyncMailbox[string, bool]()
 	assert.NotNil(t, m)
-
-	m.Start()
-	defer m.Stop()
 
 	// Set up receiver
 	var received []string
@@ -24,7 +20,11 @@ func Test_SyncMailbox_Basic(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		for cb := range m.ReceiveC() {
+		for {
+			cb, ok := <-m.Out()
+			if !ok {
+				return
+			}
 			received = append(received, cb.Value)
 			cb.Notify(true, nil)
 		}
@@ -32,50 +32,31 @@ func Test_SyncMailbox_Basic(t *testing.T) {
 
 	// Test sending multiple messages
 	ctx := gocontext.Background()
-	_, err := m.Send(ctx, "hello")
+	_, err := m.In(ctx, "hello")
 	assert.NoError(t, err)
-	_, err = m.Send(ctx, "world")
+	_, err = m.In(ctx, "world")
 	assert.NoError(t, err)
+	m.Close()
 
-	m.Stop()
 	wg.Wait()
 
 	assert.Equal(t, []string{"hello", "world"}, received)
 }
 
 func Test_SyncMailbox_Stopped(t *testing.T) {
-	t.Parallel()
-
 	m := NewSyncMailbox[string, bool]()
 	assert.NotNil(t, m)
+	ctx := gocontext.Background()
+	ctx, cncl := gocontext.WithTimeout(ctx, 1*time.Second)
+	defer cncl()
 
-	m.Start()
-	m.Stop()
-	success, err := m.Send(gocontext.Background(), "should fail")
+	success, err := m.In(ctx, "should fail")
 	assert.Error(t, err)
 	assert.False(t, success)
 }
-
-func Test_SyncMailbox_StopBeforeSend(t *testing.T) {
-	t.Parallel()
-
-	m := NewSyncMailbox[string, bool]()
-	assert.NotNil(t, m)
-
-	m.Stop()
-	// Don't start the mailbox at all
-	_, err := m.Send(gocontext.Background(), "should fail")
-	assert.Error(t, err)
-}
-
 func Test_SyncMailbox_Concurrent(t *testing.T) {
-	t.Parallel()
-
 	m := NewSyncMailbox[int, int]()
 	assert.NotNil(t, m)
-
-	m.Start()
-	defer m.Stop()
 
 	// Set up receiver
 	var received []int
@@ -85,7 +66,11 @@ func Test_SyncMailbox_Concurrent(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		for cb := range m.ReceiveC() {
+		for {
+			cb, ok := <-m.Out()
+			if !ok {
+				return
+			}
 			mu.Lock()
 			received = append(received, cb.Value)
 			mu.Unlock()
@@ -104,15 +89,14 @@ func Test_SyncMailbox_Concurrent(t *testing.T) {
 			defer sendWg.Done()
 			for j := 0; j < messagesPerSender; j++ {
 				value := senderID*messagesPerSender + j
-				ret, err := m.Send(gocontext.Background(), value)
+				ret, err := m.In(gocontext.Background(), value)
 				assert.NoError(t, err)
 				assert.Equal(t, ret, value)
 			}
 		}(i)
 	}
-
 	sendWg.Wait()
-	m.Stop()
+	m.Close()
 	wg.Wait()
 
 	assert.Equal(t, numSenders*messagesPerSender, len(received))

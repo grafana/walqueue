@@ -12,37 +12,24 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/proto"
-	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/common/config"
-	"github.com/vladopajic/go-actor/actor"
 	"go.uber.org/atomic"
 )
 
-var _ actor.Worker = (*loop[types.MetricDatum])(nil)
-
-// loop handles the low level sending of data. It's conceptually a queue.
-// loop makes no attempt to save or restore signals in the queue.
-// loop config cannot be updated, it is easier to recreate. This does mean we lose any signals in the queue.
-type loop[T types.Datum] struct {
-	isMeta         bool
-	seriesMbx      actor.Mailbox[T]
-	client         *http.Client
-	cfg            types.ConnectionConfig
-	log            log.Logger
-	lastSend       time.Time
-	statsFunc      func(s types.NetworkStats)
-	stopCalled     atomic.Bool
-	externalLabels map[string]string
-	self           actor.Actor
-	ticker         *time.Ticker
-	buf            *proto.Buffer
-	sendBuffer     []byte
-	items          *datumSlice[T]
+type write struct {
+	isMeta     bool
+	client     *http.Client
+	cfg        types.ConnectionConfig
+	log        log.Logger
+	statsFunc  func(s types.NetworkStats)
+	stopCalled atomic.Bool
+	ticker     *time.Ticker
+	done       chan struct{}
+	stats      chan sendResult
 }
 
-func newLoop[T types.Datum](cc types.ConnectionConfig, isMetaData bool, l log.Logger, stats func(s types.NetworkStats)) (*loop[T], error) {
+func newLoop(cc types.ConnectionConfig, l log.Logger, stats func(s types.NetworkStats), done chan struct{}, statsResult chan sendResult) (*write, error) {
 	var httpOpts []config.HTTPClientOption
 	if cc.UseRoundRobin {
 		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}
@@ -54,82 +41,23 @@ func newLoop[T types.Datum](cc types.ConnectionConfig, isMetaData bool, l log.Lo
 	if err != nil {
 		return nil, err
 	}
-	return &loop[T]{
-		isMeta:         isMetaData,
-		seriesMbx:      actor.NewMailbox[T](actor.OptCapacity(cc.BatchCount), actor.OptAsChan()),
-		client:         httpClient,
-		cfg:            cc,
-		log:            log.With(l, "name", "loop", "url", cc.URL),
-		statsFunc:      stats,
-		externalLabels: cc.ExternalLabels,
-		ticker:         time.NewTicker(1 * time.Second),
-		buf:            proto.NewBuffer(nil),
-		sendBuffer:     make([]byte, 0),
-		items:          &datumSlice[T]{m: make([]T, 0)},
+	return &write{
+		client:    httpClient,
+		cfg:       cc,
+		log:       log.With(l, "name", "loop", "url", cc.URL),
+		statsFunc: stats,
+		ticker:    time.NewTicker(1 * time.Second),
+		done:      done,
+		stats:     statsResult,
 	}, nil
 }
 
-func (l *loop[T]) Start() {
-	l.self = actor.Combine(l.actors()...).Build()
-	l.self.Start()
-}
-
-func (l *loop[T]) Stop() {
-	l.stopCalled.Store(true)
-	l.self.Stop()
-}
-
-func (l *loop[T]) actors() []actor.Actor {
-	return []actor.Actor{
-		actor.New(l),
-		l.seriesMbx,
-	}
-}
-
-func (l *loop[T]) DoWork(ctx actor.Context) actor.WorkerStatus {
-	send := func(series T) {
-		l.items.Add(series)
-		if l.items.Len() >= l.cfg.BatchCount {
-			l.trySend(l.items.SliceAndReset(), ctx)
-		}
-
-	}
-	// Main select loop
-	select {
-	case <-ctx.Done():
-		return actor.WorkerEnd
-	// Ticker is to ensure the flush timer is called.
-	case <-l.ticker.C:
-		if l.items.Len() == 0 && !l.isMeta {
-			return actor.WorkerContinue
-		}
-		if time.Since(l.lastSend) > l.cfg.FlushInterval && l.items.Len() > 0 {
-			l.trySend(l.items.SliceAndReset(), ctx)
-		}
-		return actor.WorkerContinue
-	case series, ok := <-l.seriesMbx.ReceiveC():
-		if !ok {
-			return actor.WorkerEnd
-		}
-		send(series)
-		return actor.WorkerContinue
-	}
-}
-
 // trySend is the core functionality for sending data to a endpoint. It will attempt retries as defined in MaxRetryAttempts.
-func (l *loop[T]) trySend(series []T, ctx context.Context) {
-
+func (l *write) trySend(buf []byte, ctx context.Context) {
 	attempts := 0
-	// Ensure we return any items back to the pools they belong to.
-	defer func() {
-		for _, s := range series {
-			s.Free()
-		}
-	}()
-	defer l.sendingCleanup()
 	for {
 		start := time.Now()
-		result := l.send(series, ctx, attempts)
+		result := l.send(buf, ctx, attempts)
 		duration := time.Since(start)
 		l.statsFunc(types.NetworkStats{
 			SendDuration: duration,
@@ -166,30 +94,13 @@ type sendResult struct {
 	networkError     bool
 }
 
-func (l *loop[T]) sendingCleanup() {
-	l.sendBuffer = l.sendBuffer[:0]
-	l.lastSend = time.Now()
-}
-
 // send is the main work loop of the loop.
-func (l *loop[T]) send(series []T, ctx context.Context, retryCount int) sendResult {
+func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult {
 	result := sendResult{}
 	defer func() {
-		recordStats(series, l.isMeta, l.statsFunc, result, len(l.sendBuffer))
+		l.stats <- result
 	}()
-	// Check to see if this is a retry and we can reuse the buffer.
-	// I wonder if we should do this, its possible we are sending things that have exceeded the TTL.
-	if len(l.sendBuffer) == 0 {
-		data, wrErr := generateWriteRequest[T](series)
-		if wrErr != nil {
-			result.err = wrErr
-			result.recoverableError = false
-			return result
-		}
-		l.sendBuffer = snappy.Encode(l.sendBuffer, data)
-	}
-
-	httpReq, err := http.NewRequest("POST", l.cfg.URL, bytes.NewReader(l.sendBuffer))
+	httpReq, err := http.NewRequest("POST", l.cfg.URL, bytes.NewReader(buf))
 	if err != nil {
 		result.err = err
 		result.recoverableError = true

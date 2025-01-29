@@ -269,11 +269,7 @@ func (s *PrometheusStats) UpdateNetwork(stats types.NetworkStats) {
 	// The newest timestamp is not always sent.
 	if stats.NewestTimestampSeconds != 0 {
 		s.networkOut.Store(stats.NewestTimestampSeconds)
-		// We always want to ensure that we have real values, else there is a window where this can be
-		// timestamp - 0 which gives a result in the years.
-		if s.serializerIn.Load() != 0 && s.networkOut.Load() != 0 {
-			s.TimestampDriftSeconds.Set(float64(s.serializerIn.Load() - s.networkOut.Load()))
-		}
+		s.updateDrift()
 		s.RemoteStorageOutTimestamp.Set(float64(stats.NewestTimestampSeconds))
 		s.NetworkNewestOutTimeStampSeconds.Set(float64(stats.NewestTimestampSeconds))
 	}
@@ -300,13 +296,17 @@ func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
 	s.SerializerErrors.Add(float64(stats.Errors))
 	if stats.NewestTimestampSeconds != 0 {
 		s.serializerIn.Store(stats.NewestTimestampSeconds)
-		// We always want to ensure that we have real values, else there is a window where this can be
-		// timestamp - 0 which gives a result in the years.
-		if s.serializerIn.Load() != 0 && s.networkOut.Load() != 0 {
-			s.TimestampDriftSeconds.Set(float64(s.serializerIn.Load() - s.networkOut.Load()))
-		}
+		s.updateDrift()
 		s.SerializerNewestInTimeStampSeconds.Set(float64(stats.NewestTimestampSeconds))
 		s.RemoteStorageInTimestamp.Set(float64(stats.NewestTimestampSeconds))
 	}
 
+}
+
+func (s *PrometheusStats) updateDrift() {
+	// We always want to ensure that we have real values, else there is a window where this can be
+	// timestamp - 0 which gives a result in the years.
+	if s.serializerIn.Load() != 0 && s.networkOut.Load() != 0 {
+		s.TimestampDriftSeconds.Set(float64(s.serializerIn.Load() - s.networkOut.Load()))
+	}
 }

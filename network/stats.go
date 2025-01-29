@@ -9,11 +9,7 @@ import (
 
 // recordStats determines what values to send to the stats function. This allows for any
 // number of metrics/signals libraries to be used. Prometheus, OTel, and any other.
-func recordStats[T types.Datum](series []T, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
-	seriesCount := getSeriesCount(series)
-	histogramCount := getHistogramCount(series)
-	metadataCount := getMetaDataCount(series)
-
+func recordStats(seriesCount, histogramCount, metadataCount int, newestTS int64, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
 	switch {
 	case r.networkError:
 		stats(types.NetworkStats{
@@ -28,18 +24,6 @@ func recordStats[T types.Datum](series []T, isMeta bool, stats func(s types.Netw
 			},
 		})
 	case r.successful:
-		// Need to grab the newest series.
-		var newestTS int64
-		for _, ts := range series {
-			mm, valid := interface{}(ts).(types.MetricDatum)
-			if !valid {
-				continue
-			}
-			if mm.TimeStampMS() > newestTS {
-				newestTS = mm.TimeStampMS()
-			}
-
-		}
 		var sampleBytesSent int
 		var metaBytesSent int
 		// Each loop is explicitly a normal signal or metadata sender.

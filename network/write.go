@@ -22,14 +22,13 @@ type write struct {
 	client     *http.Client
 	cfg        types.ConnectionConfig
 	log        log.Logger
-	statsFunc  func(s types.NetworkStats)
 	stopCalled atomic.Bool
 	ticker     *time.Ticker
 	done       chan struct{}
-	stats      chan sendResult
+	stats      func(r sendResult)
 }
 
-func newLoop(cc types.ConnectionConfig, l log.Logger, stats func(s types.NetworkStats), done chan struct{}, statsResult chan sendResult) (*write, error) {
+func newLoop(cc types.ConnectionConfig, l log.Logger, statsResult func(r sendResult)) (*write, error) {
 	var httpOpts []config.HTTPClientOption
 	if cc.UseRoundRobin {
 		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}
@@ -42,13 +41,11 @@ func newLoop(cc types.ConnectionConfig, l log.Logger, stats func(s types.Network
 		return nil, err
 	}
 	return &write{
-		client:    httpClient,
-		cfg:       cc,
-		log:       log.With(l, "name", "loop", "url", cc.URL),
-		statsFunc: stats,
-		ticker:    time.NewTicker(1 * time.Second),
-		done:      done,
-		stats:     statsResult,
+		client: httpClient,
+		cfg:    cc,
+		log:    log.With(l, "name", "loop", "url", cc.URL),
+		ticker: time.NewTicker(1 * time.Second),
+		stats:  statsResult,
 	}, nil
 }
 
@@ -56,12 +53,8 @@ func newLoop(cc types.ConnectionConfig, l log.Logger, stats func(s types.Network
 func (l *write) trySend(buf []byte, ctx context.Context) {
 	attempts := 0
 	for {
-		start := time.Now()
 		result := l.send(buf, ctx, attempts)
-		duration := time.Since(start)
-		l.statsFunc(types.NetworkStats{
-			SendDuration: duration,
-		})
+
 		if result.err != nil {
 			level.Error(l.log).Log("msg", "error in sending telemetry", "err", result.err.Error())
 		}
@@ -92,13 +85,16 @@ type sendResult struct {
 	retryAfter       time.Duration
 	statusCode       int
 	networkError     bool
+	duration         time.Duration
 }
 
 // send is the main work loop of the loop.
 func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult {
+	start := time.Now()
 	result := sendResult{}
 	defer func() {
-		l.stats <- result
+		result.duration = time.Since(start)
+		l.stats(result)
 	}()
 	httpReq, err := http.NewRequest("POST", l.cfg.URL, bytes.NewReader(buf))
 	if err != nil {

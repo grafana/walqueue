@@ -11,16 +11,18 @@ import (
 
 // manager manages loops. Mostly it exists to control their lifecycle and send work to them.
 type manager struct {
-	loops       []*loop[types.MetricDatum]
-	metadata    *loop[types.MetadataDatum]
-	logger      log.Logger
-	inbox       actor.Mailbox[types.MetricDatum]
-	metaInbox   actor.Mailbox[types.MetadataDatum]
-	configInbox *types.SyncMailbox[types.ConnectionConfig, bool]
-	self        actor.Actor
-	cfg         types.ConnectionConfig
-	stats       func(types.NetworkStats)
-	metaStats   func(types.NetworkStats)
+	loops          []*writeBuffer[types.MetricDatum]
+	metadata       *writeBuffer[types.MetadataDatum]
+	logger         log.Logger
+	inbox          actor.Mailbox[types.MetricDatum]
+	metaInbox      actor.Mailbox[types.MetadataDatum]
+	configInbox    *types.SyncMailbox[types.ConnectionConfig, bool]
+	self           actor.Actor
+	cfg            types.ConnectionConfig
+	stats          func(types.NetworkStats)
+	metaStats      func(types.NetworkStats)
+	seriesBuffer   map[int][]types.MetricDatum
+	metadataBuffer []types.MetadataDatum
 }
 
 var _ types.NetworkClient = (*manager)(nil)
@@ -29,7 +31,7 @@ var _ actor.Worker = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStats func(types.NetworkStats)) (types.NetworkClient, error) {
 	s := &manager{
-		loops:  make([]*loop[types.MetricDatum], 0, cc.Connections),
+		loops:  make([]*writeBuffer[types.MetricDatum], 0, cc.Connections),
 		logger: logger,
 		// This provides blocking to only handle one at a time, so that if a queue blocks
 		// it will stop the filequeue from feeding more. Without passing true the minimum is actually 64 instead of 1.
@@ -43,22 +45,12 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.cfg.Connections; i++ {
-		l, err := newLoop[types.MetricDatum](cc, false, logger, seriesStats)
-		if err != nil {
-			level.Error(logger).Log("msg", "failed to create series loop", "err", err)
-			return nil, fmt.Errorf("failed to create series loop: %w", err)
-		}
-		l.self = actor.New(l)
+		l := newWriteBuffer[types.MetricDatum](cc, seriesStats, false, logger)
 		s.loops = append(s.loops, l)
 	}
 
-	metadata, err := newLoop[types.MetadataDatum](cc, true, logger, metadataStats)
-	if err != nil {
-		level.Error(logger).Log("msg", "failed to create metadata loop", "err", err)
-		return nil, fmt.Errorf("failed to create metadata loop: %w", err)
-	}
+	metadata := newWriteBuffer[types.MetadataDatum](cc, seriesStats, true, logger)
 	s.metadata = metadata
-	s.metadata.self = actor.New(s.metadata)
 	return s, nil
 }
 
@@ -153,7 +145,7 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) error {
 	// For the moment we will stop all the items and recreate them.
 	level.Debug(s.logger).Log("msg", "dropping all series in loops and creating queue due to config change")
 	s.stopLoops()
-	s.loops = make([]*loop[types.MetricDatum], 0, s.cfg.Connections)
+	s.loops = make([]*write[types.MetricDatum], 0, s.cfg.Connections)
 	for i := uint(0); i < s.cfg.Connections; i++ {
 		l, err := newLoop[types.MetricDatum](cc, false, s.logger, s.stats)
 		if err != nil {

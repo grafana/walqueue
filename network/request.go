@@ -10,9 +10,8 @@ import (
 
 // generateWriteRequest creates a proto prombpb.WriteRequest from manual bytes. Since
 // the data is already serialized and we just need to wrap it in a proto message.
-func generateWriteRequest[T any](series []T) ([]byte, error) {
-	// TODO: making this use a byte pool or passed in value would be more efficient.
-	bb := bytes.Buffer{}
+func generateWriteRequest[T any](series []T, input []byte) ([]byte, error) {
+	bb := bytes.NewBuffer(input)
 	for _, t := range series {
 		// This conversion is necessary to test for a specific interface.
 		mm, valid := interface{}(t).(types.MetricDatum)

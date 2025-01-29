@@ -12,7 +12,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
-	"github.com/vladopajic/go-actor/actor"
 )
 
 var _ types.FileStorage = (*queue)(nil)
@@ -109,7 +108,7 @@ func get(logger log.Logger, name string) (map[string]string, []byte, error) {
 }
 
 // DoWork allows most of the queue to be single threaded with work only coming in and going out via mailboxes(channels).
-func (q *queue) run(ctx actor.Context) {
+func (q *queue) run(ctx context.Context) {
 	// Queue up our existing items, we cant do this earlier since the actor isnt started.
 	for _, name := range q.files {
 		q.out(ctx, types.DataHandle{

@@ -6,7 +6,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
-	"github.com/vladopajic/go-actor/actor"
 	"golang.design/x/chann"
 )
 
@@ -75,7 +74,7 @@ func (s *manager) UpdateConfig(ctx context.Context, cc types.ConnectionConfig) (
 	return s.configInbox.In(ctx, cc)
 }
 
-func (s *manager) run(ctx actor.Context) {
+func (s *manager) run(ctx context.Context) {
 	for {
 		// checkConfig returns a value if we should continue the loop or can we exit early.
 		cont := s.checkConfig(ctx)

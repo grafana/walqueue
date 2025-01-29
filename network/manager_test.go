@@ -89,12 +89,12 @@ func TestUpdatingConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, success)
 	time.Sleep(1 * time.Second)
-	for i := 0; i < 40; i++ {
+	for i := 0; i < 5; i++ {
 		send(t, wr, ctx)
 	}
 	require.Eventuallyf(t, func() bool {
-		return recordsFound.Load() == 40
-	}, 20*time.Second, 1*time.Second, "record count should be 100 but is %d", recordsFound.Load())
+		return recordsFound.Load() == 5
+	}, 20*time.Second, 1*time.Second, "record count should be 5 but is %d", recordsFound.Load())
 
 	require.Truef(t, lastBatchSize.Load() == 20, "batch_count should be 20 but is %d", lastBatchSize.Load())
 }

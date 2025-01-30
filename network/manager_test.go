@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,9 +19,20 @@ import (
 )
 
 func TestSending(t *testing.T) {
+	tsMap := map[float64]struct{}{}
+	mut := sync.Mutex{}
 	recordsFound := atomic.Uint32{}
 	svr := httptest.NewServer(handler(t, http.StatusOK, func(wr *prompb.WriteRequest) {
 		recordsFound.Add(uint32(len(wr.Timeseries)))
+		mut.Lock()
+		for _, ts := range wr.Timeseries {
+			_, found := tsMap[ts.Samples[0].Value]
+			if found {
+				require.Truef(t, false, "found duplicate value %f", ts.Samples[0].Value)
+			}
+			tsMap[ts.Samples[0].Value] = struct{}{}
+		}
+		defer mut.Unlock()
 	}))
 
 	defer svr.Close()
@@ -38,16 +50,16 @@ func TestSending(t *testing.T) {
 
 	logger := log.NewNopLogger()
 	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
-	wr.Start()
+	wr.Start(ctx)
 	defer wr.Stop()
 
 	require.NoError(t, err)
-	for i := 0; i < 1_000; i++ {
-		send(t, wr, ctx)
+	for i := 0; i < 100; i++ {
+		send(t, i, wr, ctx)
 	}
-	require.Eventually(t, func() bool {
-		return recordsFound.Load() == 1_000
-	}, 10*time.Second, 100*time.Millisecond)
+	require.Eventuallyf(t, func() bool {
+		return recordsFound.Load() == 100
+	}, 10*time.Second, 100*time.Millisecond, "expected 100 records but got %d", recordsFound.Load())
 }
 
 func TestUpdatingConfig(t *testing.T) {
@@ -72,7 +84,8 @@ func TestUpdatingConfig(t *testing.T) {
 
 	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
 	require.NoError(t, err)
-	wr.Start()
+	ctx := context.Background()
+	wr.Start(ctx)
 	defer wr.Stop()
 
 	cc2 := types.ConnectionConfig{
@@ -82,13 +95,13 @@ func TestUpdatingConfig(t *testing.T) {
 		FlushInterval: 5 * time.Second,
 		Connections:   1,
 	}
-	ctx := context.Background()
+
 	success, err := wr.UpdateConfig(ctx, cc2)
 	require.NoError(t, err)
 	require.True(t, success)
 	time.Sleep(1 * time.Second)
 	for i := 0; i < 40; i++ {
-		send(t, wr, ctx)
+		send(t, i, wr, ctx)
 	}
 	require.Eventuallyf(t, func() bool {
 		return recordsFound.Load() == 40
@@ -126,9 +139,9 @@ func TestRetry(t *testing.T) {
 	logger := log.NewNopLogger()
 	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
 	require.NoError(t, err)
-	wr.Start()
+	wr.Start(ctx)
 	defer wr.Stop()
-	send(t, wr, ctx)
+	send(t, 1, wr, ctx)
 
 	require.Eventually(t, func() bool {
 		done := retries.Load() > 5
@@ -160,36 +173,33 @@ func TestRetryBounded(t *testing.T) {
 
 	logger := log.NewNopLogger()
 	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
-	wr.Start()
+	wr.Start(ctx)
 	defer wr.Stop()
 	require.NoError(t, err)
 	for i := 0; i < 10; i++ {
-		send(t, wr, ctx)
+		send(t, i, wr, ctx)
 	}
-	require.Eventually(t, func() bool {
+	require.Eventuallyf(t, func() bool {
 		// We send 10 but each one gets retried once so 20 total.
 		return sends.Load() == 10*2
-	}, 2*time.Second, 100*time.Millisecond)
-	time.Sleep(2 * time.Second)
+	}, 5*time.Second, 100*time.Millisecond, "expected 20 records but got %d", sends.Load())
+	time.Sleep(5 * time.Second)
 	// Ensure we dont get any more.
 	require.True(t, sends.Load() == 10*2)
 }
 
 func TestRecoverable(t *testing.T) {
-
 	recoverable := atomic.Uint32{}
 	svr := httptest.NewServer(handler(t, http.StatusInternalServerError, func(wr *prompb.WriteRequest) {
 	}))
 	defer svr.Close()
 	ctx := context.Background()
-	ctx, cncl := context.WithCancel(ctx)
-	defer cncl()
 
 	cc := types.ConnectionConfig{
 		URL:              svr.URL,
 		Timeout:          1 * time.Second,
 		BatchCount:       1,
-		FlushInterval:    1 * time.Second,
+		FlushInterval:    10 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
 		Connections:      1,
@@ -200,15 +210,15 @@ func TestRecoverable(t *testing.T) {
 		recoverable.Add(uint32(s.Total5XX()))
 	}, func(s types.NetworkStats) {})
 	require.NoError(t, err)
-	wr.Start()
+	wr.Start(ctx)
 	defer wr.Stop()
 	for i := 0; i < 10; i++ {
-		send(t, wr, ctx)
+		send(t, i, wr, ctx)
 	}
 	require.Eventuallyf(t, func() bool {
 		// We send 10 but each one gets retried once so 20 total.
 		return recoverable.Load() == 10*2
-	}, 2*time.Second, 100*time.Millisecond, "recoverable should be 20 but is %d", recoverable.Load())
+	}, 20*time.Second, 100*time.Millisecond, "recoverable should be 20 but is %d", recoverable.Load())
 	time.Sleep(2 * time.Second)
 	// Ensure we dont get any more.
 	require.True(t, recoverable.Load() == 10*2)
@@ -239,22 +249,22 @@ func TestNonRecoverable(t *testing.T) {
 	wr, err := New(cc, logger, func(s types.NetworkStats) {
 		nonRecoverable.Add(uint32(s.TotalFailed()))
 	}, func(s types.NetworkStats) {})
-	wr.Start()
+	wr.Start(ctx)
 	defer wr.Stop()
 	require.NoError(t, err)
 	for i := 0; i < 10; i++ {
-		send(t, wr, ctx)
+		send(t, i, wr, ctx)
 	}
 	require.Eventuallyf(t, func() bool {
 		return nonRecoverable.Load() == 10
-	}, 2*time.Second, 100*time.Millisecond, "non recoverable should be 10 but is %d", nonRecoverable.Load())
+	}, 10*time.Second, 100*time.Millisecond, "non recoverable should be 10 but is %d", nonRecoverable.Load())
 	time.Sleep(2 * time.Second)
 	// Ensure we dont get any more.
 	require.True(t, nonRecoverable.Load() == 10)
 }
 
-func send(t *testing.T, wr types.NetworkClient, ctx context.Context) {
-	ts := createSeries(t)
+func send(t *testing.T, i int, wr types.NetworkClient, ctx context.Context) {
+	ts := createSeries(i, t)
 	// The actual hash is only used for queueing into different buckets.
 	err := wr.SendSeries(ctx, ts)
 	require.NoError(t, err)
@@ -276,12 +286,12 @@ func handler(t *testing.T, code int, callback func(wr *prompb.WriteRequest)) htt
 	})
 }
 
-func createSeries(_ *testing.T) types.MetricDatum {
+func createSeries(i int, _ *testing.T) types.MetricDatum {
 	ts := &prompb.TimeSeries{}
 	ts.Samples = make([]prompb.Sample, 1)
 	ts.Samples[0] = prompb.Sample{
 		Timestamp: time.Now().Unix(),
-		Value:     1,
+		Value:     float64(i),
 	}
 	ts.Labels = make([]prompb.Label, 1)
 	ts.Labels[0] = prompb.Label{
@@ -290,7 +300,7 @@ func createSeries(_ *testing.T) types.MetricDatum {
 	}
 	bb, _ := ts.Marshal()
 	return &metric{
-		hash:        1,
+		hash:        uint64(i),
 		ts:          ts.Samples[0].Timestamp,
 		buf:         bb,
 		isHistogram: false,

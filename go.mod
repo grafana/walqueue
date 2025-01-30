@@ -19,6 +19,7 @@ require (
 	github.com/vladopajic/go-actor v0.9.1-0.20241115212052-39d92aec6093
 	go.uber.org/atomic v1.11.0
 	go.uber.org/goleak v1.3.0
+	golang.design/x/chann v0.1.2
 )
 
 require (

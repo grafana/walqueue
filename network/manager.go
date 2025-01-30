@@ -2,32 +2,30 @@ package network
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
-	"github.com/vladopajic/go-actor/actor"
+	"golang.design/x/chann"
+	"time"
 )
 
 // manager manages loops. Mostly it exists to control their lifecycle and send work to them.
 type manager struct {
-	loops          []*writeBuffer[types.MetricDatum]
-	metadata       *writeBuffer[types.MetadataDatum]
-	logger         log.Logger
-	inbox          actor.Mailbox[types.MetricDatum]
-	metaInbox      actor.Mailbox[types.MetadataDatum]
-	configInbox    *types.SyncMailbox[types.ConnectionConfig, bool]
-	self           actor.Actor
-	cfg            types.ConnectionConfig
-	stats          func(types.NetworkStats)
-	metaStats      func(types.NetworkStats)
-	seriesBuffer   map[int][]types.MetricDatum
-	metadataBuffer []types.MetadataDatum
+	loops            []*writeBuffer[types.MetricDatum]
+	metadata         *writeBuffer[types.MetadataDatum]
+	logger           log.Logger
+	inbox            *types.Mailbox[types.MetricDatum]
+	metaInbox        *types.Mailbox[types.MetadataDatum]
+	configInbox      *types.SyncMailbox[types.ConnectionConfig, bool]
+	cfg              types.ConnectionConfig
+	stats            func(types.NetworkStats)
+	metaStats        func(types.NetworkStats)
+	bufferedMetric   types.MetricDatum
+	bufferedMetadata types.MetadataDatum
+	lastFlushTime    time.Time
 }
 
 var _ types.NetworkClient = (*manager)(nil)
-
-var _ actor.Worker = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStats func(types.NetworkStats)) (types.NetworkClient, error) {
 	s := &manager{
@@ -35,12 +33,15 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 		logger: logger,
 		// This provides blocking to only handle one at a time, so that if a queue blocks
 		// it will stop the filequeue from feeding more. Without passing true the minimum is actually 64 instead of 1.
-		inbox:       actor.NewMailbox[types.MetricDatum](actor.OptCapacity(1), actor.OptAsChan()),
-		metaInbox:   actor.NewMailbox[types.MetadataDatum](actor.OptCapacity(1), actor.OptAsChan()),
-		configInbox: types.NewSyncMailbox[types.ConnectionConfig, bool](),
-		stats:       seriesStats,
-		metaStats:   metadataStats,
-		cfg:         cc,
+		inbox:            types.NewMailbox[types.MetricDatum](chann.Cap(1)),
+		metaInbox:        types.NewMailbox[types.MetadataDatum](chann.Cap(1)),
+		bufferedMetric:   nil,
+		bufferedMetadata: nil,
+		configInbox:      types.NewSyncMailbox[types.ConnectionConfig, bool](),
+		stats:            seriesStats,
+		metaStats:        metadataStats,
+		cfg:              cc,
+		lastFlushTime:    time.Now(),
 	}
 
 	// start kicks off a number of concurrent connections.
@@ -54,13 +55,9 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 	return s, nil
 }
 
-func (s *manager) Start() {
-	s.startLoops()
+func (s *manager) Start(ctx context.Context) {
 	s.configInbox.Start()
-	s.metaInbox.Start()
-	s.inbox.Start()
-	s.self = actor.New(s)
-	s.self.Start()
+	go s.Run(ctx)
 }
 
 func (s *manager) SendSeries(ctx context.Context, data types.MetricDatum) error {
@@ -75,61 +72,140 @@ func (s *manager) UpdateConfig(ctx context.Context, cc types.ConnectionConfig) (
 	return s.configInbox.Send(ctx, cc)
 }
 
-func (s *manager) DoWork(ctx actor.Context) actor.WorkerStatus {
-	// This acts as a priority queue, always check for configuration changes first.
+type flowcontrol int
+
+const (
+	Restart flowcontrol = iota
+	Exit
+	ContinueExecution
+)
+
+func (s *manager) Run(ctx context.Context) {
+	for {
+		flow := s.checkConfig(ctx)
+		if flow == Exit {
+			return
+		}
+		s.flushCheck(ctx)
+		flow = s.bufferMetricCheck(ctx)
+		if flow == Restart {
+			continue
+		}
+		flow = s.bufferMetaCheck(ctx)
+		if flow == Restart {
+			continue
+		}
+		flow = s.mainWork(ctx)
+		if flow == Exit {
+			return
+		}
+	}
+
+}
+
+func (s *manager) checkConfig(ctx context.Context) flowcontrol {
 	select {
+	case <-ctx.Done():
+		return Exit
 	case cfg, ok := <-s.configInbox.ReceiveC():
 		var successful bool
 		if !ok {
 			level.Debug(s.logger).Log("msg", "config inbox closed")
-			return actor.WorkerEnd
+			return Exit
 		}
 		var err error
-		defer func() {
-			cfg.Notify(successful, err)
-		}()
 		if err = s.updateConfig(cfg.Value); err == nil {
 			successful = true
 		}
-		return actor.WorkerContinue
+		cfg.Notify(successful, err)
+		return ContinueExecution
 	default:
+		return ContinueExecution
 	}
+}
 
+func (s *manager) bufferMetricCheck(ctx context.Context) flowcontrol {
+	if s.bufferedMetric != nil {
+		added := s.queue(ctx, s.bufferedMetric)
+		if !added {
+			time.Sleep(100 * time.Millisecond)
+			return Restart
+		} else {
+			s.bufferedMetric = nil
+		}
+	}
+	return ContinueExecution
+}
+
+func (s *manager) bufferMetaCheck(ctx context.Context) flowcontrol {
+	if s.bufferedMetadata != nil {
+		added := s.metadata.Add(ctx, s.bufferedMetadata)
+		if !added {
+			time.Sleep(100 * time.Millisecond)
+			return Restart
+		} else {
+			s.bufferedMetadata = nil
+		}
+	}
+	return ContinueExecution
+
+}
+
+func (s *manager) flushCheck(ctx context.Context) {
+	// This isnt an exact science but it doesnt need to be, we just need to make sure that even if batch counts arent
+	// being met then data is flowing.
+	if time.Since(s.lastFlushTime) > s.cfg.FlushInterval {
+		for _, l := range s.loops {
+			l.Send(ctx)
+		}
+		s.metadata.Send(ctx)
+		s.lastFlushTime = time.Now()
+	}
+}
+
+func (s *manager) mainWork(ctx context.Context) flowcontrol {
 	// main work queue.
 	select {
 	case <-ctx.Done():
-		return actor.WorkerEnd
+		return Exit
 	case ts, ok := <-s.inbox.ReceiveC():
 		if !ok {
 			level.Debug(s.logger).Log("msg", "series inbox closed")
-			return actor.WorkerEnd
+			return Exit
 		}
-		s.queue(ctx, ts)
-		return actor.WorkerContinue
+		added := s.queue(ctx, ts)
+		if !added {
+			s.bufferedMetric = ts
+			time.Sleep(100 * time.Millisecond)
+			return Restart
+		}
+		return ContinueExecution
 	case ts, ok := <-s.metaInbox.ReceiveC():
 		if !ok {
 			level.Debug(s.logger).Log("msg", "meta inbox closed")
-			return actor.WorkerEnd
+			return Exit
 		}
-		err := s.metadata.seriesMbx.Send(ctx, ts)
-		if err != nil {
-			level.Error(s.logger).Log("msg", "failed to send to metadata loop", "err", err)
+		added := s.metadata.Add(ctx, ts)
+		if !added {
+			s.bufferedMetadata = ts
+			time.Sleep(100 * time.Millisecond)
+			return Restart
 		}
-		return actor.WorkerContinue
+		return ContinueExecution
 	case cfg, ok := <-s.configInbox.ReceiveC():
 		var successful bool
 		if !ok {
 			level.Debug(s.logger).Log("msg", "config inbox closed")
-			return actor.WorkerEnd
+			return Exit
 		}
 		var err error
-		defer func() {
-			cfg.Notify(successful, err)
-		}()
 		if err = s.updateConfig(cfg.Value); err == nil {
 			successful = true
 		}
-		return actor.WorkerContinue
+		cfg.Notify(successful, err)
+		return ContinueExecution
+	case <-time.After(100 * time.Millisecond):
+		return ContinueExecution
 	}
 }
 
@@ -139,65 +215,48 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) error {
 		return nil
 	}
 	s.cfg = cc
-	// TODO @mattdurham make this smarter, at the moment any samples in the loops are lost.
-	// Ideally we would drain the queues and re add them but that is a future need.
-	// In practice this shouldn't change often so data loss should be minimal.
-	// For the moment we will stop all the items and recreate them.
-	level.Debug(s.logger).Log("msg", "dropping all series in loops and creating queue due to config change")
-	s.stopLoops()
-	s.loops = make([]*write[types.MetricDatum], 0, s.cfg.Connections)
-	for i := uint(0); i < s.cfg.Connections; i++ {
-		l, err := newLoop[types.MetricDatum](cc, false, s.logger, s.stats)
-		if err != nil {
-			level.Error(s.logger).Log("msg", "failed to create series loop during config update", "err", err)
-			return err
-		}
-		l.self = actor.New(l)
-		s.loops = append(s.loops, l)
+	level.Debug(s.logger).Log("msg", "recreating write buffers due to configuration change.")
+	// Drain then stop the current loops.
+	drainedMetrics := make([]types.MetricDatum, 0, len(s.loops)*cc.BatchCount)
+	for _, l := range s.loops {
+		drainedMetrics = append(drainedMetrics, l.Drain()...)
 	}
 
-	metadata, err := newLoop[types.MetadataDatum](cc, true, s.logger, s.metaStats)
-	if err != nil {
-		level.Error(s.logger).Log("msg", "failed to create metadata loop during config update", "err", err)
-		return err
+	drainedMeta := s.metadata.Drain()
+
+	s.loops = make([]*writeBuffer[types.MetricDatum], 0, s.cfg.Connections)
+	for i := uint(0); i < s.cfg.Connections; i++ {
+		l := newWriteBuffer[types.MetricDatum](cc, s.stats, false, s.logger)
+		s.loops = append(s.loops, l)
+	}
+	// Force adding of metrics, note this may cause the system to go above the batch count.
+	for _, d := range drainedMetrics {
+		s.forceQueue(d)
+	}
+
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.stats, true, s.logger)
+	for _, d := range drainedMeta {
+		s.metadata.ForceAdd(d)
 	}
 	s.metadata = metadata
-	s.metadata.self = actor.New(s.metadata)
-	level.Debug(s.logger).Log("msg", "starting loops")
-	s.startLoops()
-	level.Debug(s.logger).Log("msg", "loops started")
 	return nil
 }
 
 func (s *manager) Stop() {
-	s.stopLoops()
 	s.configInbox.Stop()
-	s.metaInbox.Stop()
-	s.inbox.Stop()
-	s.self.Stop()
 }
 
-func (s *manager) stopLoops() {
-	for _, l := range s.loops {
-		l.Stop()
-	}
-	s.metadata.Stop()
-}
-
-func (s *manager) startLoops() {
-	for _, l := range s.loops {
-		l.Start()
-	}
-	s.metadata.Start()
-}
-
-// Queue adds anything thats not metadata to the queue.
-func (s *manager) queue(ctx context.Context, ts types.MetricDatum) {
+// queue adds anything thats not metadata to the queue.
+func (s *manager) queue(ctx context.Context, ts types.MetricDatum) bool {
 	// Based on a hash which is the label hash add to the queue.
 	queueNum := ts.Hash() % uint64(s.cfg.Connections)
 	// This will block if the queue is full.
-	err := s.loops[queueNum].seriesMbx.Send(ctx, ts)
-	if err != nil {
-		level.Error(s.logger).Log("msg", "failed to send to loop", "err", err)
-	}
+	return s.loops[queueNum].Add(ctx, ts)
+}
+
+// forceQueue adds forces data to be added, this should only be used in cases where we are draining the reapplying.
+func (s *manager) forceQueue(ts types.MetricDatum) {
+	// Based on a hash which is the label hash add to the queue.
+	queueNum := ts.Hash() % uint64(s.cfg.Connections)
+	s.loops[queueNum].ForceAdd(ts)
 }

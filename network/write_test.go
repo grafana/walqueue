@@ -122,23 +122,24 @@ func TestTLSConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := log.NewNopLogger()
-			l, newErr := newLoop[types.MetricDatum](tt.tlsConfig, false, logger, func(s types.NetworkStats) {})
-
+			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {})
 			if tt.wantErr {
 				require.Error(t, newErr)
-				require.Nil(t, l, "newLoop should return nil for invalid TLS config")
+				require.Nil(t, l, "newWrite should return nil for invalid TLS config")
 				return
 			}
 			require.NoError(t, newErr)
 
-			require.NotNil(t, l, "newLoop should not return nil for valid TLS config")
+			require.NotNil(t, l, "newWrite should not return nil for valid TLS config")
 
 			// Create a test series for sending
-			pending := []types.MetricDatum{createSeries(t)}
+			pending := []types.MetricDatum{createSeries(1, t)}
 
 			// Test connection by sending a request
 			ctx := context.Background()
-			result := l.send(pending, ctx, 0)
+			snappyBuf, _, werr := buildWriteRequest[types.MetricDatum](pending, nil, nil)
+			require.NoError(t, werr)
+			result := l.send(snappyBuf, ctx, 0)
 			if !tt.wantErr {
 				require.True(t, result.successful, "request should be successful")
 				require.NoError(t, result.err, "request should not return error")
@@ -183,13 +184,13 @@ func TestTLSConfigValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l, newErr := newLoop[types.MetricDatum](tt.tlsConfig, false, logger, func(s types.NetworkStats) {})
+			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {})
 			if tt.wantLoop {
 				require.NoError(t, newErr)
-				require.NotNil(t, l, "newLoop should return a valid loop")
+				require.NotNil(t, l, "newWrite should return a valid loop")
 			} else {
 				require.Error(t, newErr)
-				require.Nil(t, l, "newLoop should return nil for invalid config")
+				require.Nil(t, l, "newWrite should return nil for invalid config")
 			}
 		})
 	}

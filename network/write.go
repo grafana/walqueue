@@ -14,21 +14,18 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/common/config"
-	"go.uber.org/atomic"
 )
 
+// write is a fire and forget client.
 type write struct {
-	isMeta     bool
-	client     *http.Client
-	cfg        types.ConnectionConfig
-	log        log.Logger
-	stopCalled atomic.Bool
-	ticker     *time.Ticker
-	done       chan struct{}
-	stats      func(r sendResult)
+	isMeta bool
+	client *http.Client
+	cfg    types.ConnectionConfig
+	log    log.Logger
+	stats  func(r sendResult)
 }
 
-func newLoop(cc types.ConnectionConfig, l log.Logger, statsResult func(r sendResult)) (*write, error) {
+func newWrite(cc types.ConnectionConfig, l log.Logger, statsResult func(r sendResult)) (*write, error) {
 	var httpOpts []config.HTTPClientOption
 	if cc.UseRoundRobin {
 		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}
@@ -44,12 +41,11 @@ func newLoop(cc types.ConnectionConfig, l log.Logger, statsResult func(r sendRes
 		client: httpClient,
 		cfg:    cc,
 		log:    log.With(l, "name", "loop", "url", cc.URL),
-		ticker: time.NewTicker(1 * time.Second),
 		stats:  statsResult,
 	}, nil
 }
 
-// trySend is the core functionality for sending data to a endpoint. It will attempt retries as defined in MaxRetryAttempts.
+// trySend is the core functionality for sending data to an endpoint. It will attempt retries as defined in MaxRetryAttempts.
 func (l *write) trySend(buf []byte, ctx context.Context) {
 	attempts := 0
 	for {
@@ -69,13 +65,10 @@ func (l *write) trySend(buf []byte, ctx context.Context) {
 			level.Debug(l.log).Log("msg", "max retry attempts reached", "attempts", attempts)
 			return
 		}
-		// This helps us short circuit the loop if we are stopping.
-		if l.stopCalled.Load() {
-			return
-		}
 		// Sleep between attempts.
 		time.Sleep(result.retryAfter)
 	}
+
 }
 
 type sendResult struct {

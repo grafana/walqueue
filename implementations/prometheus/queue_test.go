@@ -2,15 +2,16 @@ package prometheus
 
 import (
 	"context"
-	"github.com/golang/snappy"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/prompb"
-	"go.uber.org/atomic"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/golang/snappy"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/prompb"
+	"go.uber.org/atomic"
 
 	"github.com/go-kit/log"
 	"github.com/grafana/walqueue/types"
@@ -95,7 +96,7 @@ func TestQueue_Appender(t *testing.T) {
 				logger,
 			)
 			require.NoError(t, err)
-			q.Start()
+			q.Start(context.TODO())
 			defer q.Stop()
 
 			defer svr.Close()
@@ -116,7 +117,7 @@ func TestStats(t *testing.T) {
 	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
 	require.NoError(t, err)
 	// This will unregister the metrics
-	end.Start()
+	end.Start(context.TODO())
 	// This sleep is to give the goroutines time to spin up.
 	time.Sleep(1 * time.Second)
 	end.Stop()
@@ -127,7 +128,7 @@ func TestStats(t *testing.T) {
 	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
 	require.NoError(t, err)
 
-	end2.Start()
+	end2.Start(context.TODO())
 	// This sleep is to give the goroutines time to spin up.
 	time.Sleep(1 * time.Second)
 	end2.Stop()

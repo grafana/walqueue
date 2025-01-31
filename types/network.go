@@ -9,7 +9,7 @@ import (
 )
 
 type NetworkClient interface {
-	Start()
+	Start(ctx context.Context)
 	Stop()
 	// SendSeries will block if the network caches are full.
 	SendSeries(ctx context.Context, d MetricDatum) error

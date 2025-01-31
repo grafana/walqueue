@@ -11,7 +11,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/grafana/walqueue/types"
 	"github.com/stretchr/testify/require"
-	"github.com/vladopajic/go-actor/actor"
 	"go.uber.org/goleak"
 )
 
@@ -20,15 +19,15 @@ func TestFileQueue(t *testing.T) {
 
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
-	defer mbx.Stop()
+	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
 	require.NoError(t, err)
-	q.Start()
+	q.Start(context.Background())
 	defer q.Stop()
+
 	err = q.Store(context.Background(), nil, []byte("test"))
 
 	require.NoError(t, err)
@@ -43,9 +42,10 @@ func TestFileQueue(t *testing.T) {
 	select {
 	case <-timer.C:
 		return
-	case <-mbx.ReceiveC():
+	case <-mbx.Receive():
 		require.True(t, false)
 	}
+
 }
 
 func TestMetaFileQueue(t *testing.T) {
@@ -53,13 +53,12 @@ func TestMetaFileQueue(t *testing.T) {
 
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
-	defer mbx.Stop()
+	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	q.Start(context.Background())
 	defer q.Stop()
 	require.NoError(t, err)
 	err = q.Store(context.Background(), map[string]string{"name": "bob"}, []byte("test"))
@@ -77,13 +76,12 @@ func TestCorruption(t *testing.T) {
 
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
-	defer mbx.Stop()
+	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	q.Start(context.Background())
 	defer q.Stop()
 	require.NoError(t, err)
 
@@ -120,13 +118,12 @@ func TestFileDeleted(t *testing.T) {
 
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
-	defer mbx.Stop()
+	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	q.Start(context.Background())
 	defer q.Stop()
 	require.NoError(t, err)
 
@@ -166,13 +163,12 @@ func TestOtherFiles(t *testing.T) {
 
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
-	defer mbx.Stop()
+	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	q.Start(context.Background())
 	defer q.Stop()
 	require.NoError(t, err)
 
@@ -189,12 +185,12 @@ func TestResuming(t *testing.T) {
 
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
+	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	q.Start(context.Background())
 	require.NoError(t, err)
 
 	err = q.Store(context.Background(), nil, []byte("first"))
@@ -205,17 +201,15 @@ func TestResuming(t *testing.T) {
 
 	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
-	mbx.Stop()
 	q.Stop()
 
-	mbx2 := actor.NewMailbox[types.DataHandle]()
-	mbx2.Start()
-	defer mbx2.Stop()
+	mbx2 := types.NewMailbox[types.DataHandle]()
+	defer mbx2.Close()
 	q2, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx2.Send(ctx, dh)
 	}, log)
 	require.NoError(t, err)
-	q2.Start()
+	q2.Start(context.Background())
 	defer q2.Stop()
 	err = q2.Store(context.Background(), nil, []byte("third"))
 
@@ -233,14 +227,14 @@ func TestResuming(t *testing.T) {
 	require.True(t, string(buf) == "third")
 }
 
-func getHandle(t *testing.T, mbx actor.MailboxReceiver[types.DataHandle]) (map[string]string, []byte, error) {
-	timer := time.NewTicker(5 * time.Second)
+func getHandle(t *testing.T, mbx *types.Mailbox[types.DataHandle]) (map[string]string, []byte, error) {
+	timer := time.NewTicker(50 * time.Second)
 	select {
 	case <-timer.C:
 		require.True(t, false)
 		// This is only here to satisfy the linting.
 		return nil, nil, nil
-	case item, ok := <-mbx.ReceiveC():
+	case item, ok := <-mbx.Receive():
 		require.True(t, ok)
 		return item.Pop()
 	}

@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"go.uber.org/atomic"
 	"io"
 	"math/big"
 	"net"
@@ -193,6 +194,85 @@ func TestTLSConfigValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDrainStop(t *testing.T) {
+	allowReturn := atomic.NewBool(false)
+	totalRecords := atomic.NewInt64(0)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		totalRecords.Inc()
+		for {
+			if allowReturn.Load() {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}))
+	defer srv.Close()
+	l, err := newLoop[types.MetricDatum](types.ConnectionConfig{
+		URL:              srv.URL,
+		Timeout:          1 * time.Minute,
+		RetryBackoff:     1 * time.Second,
+		MaxRetryAttempts: 10,
+		BatchCount:       1,
+		FlushInterval:    1 * time.Second,
+		Connections:      1,
+	}, false, log.NewNopLogger(), func(s types.NetworkStats) {
+
+	})
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	l.Start(ctx)
+
+	require.NoError(t, l.seriesMbx.Send(ctx, &fakeDatum{}))
+	require.NoError(t, l.seriesMbx.Send(ctx, &fakeDatum{}))
+	l.DrainStop()
+	// One record will be in the write request, so 1 should be in the queue
+	require.Eventually(t, func() bool {
+		return l.seriesMbx.AproxLen() == 1
+	}, 5*time.Second, 100*time.Millisecond)
+	// Allow it to run.
+	allowReturn.Store(true)
+	require.Eventually(t, func() bool {
+		return l.seriesMbx.AproxLen() == 0
+	}, 5*time.Second, 100*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return totalRecords.Load() == 2
+	}, 5*time.Second, 100*time.Millisecond)
+
+}
+
+var _ types.MetricDatum = (*fakeDatum)(nil)
+
+type fakeDatum struct{}
+
+func (f fakeDatum) Hash() uint64 {
+	return 0
+}
+
+func (f fakeDatum) TimeStampMS() int64 {
+	return time.Now().UnixMilli()
+}
+
+func (f fakeDatum) IsHistogram() bool {
+	return false
+}
+
+func (f fakeDatum) Bytes() []byte {
+	return nil
+}
+
+func (f fakeDatum) Type() types.Type {
+	return types.PrometheusMetricV1
+}
+
+func (f fakeDatum) FileFormat() types.FileFormat {
+	return types.AlloyFileVersionV2
+}
+
+func (f fakeDatum) Free() {
+
 }
 
 // generateTestCertificates creates a CA certificate and a server certificate for testing

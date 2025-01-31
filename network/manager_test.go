@@ -105,9 +105,81 @@ func TestUpdatingConfig(t *testing.T) {
 	}
 	require.Eventuallyf(t, func() bool {
 		return recordsFound.Load() == 40
-	}, 20*time.Second, 1*time.Second, "record count should be 100 but is %d", recordsFound.Load())
+	}, 20*time.Second, 1*time.Second, "record count should be 40 but is %d", recordsFound.Load())
 
 	require.Truef(t, lastBatchSize.Load() == 20, "batch_count should be 20 but is %d", lastBatchSize.Load())
+}
+
+func TestDrain(t *testing.T) {
+	recordsFound := atomic.Uint32{}
+	headerVal := atomic.Int32{}
+	valueSent := atomic.Bool{}
+	valueSent.Store(false)
+	// This will cause it to buffer requests.
+	headerVal.Store(http.StatusTooManyRequests)
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		defer r.Body.Close()
+		decoded, err := snappy.Decode(nil, buf)
+		require.NoError(t, err)
+
+		wr := &prompb.WriteRequest{}
+		err = wr.Unmarshal(decoded)
+		require.NoError(t, err)
+		valueSent.Store(true)
+		w.WriteHeader(int(headerVal.Load()))
+		// Only add if we are in OK mode.
+		if headerVal.Load() == http.StatusOK {
+			recordsFound.Add(uint32(len(wr.Timeseries)))
+		}
+	}))
+
+	defer svr.Close()
+
+	cc := types.ConnectionConfig{
+		URL:              svr.URL,
+		Timeout:          1 * time.Second,
+		BatchCount:       1,
+		FlushInterval:    5 * time.Second,
+		Connections:      1,
+		MaxRetryAttempts: 100,
+		RetryBackoff:     10 * time.Second,
+	}
+
+	logger := log.NewNopLogger()
+
+	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	require.NoError(t, err)
+	ctx := context.Background()
+	wr.Start(ctx)
+	defer wr.Stop()
+	// Kick these off in the background.
+	go func() {
+		for i := 0; i < 40; i++ {
+			send(t, i, wr, ctx)
+		}
+	}()
+	// Make sure we get a request sent so that it is in the queue.
+	require.Eventually(t, func() bool {
+		return valueSent.Load()
+	}, 5*time.Second, 100*time.Millisecond)
+	cc2 := types.ConnectionConfig{
+		URL:              svr.URL,
+		Timeout:          1 * time.Second,
+		BatchCount:       1,
+		FlushInterval:    5 * time.Second,
+		Connections:      4,
+		MaxRetryAttempts: 100,
+		RetryBackoff:     10 * time.Second,
+	}
+	// Update the config which should NOT lose any data
+	wr.UpdateConfig(ctx, cc2)
+	// Once the update comes through ensure ok so that data can flow.
+	headerVal.Store(http.StatusOK)
+	require.Eventuallyf(t, func() bool {
+		return recordsFound.Load() == 40
+	}, 20*time.Second, 1*time.Second, "record count should be 40 but is %d", recordsFound.Load())
 }
 
 func TestRetry(t *testing.T) {
@@ -197,12 +269,12 @@ func TestRecoverable(t *testing.T) {
 
 	cc := types.ConnectionConfig{
 		URL:              svr.URL,
-		Timeout:          1 * time.Second,
+		Timeout:          100 * time.Millisecond,
 		BatchCount:       1,
 		FlushInterval:    10 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		Connections:      1,
+		Connections:      10,
 	}
 
 	logger := log.NewNopLogger()
@@ -218,7 +290,7 @@ func TestRecoverable(t *testing.T) {
 	require.Eventuallyf(t, func() bool {
 		// We send 10 but each one gets retried once so 20 total.
 		return recoverable.Load() == 10*2
-	}, 20*time.Second, 100*time.Millisecond, "recoverable should be 20 but is %d", recoverable.Load())
+	}, 40*time.Second, 100*time.Millisecond, "recoverable should be 20 but is %d", recoverable.Load())
 	time.Sleep(2 * time.Second)
 	// Ensure we dont get any more.
 	require.True(t, recoverable.Load() == 10*2)

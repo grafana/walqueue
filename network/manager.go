@@ -81,12 +81,21 @@ const (
 )
 
 func (s *manager) Run(ctx context.Context) {
+	// This is the primary run loop for the manager since it is no longer an actor.
 	for {
+
+		// CheckConfig is a priority to check the config. If no changes are found will default out
+		// and return ContinueExecution
 		flow := s.checkConfig(ctx)
 		if flow == Exit {
 			return
 		}
+		// Flush will check to see if we haven't sent data since the last flush.
 		s.flushCheck(ctx)
+
+		// The buffered checks are for when we could NOT add a metric to the write buffer.
+		// In that case we CANNOT pull a new record until, this will check if we can add
+		// and if it succeeds will return ContinueExecution else will return restart after a timout.
 		flow = s.bufferMetricCheck(ctx)
 		if flow == Restart {
 			continue
@@ -95,6 +104,8 @@ func (s *manager) Run(ctx context.Context) {
 		if flow == Restart {
 			continue
 		}
+
+		// Finally the main work loop where we pull new data.
 		flow = s.mainWork(ctx)
 		if flow == Exit {
 			return
@@ -204,6 +215,7 @@ func (s *manager) mainWork(ctx context.Context) flowcontrol {
 		}
 		cfg.Notify(successful, err)
 		return ContinueExecution
+		// This is necessary so we dont starve the queue, especially with buffered items.
 	case <-time.After(100 * time.Millisecond):
 		return ContinueExecution
 	}

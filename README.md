@@ -44,7 +44,7 @@ The underlying storage format can and will change. New releases will support pre
 
 ### actors
 
-Underlying each of these major parts is an actor framework. The actor framework provides an work loop in the form of the func `DoWork`, each part is single threaded and only exposes a a handful of functions for sending and receiving data. Telemetry, configuration and other types of data are passed in via the work loop and handled one at a time. There are some allowances for setting atomic variables for specific scenarios. In the case of network retries it is necessary to break out of the tight loop. 
+Underlying each of these major parts is a work loop in the form of the func `DoWork` or `Run`, each part is single threaded and only exposes a handful of functions for sending and receiving data. Telemetry, configuration and other types of data are passed in via the work loop and handled one at a time. There are some allowances for setting atomic variables for specific scenarios.
 
 This means that the parts are inherently context free and single threaded which greatly simplifies the design. Communication is handled via [mailboxes] that are backed by channels underneath. By default these are asynchronous calls to an unbounded queue. Where that differs will be noted. 
 
@@ -72,9 +72,9 @@ The `endpoint` handles uncompressing the data and feeding it to the `network` se
 
 ### network
 
-The `network` consists of two major sections, `manager` and `loop`. Inspired by the prometheus remote write the signals are placed in a queue by the label hash. This ensures that an out of order sample does not occur within a single instance and provides parrallelism. The `manager` handles picking which `loop` to send the data to and responding to configuration changes to change the configuration of a set of `loops`.
+The `network` consists of two major sections, `manager`,`write_buffer` and `write`. Inspired by the prometheus remote write the signals are placed in a queue by the label hash. This ensures that an out of order sample does not occur within a single instance and provides parallelism. The `manager` handles picking which `write_buffer` to send the data to. Each `write_buffer` then can trigger a `write` request.
 
-The `loop` is responsible for converting a set of `Datum` structs to bytes and sending the data and responding. Due to the nature of the tight retry loop, it has an atomic bool to allow a stop value to be set and break out of the retry loop. The `loop` also provides stats, it should be noted these stats are not prometheus or opentelemetry, they are a callback for when stats are updated. This allows the caller to determine how to present the stats. The only requirement is that the callback be threadsafe to the caller.  
+The `write_bufer` is responsible for converting a set of `Datum` structs to bytes and sending the data to `write`. The `write/write_buffer` also provides stats, it should be noted these stats are not prometheus or opentelemetry, they are a callback for when stats are updated. This allows the caller to determine how to present the stats. The only requirement is that the callback be threadsafe to the caller.  
 
 ### component
 

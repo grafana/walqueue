@@ -140,7 +140,7 @@ func buildWriteRequest[T types.Datum](items []T, snappybuf []byte, protobuf []by
 	return snappybuf, protobuf, nil
 }
 
-// singalsInfo allows us to preallocate what type of signals and count, since once they are
+// signalsInfo allows us to preallocate what type of signals and count, since once they are
 // serialized that information is lost.
 type signalsInfo struct {
 	seriesCount    int

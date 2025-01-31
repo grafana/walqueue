@@ -266,7 +266,7 @@ func (s *manager) queue(ctx context.Context, ts types.MetricDatum) bool {
 	return s.writeBuffers[queueNum].Add(ctx, ts)
 }
 
-// forceQueue adds forces data to be added, this should only be used in cases where we are draining the reapplying.
+// forceQueue forces data to be added ignoring queue limits, this should only be used in cases where we are draining then reapplying.
 func (s *manager) forceQueue(ctx context.Context, ts types.MetricDatum) {
 	// Based on a hash which is the label hash add to the queue.
 	queueNum := ts.Hash() % uint64(s.cfg.Connections)

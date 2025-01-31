@@ -105,7 +105,7 @@ func (w *writeBuffer[T]) send(bb []byte, s signalsInfo, ctx context.Context) {
 	}
 	l, nlErr := newWrite(w.cfg, w.log, stats)
 	if nlErr != nil {
-		level.Error(w.log).Log("msg", "error creating loop", "err", nlErr)
+		level.Error(w.log).Log("msg", "error creating write", "err", nlErr)
 		return
 	}
 	l.trySend(bb, ctx)
@@ -144,7 +144,7 @@ func buildWriteRequest[T types.Datum](items []T, snappybuf []byte, protobuf []by
 	return snappybuf, protobuf, nil
 }
 
-// singalsInfo allows us to preallocate what type of signals and count, since once they are
+// signalsInfo allows us to preallocate what type of signals and count, since once they are
 // serialized that information is lost.
 type signalsInfo struct {
 	seriesCount    int

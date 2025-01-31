@@ -101,7 +101,7 @@ func (w *writeBuffer[T]) send(bb []byte, s signalsInfo, ctx context.Context) {
 	}
 	l, nlErr := newWrite(w.cfg, w.log, stats)
 	if nlErr != nil {
-		level.Error(w.log).Log("msg", "error creating loop", "err", nlErr)
+		level.Error(w.log).Log("msg", "error creating write", "err", nlErr)
 		return
 	}
 	l.trySend(bb, ctx)

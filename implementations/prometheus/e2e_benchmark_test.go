@@ -3,6 +3,7 @@ package prometheus
 import (
 	"context"
 	"github.com/grafana/walqueue/types"
+	"github.com/prometheus/prometheus/model/labels"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,24 +18,40 @@ import (
 
 func BenchmarkE2E(b *testing.B) {
 	/*
-		This adds 10_000 prometheus metrics and checks them. 70% of the allocs are building the test series. 14k are the actual work.
-			cpu: 13th Gen Intel(R) Core(TM) i5-13500
-			2025-01-31 BenchmarkE2E/normal-20         	       1	10009671619 ns/op	10864704 B/op	   67452 allocs/op
+		go test -bench="BenchmarkE2E" -run="BenchmarkE2E" -benchmem -benchtime "5s";
+		cpu: 13th Gen Intel(R) Core(TM) i5-13500
+		2025-01-31 BenchmarkE2E/normal-20                 1        10008482261 ns/op       10114520 B/op      17934 allocs/op
 	*/
 	type e2eTest struct {
 		name   string
-		maker  func(index int, app storage.Appender)
+		maker  func(b *testing.B, app storage.Appender)
 		tester func(samples []prompb.TimeSeries)
+	}
+	type item struct {
+		ts    int64
+		value float64
+		lbls  labels.Labels
 	}
 	tests := []e2eTest{
 		{
 			name: "normal",
-			maker: func(index int, app storage.Appender) {
-				ts, v, lbls := makeSeries(index)
-				_, _ = app.Append(0, lbls, ts, v)
+			maker: func(t *testing.B, app storage.Appender) {
+				t.StopTimer()
+				itemList := make([]item, 10_000)
+				for i := range itemList {
+					ts, val, lbls := makeSeries(i)
+					itemList[i] = item{
+						ts:    ts,
+						value: val,
+						lbls:  lbls,
+					}
+				}
+				t.StartTimer()
+				for _, it := range itemList {
+					_, _ = app.Append(0, it.lbls, it.ts, it.value)
+				}
 			},
 			tester: func(samples []prompb.TimeSeries) {
-				b.Helper()
 				for _, s := range samples {
 					require.True(b, len(s.Samples) == 1)
 				}
@@ -48,8 +65,7 @@ func BenchmarkE2E(b *testing.B) {
 	}
 }
 
-func runBenchmark(t *testing.B, add func(index int, appendable storage.Appender), _ func(samples []prompb.TimeSeries)) {
-	t.ReportAllocs()
+func runBenchmark(t *testing.B, add func(b *testing.B, appendable storage.Appender), _ func(samples []prompb.TimeSeries)) {
 	l := log.NewNopLogger()
 	done := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -63,9 +79,10 @@ func runBenchmark(t *testing.B, add func(index int, appendable storage.Appender)
 
 	app := c.Appender(ctx)
 
-	for i := 0; i < 10_000; i++ {
-		add(i, app)
+	for i := 0; i < t.N; i++ {
+		add(t, app)
 	}
+
 	require.NoError(t, app.Commit())
 
 	tm := time.NewTimer(10 * time.Second)
@@ -86,7 +103,6 @@ func newComponentBenchmark(t *testing.B, l log.Logger, url string) (Queue, error
 		FlushInterval:    1 * time.Second,
 		Connections:      20,
 	}, t.TempDir(), 10_000, 1*time.Second, 1*time.Hour, prometheus.NewRegistry(), "alloy", l)
-
 }
 
 var _ prometheus.Registerer = (*fakeRegistry)(nil)

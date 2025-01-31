@@ -40,6 +40,7 @@ func TestE2E(t *testing.T) {
 		{
 			name: "normal",
 			maker: func(index int, app storage.Appender) (float64, labels.Labels) {
+
 				ts, v, lbls := makeSeries(index)
 				_, errApp := app.Append(0, lbls, ts, v)
 				require.NoError(t, errApp)

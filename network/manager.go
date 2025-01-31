@@ -125,7 +125,7 @@ func (s *manager) checkConfig(ctx context.Context) flowcontrol {
 			return Exit
 		}
 		var err error
-		if err = s.updateConfig(cfg.Value); err == nil {
+		if err = s.updateConfig(ctx, cfg.Value); err == nil {
 			successful = true
 		}
 		cfg.Notify(successful, err)
@@ -210,7 +210,7 @@ func (s *manager) mainWork(ctx context.Context) flowcontrol {
 			return Exit
 		}
 		var err error
-		if err = s.updateConfig(cfg.Value); err == nil {
+		if err = s.updateConfig(ctx, cfg.Value); err == nil {
 			successful = true
 		}
 		cfg.Notify(successful, err)
@@ -221,7 +221,7 @@ func (s *manager) mainWork(ctx context.Context) flowcontrol {
 	}
 }
 
-func (s *manager) updateConfig(cc types.ConnectionConfig) error {
+func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig) error {
 	// No need to do anything if the configuration is the same.
 	if s.cfg.Equals(cc) {
 		return nil
@@ -243,12 +243,12 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) error {
 	}
 	// Force adding of metrics, note this may cause the system to go above the batch count.
 	for _, d := range drainedMetrics {
-		s.forceQueue(d)
+		s.forceQueue(ctx, d)
 	}
 
 	metadata := newWriteBuffer[types.MetadataDatum](cc, s.stats, true, s.logger)
 	for _, d := range drainedMeta {
-		s.metadata.ForceAdd(d)
+		s.metadata.ForceAdd(ctx, d)
 	}
 	s.metadata = metadata
 	return nil
@@ -267,8 +267,8 @@ func (s *manager) queue(ctx context.Context, ts types.MetricDatum) bool {
 }
 
 // forceQueue adds forces data to be added, this should only be used in cases where we are draining the reapplying.
-func (s *manager) forceQueue(ts types.MetricDatum) {
+func (s *manager) forceQueue(ctx context.Context, ts types.MetricDatum) {
 	// Based on a hash which is the label hash add to the queue.
 	queueNum := ts.Hash() % uint64(s.cfg.Connections)
-	s.writeBuffers[queueNum].ForceAdd(ts)
+	s.writeBuffers[queueNum].ForceAdd(ctx, ts)
 }

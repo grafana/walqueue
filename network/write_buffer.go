@@ -14,32 +14,34 @@ import (
 // write request as needed. All methods need to be called in a thread safe manner.
 type writeBuffer[T types.Datum] struct {
 	items []T
-	// writeAvailable keeps track if there is a write request going out.
-	writeAvailable *atomic.Bool
-	wrBuf          []byte
-	snappyBuf      []byte
-	log            log.Logger
-	cfg            types.ConnectionConfig
-	stats          func(stats types.NetworkStats)
-	isMeta         bool
+	// writeInProgress keeps track if there is a write request going out.
+	writeInProgress *atomic.Bool
+	wrBuf           []byte
+	snappyBuf       []byte
+	log             log.Logger
+	cfg             types.ConnectionConfig
+	stats           func(stats types.NetworkStats)
+	isMeta          bool
 }
 
 func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger) *writeBuffer[T] {
 	return &writeBuffer[T]{
-		items:          make([]T, 0),
-		writeAvailable: atomic.NewBool(true),
-		cfg:            cfg,
-		stats:          stats,
-		isMeta:         isMeta,
-		log:            l,
+		items:           make([]T, 0),
+		writeInProgress: atomic.NewBool(false),
+		cfg:             cfg,
+		stats:           stats,
+		isMeta:          isMeta,
+		log:             l,
 	}
 }
 
 // ForceAdd is only used when we need to force items to the queue, this is generally done as part of a config change.
-func (w *writeBuffer[T]) ForceAdd(item T) {
+func (w *writeBuffer[T]) ForceAdd(ctx context.Context, item T) {
 	w.items = append(w.items, item)
+	w.Send(ctx)
 }
 
+// Add will add to the before and then send if appropriate.
 func (w *writeBuffer[T]) Add(ctx context.Context, item T) bool {
 	// Check if adding to the buffer would put us over the batch count.
 	// Having a batch count batch*2+1 means we can have more data read to go.
@@ -74,23 +76,25 @@ func (w *writeBuffer[T]) Send(ctx context.Context) {
 	if len(w.items) == 0 {
 		return
 	}
-	// Write Available tells us if there is a write client available, if true then we can right.
-	if w.writeAvailable.Load() {
+	// Write in progress tells us if there is a write client in progress, if false then we can right.
+	if !w.writeInProgress.Load() {
 		sendingItems := w.getItems()
 		// About to kick off a write request so the write is no longer available.
-		w.writeAvailable.Store(false)
+		w.writeInProgress.Store(true)
 		go func() {
+			defer w.writeInProgress.Store(false)
 			s := newSignalsInfo[T](sendingItems)
 			var err error
 			w.snappyBuf, w.wrBuf, err = buildWriteRequest[T](sendingItems, w.snappyBuf, w.wrBuf)
-			// If the write request fails then we should pretend it worked.
+			// If the build write request fails then we should pretend it worked. Since this should only trigger if
+			// we get invalid datums.
 			if err != nil {
 				level.Error(w.log).Log("msg", "error building write request", "err", err)
 				return
 			}
 			w.send(w.snappyBuf, s, ctx)
 			// Things are sent open back up for writes.
-			w.writeAvailable.Store(true)
+
 		}()
 	}
 }

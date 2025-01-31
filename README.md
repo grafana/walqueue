@@ -74,7 +74,7 @@ The `endpoint` handles uncompressing the data and feeding it to the `network` se
 
 The `network` consists of two major sections, `manager`,`write_buffer` and `write`. Inspired by the prometheus remote write the signals are placed in a queue by the label hash. This ensures that an out of order sample does not occur within a single instance and provides parallelism. The `manager` handles picking which `write_buffer` to send the data to. Each `write_buffer` then can trigger a `write` request.
 
-The `write_bufer` is responsible for converting a set of `Datum` structs to bytes and sending the data to `write`. The `write/write_buffer` also provides stats, it should be noted these stats are not prometheus or opentelemetry, they are a callback for when stats are updated. This allows the caller to determine how to present the stats. The only requirement is that the callback be threadsafe to the caller.  
+The `write_buffer` is responsible for converting a set of `Datum` structs to bytes and sending the data to `write`. The `write/write_buffer` also provides stats, it should be noted these stats are not prometheus or opentelemetry, they are a callback for when stats are updated. This allows the caller to determine how to present the stats. The only requirement is that the callback be threadsafe to the caller.  
 
 ### component
 

@@ -194,6 +194,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	if err != nil {
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
+
 	for _, series := range items {
 		// Check that the TTL.
 		mm, valid := series.(types.MetricDatum)

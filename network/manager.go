@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-// manager manages loops. Mostly it exists to control their lifecycle and send work to them.
+// manager manages writeBuffers. Mostly it exists to control their lifecycle and send work to them.
 type manager struct {
-	loops            []*writeBuffer[types.MetricDatum]
+	writeBuffers     []*writeBuffer[types.MetricDatum]
 	metadata         *writeBuffer[types.MetadataDatum]
 	logger           log.Logger
 	inbox            *types.Mailbox[types.MetricDatum]
@@ -29,8 +29,8 @@ var _ types.NetworkClient = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStats func(types.NetworkStats)) (types.NetworkClient, error) {
 	s := &manager{
-		loops:  make([]*writeBuffer[types.MetricDatum], 0, cc.Connections),
-		logger: logger,
+		writeBuffers: make([]*writeBuffer[types.MetricDatum], 0, cc.Connections),
+		logger:       logger,
 		// This provides blocking to only handle one at a time, so that if a queue blocks
 		// it will stop the filequeue from feeding more. Without passing true the minimum is actually 64 instead of 1.
 		inbox:            types.NewMailbox[types.MetricDatum](chann.Cap(1)),
@@ -47,7 +47,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.cfg.Connections; i++ {
 		l := newWriteBuffer[types.MetricDatum](cc, seriesStats, false, logger)
-		s.loops = append(s.loops, l)
+		s.writeBuffers = append(s.writeBuffers, l)
 	}
 
 	metadata := newWriteBuffer[types.MetadataDatum](cc, seriesStats, true, logger)
@@ -166,7 +166,7 @@ func (s *manager) flushCheck(ctx context.Context) {
 	// This isnt an exact science but it doesnt need to be, we just need to make sure that even if batch counts arent
 	// being met then data is flowing.
 	if time.Since(s.lastFlushTime) > s.cfg.FlushInterval {
-		for _, l := range s.loops {
+		for _, l := range s.writeBuffers {
 			l.Send(ctx)
 		}
 		s.metadata.Send(ctx)
@@ -228,18 +228,18 @@ func (s *manager) updateConfig(cc types.ConnectionConfig) error {
 	}
 	s.cfg = cc
 	level.Debug(s.logger).Log("msg", "recreating write buffers due to configuration change.")
-	// Drain then stop the current loops.
-	drainedMetrics := make([]types.MetricDatum, 0, len(s.loops)*cc.BatchCount)
-	for _, l := range s.loops {
+	// Drain then stop the current writeBuffers.
+	drainedMetrics := make([]types.MetricDatum, 0, len(s.writeBuffers)*cc.BatchCount)
+	for _, l := range s.writeBuffers {
 		drainedMetrics = append(drainedMetrics, l.Drain()...)
 	}
 
 	drainedMeta := s.metadata.Drain()
 
-	s.loops = make([]*writeBuffer[types.MetricDatum], 0, s.cfg.Connections)
+	s.writeBuffers = make([]*writeBuffer[types.MetricDatum], 0, s.cfg.Connections)
 	for i := uint(0); i < s.cfg.Connections; i++ {
 		l := newWriteBuffer[types.MetricDatum](cc, s.stats, false, s.logger)
-		s.loops = append(s.loops, l)
+		s.writeBuffers = append(s.writeBuffers, l)
 	}
 	// Force adding of metrics, note this may cause the system to go above the batch count.
 	for _, d := range drainedMetrics {
@@ -263,12 +263,12 @@ func (s *manager) queue(ctx context.Context, ts types.MetricDatum) bool {
 	// Based on a hash which is the label hash add to the queue.
 	queueNum := ts.Hash() % uint64(s.cfg.Connections)
 	// This will block if the queue is full.
-	return s.loops[queueNum].Add(ctx, ts)
+	return s.writeBuffers[queueNum].Add(ctx, ts)
 }
 
 // forceQueue adds forces data to be added, this should only be used in cases where we are draining the reapplying.
 func (s *manager) forceQueue(ts types.MetricDatum) {
 	// Based on a hash which is the label hash add to the queue.
 	queueNum := ts.Hash() % uint64(s.cfg.Connections)
-	s.loops[queueNum].ForceAdd(ts)
+	s.writeBuffers[queueNum].ForceAdd(ts)
 }

@@ -41,7 +41,7 @@ func (w *writeBuffer[T]) ForceAdd(ctx context.Context, item T) {
 	w.Send(ctx)
 }
 
-// Add will add to the before and then send if appropriate.
+// Add will add to the buffer and then send if appropriate.
 func (w *writeBuffer[T]) Add(ctx context.Context, item T) bool {
 	// Check if adding to the buffer would put us over the batch count.
 	// Having a batch count batch*2+1 means we can have more data read to go.
@@ -93,8 +93,6 @@ func (w *writeBuffer[T]) Send(ctx context.Context) {
 				return
 			}
 			w.send(w.snappyBuf, s, ctx)
-			// Things are sent open back up for writes.
-
 		}()
 	}
 }

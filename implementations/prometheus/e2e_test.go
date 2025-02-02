@@ -40,7 +40,6 @@ func TestE2E(t *testing.T) {
 		{
 			name: "normal",
 			maker: func(index int, app storage.Appender) (float64, labels.Labels) {
-
 				ts, v, lbls := makeSeries(index)
 				_, errApp := app.Append(0, lbls, ts, v)
 				require.NoError(t, errApp)
@@ -344,7 +343,7 @@ func newComponent(t *testing.T, l log.Logger, url string, reg prometheus.Registe
 		MaxRetryAttempts: 1,
 		BatchCount:       5,
 		FlushInterval:    1 * time.Second,
-		Connections:      1,
+		Connections:      4,
 	}, t.TempDir(), 10, 1*time.Second, 1*time.Hour, reg, "alloy", l)
 
 }

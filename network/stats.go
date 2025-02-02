@@ -10,6 +10,7 @@ import (
 // recordStats determines what values to send to the stats function. This allows for any
 // number of metrics/signals libraries to be used. Prometheus, OTel, and any other.
 func recordStats(seriesCount, histogramCount, metadataCount int, newestTS int64, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
+
 	switch {
 	case r.networkError:
 		stats(types.NetworkStats{
@@ -22,6 +23,7 @@ func recordStats(seriesCount, histogramCount, metadataCount int, newestTS int64,
 			Metadata: types.CategoryStats{
 				NetworkSamplesFailed: metadataCount,
 			},
+			SendDuration: r.duration,
 		})
 	case r.successful:
 		var sampleBytesSent int
@@ -45,6 +47,7 @@ func recordStats(seriesCount, histogramCount, metadataCount int, newestTS int64,
 			MetadataBytes:          metaBytesSent,
 			SeriesBytes:            sampleBytesSent,
 			NewestTimestampSeconds: time.UnixMilli(newestTS).Unix(),
+			SendDuration:           r.duration,
 		})
 	case r.statusCode == http.StatusTooManyRequests:
 		stats(types.NetworkStats{
@@ -60,6 +63,7 @@ func recordStats(seriesCount, histogramCount, metadataCount int, newestTS int64,
 				RetriedSamples:    metadataCount,
 				RetriedSamples429: metadataCount,
 			},
+			SendDuration: r.duration,
 		})
 	case r.statusCode/100 == 5:
 		stats(types.NetworkStats{
@@ -72,6 +76,7 @@ func recordStats(seriesCount, histogramCount, metadataCount int, newestTS int64,
 			Metadata: types.CategoryStats{
 				RetriedSamples: metadataCount,
 			},
+			SendDuration: r.duration,
 		})
 	case r.statusCode != 200:
 		stats(types.NetworkStats{
@@ -84,6 +89,7 @@ func recordStats(seriesCount, histogramCount, metadataCount int, newestTS int64,
 			Metadata: types.CategoryStats{
 				FailedSamples: metadataCount,
 			},
+			SendDuration: r.duration,
 		})
 	}
 

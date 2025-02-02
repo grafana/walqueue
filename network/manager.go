@@ -50,7 +50,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, seriesStats, true, logger)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, metadataStats, true, logger)
 	s.metadata = metadata
 	return s, nil
 }
@@ -246,7 +246,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig) e
 		s.forceQueue(ctx, d)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, s.stats, true, s.logger)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.metaStats, true, s.logger)
 	for _, d := range drainedMeta {
 		s.metadata.ForceAdd(ctx, d)
 	}

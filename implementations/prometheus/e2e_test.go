@@ -174,7 +174,7 @@ func runTest(t *testing.T, add func(index int, appendable storage.Appender) (flo
 
 	// This is a weird use case to handle eventually.
 	// With race turned on this can take a long time.
-	tm := time.NewTimer(20 * time.Second)
+	tm := time.NewTimer(30 * time.Second)
 	select {
 	case <-done:
 	case <-tm.C:
@@ -342,7 +342,7 @@ func newComponent(t *testing.T, l log.Logger, url string, reg prometheus.Registe
 		RetryBackoff:     1 * time.Second,
 		MaxRetryAttempts: 1,
 		BatchCount:       5,
-		FlushInterval:    1 * time.Second,
+		FlushInterval:    100 * time.Millisecond,
 		Connections:      4,
 	}, t.TempDir(), 10, 1*time.Second, 1*time.Hour, reg, "alloy", l)
 

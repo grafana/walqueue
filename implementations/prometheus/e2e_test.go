@@ -343,7 +343,8 @@ func newComponent(t *testing.T, l log.Logger, url string, reg prometheus.Registe
 		MaxRetryAttempts: 1,
 		BatchCount:       5,
 		FlushInterval:    100 * time.Millisecond,
-		Connections:      4,
+		MinConnections:   4,
+		MaxConnections:   4,
 	}, t.TempDir(), 10, 1*time.Second, 1*time.Hour, reg, "alloy", l)
 
 }

@@ -49,8 +49,10 @@ type ConnectionConfig struct {
 	// ExternalLabels specifies the external labels to be added to all samples
 	// sent to the Prometheus server.
 	ExternalLabels map[string]string
-	// Connections is the number of concurrent connections to use for sending data.
-	Connections uint
+	// MaxConnections is the maximum number of concurrent connections to use.
+	MaxConnections uint
+	// MinConnections is the minimum number of concurrent connections to use.
+	MinConnections uint
 	// TLSCert is the PEM-encoded certificate string for TLS client authentication
 	TLSCert string
 	// TLSKey is the PEM-encoded private key string for TLS client authentication

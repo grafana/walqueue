@@ -11,41 +11,58 @@ import (
 
 // manager manages writeBuffers. Mostly it exists to control their lifecycle and send work to them.
 type manager struct {
-	writeBuffers     []*writeBuffer[types.MetricDatum]
-	metadata         *writeBuffer[types.MetadataDatum]
-	logger           log.Logger
-	inbox            *types.Mailbox[types.MetricDatum]
-	metaInbox        *types.Mailbox[types.MetadataDatum]
-	configInbox      *types.SyncMailbox[types.ConnectionConfig, bool]
-	cfg              types.ConnectionConfig
-	stats            func(types.NetworkStats)
-	metaStats        func(types.NetworkStats)
-	bufferedMetric   types.MetricDatum
-	bufferedMetadata types.MetadataDatum
-	lastFlushTime    time.Time
+	writeBuffers       []*writeBuffer[types.MetricDatum]
+	metadata           *writeBuffer[types.MetadataDatum]
+	logger             log.Logger
+	inbox              *types.Mailbox[types.MetricDatum]
+	metaInbox          *types.Mailbox[types.MetadataDatum]
+	desiredOutbox      chan uint
+	configInbox        *types.SyncMailbox[types.ConnectionConfig, bool]
+	cfg                types.ConnectionConfig
+	stats              func(types.NetworkStats)
+	metaStats          func(types.NetworkStats)
+	bufferedMetric     types.MetricDatum
+	bufferedMetadata   types.MetadataDatum
+	lastFlushTime      time.Time
+	desiredParallelism *parallelism
+	desiredConnections uint
 }
 
 var _ types.NetworkClient = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStats func(types.NetworkStats)) (types.NetworkClient, error) {
+	desiredOutbox := make(chan uint)
+	p := newParallelism(10*time.Second, 60, cc.MaxConnections, cc.MinConnections, desiredOutbox)
 	s := &manager{
-		writeBuffers: make([]*writeBuffer[types.MetricDatum], 0, cc.Connections),
-		logger:       logger,
-		// This provides blocking to only handle one at a time, so that if a queue blocks
-		// it will stop the filequeue from feeding more. Without passing true the minimum is actually 64 instead of 1.
+		writeBuffers:     make([]*writeBuffer[types.MetricDatum], 0, cc.MinConnections),
+		logger:           logger,
 		inbox:            types.NewMailbox[types.MetricDatum](chann.Cap(1)),
 		metaInbox:        types.NewMailbox[types.MetadataDatum](chann.Cap(1)),
 		bufferedMetric:   nil,
 		bufferedMetadata: nil,
 		configInbox:      types.NewSyncMailbox[types.ConnectionConfig, bool](),
-		stats:            seriesStats,
-		metaStats:        metadataStats,
-		cfg:              cc,
-		lastFlushTime:    time.Now(),
+		stats: func(ns types.NetworkStats) {
+			if ns.Total5XX() > 0 || ns.Total429() > 0 || ns.TotalFailed() > 0 {
+				p.AddNetworkError()
+			}
+			seriesStats(ns)
+		},
+		metaStats: func(ns types.NetworkStats) {
+			if ns.Total5XX() > 0 || ns.Total429() > 0 || ns.TotalFailed() > 0 {
+				p.AddNetworkError()
+			}
+			metadataStats(ns)
+		},
+		cfg:                cc,
+		lastFlushTime:      time.Now(),
+		desiredOutbox:      desiredOutbox,
+		desiredParallelism: p,
 	}
 
+	s.desiredConnections = s.cfg.MinConnections
+
 	// start kicks off a number of concurrent connections.
-	for i := uint(0); i < s.cfg.Connections; i++ {
+	for i := uint(0); i < s.desiredConnections; i++ {
 		l := newWriteBuffer[types.MetricDatum](cc, seriesStats, false, logger)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
@@ -57,6 +74,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 
 func (s *manager) Start(ctx context.Context) {
 	s.configInbox.Start()
+	go s.desiredParallelism.Run(ctx)
 	go s.Run(ctx)
 }
 
@@ -83,11 +101,11 @@ const (
 func (s *manager) Run(ctx context.Context) {
 	// This is the primary run loop for the manager since it is no longer an actor.
 	for {
-
 		// CheckConfig is a priority to check the config. If no changes are found will default out
 		// and return ContinueExecution
 		flow := s.checkConfig(ctx)
 		if flow == Exit {
+			s.desiredParallelism.Stop()
 			return
 		}
 		// Flush will check to see if we haven't sent data since the last flush.
@@ -108,6 +126,7 @@ func (s *manager) Run(ctx context.Context) {
 		// Finally the main work loop where we pull new data.
 		flow = s.mainWork(ctx)
 		if flow == Exit {
+			s.desiredParallelism.Stop()
 			return
 		}
 	}
@@ -125,10 +144,21 @@ func (s *manager) checkConfig(ctx context.Context) flowcontrol {
 			return Exit
 		}
 		var err error
-		if err = s.updateConfig(ctx, cfg.Value); err == nil {
+		if err = s.updateConfig(ctx, cfg.Value, s.desiredConnections); err == nil {
 			successful = true
 		}
 		cfg.Notify(successful, err)
+		return ContinueExecution
+	case desired, ok := <-s.desiredOutbox:
+		if !ok {
+			level.Debug(s.logger).Log("msg", "desired outbox closed")
+			return Exit
+		}
+		s.desiredConnections = desired
+		err := s.updateConfig(ctx, s.cfg, s.desiredConnections)
+		if err != nil {
+			level.Debug(s.logger).Log("msg", "update config failure", "err", err)
+		}
 		return ContinueExecution
 	default:
 		return ContinueExecution
@@ -210,7 +240,7 @@ func (s *manager) mainWork(ctx context.Context) flowcontrol {
 			return Exit
 		}
 		var err error
-		if err = s.updateConfig(ctx, cfg.Value); err == nil {
+		if err = s.updateConfig(ctx, cfg.Value, s.desiredConnections); err == nil {
 			successful = true
 		}
 		cfg.Notify(successful, err)
@@ -221,7 +251,7 @@ func (s *manager) mainWork(ctx context.Context) flowcontrol {
 	}
 }
 
-func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig) error {
+func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, desiredConnections uint) error {
 	// No need to do anything if the configuration is the same.
 	if s.cfg.Equals(cc) {
 		return nil
@@ -236,8 +266,8 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig) e
 
 	drainedMeta := s.metadata.Drain()
 
-	s.writeBuffers = make([]*writeBuffer[types.MetricDatum], 0, s.cfg.Connections)
-	for i := uint(0); i < s.cfg.Connections; i++ {
+	s.writeBuffers = make([]*writeBuffer[types.MetricDatum], 0, desiredConnections)
+	for i := uint(0); i < desiredConnections; i++ {
 		l := newWriteBuffer[types.MetricDatum](cc, s.stats, false, s.logger)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
@@ -261,7 +291,7 @@ func (s *manager) Stop() {
 // queue adds anything thats not metadata to the queue.
 func (s *manager) queue(ctx context.Context, ts types.MetricDatum) bool {
 	// Based on a hash which is the label hash add to the queue.
-	queueNum := ts.Hash() % uint64(s.cfg.Connections)
+	queueNum := ts.Hash() % uint64(s.desiredConnections)
 	// This will block if the queue is full.
 	return s.writeBuffers[queueNum].Add(ctx, ts)
 }
@@ -269,6 +299,6 @@ func (s *manager) queue(ctx context.Context, ts types.MetricDatum) bool {
 // forceQueue forces data to be added ignoring queue limits, this should only be used in cases where we are draining then reapplying.
 func (s *manager) forceQueue(ctx context.Context, ts types.MetricDatum) {
 	// Based on a hash which is the label hash add to the queue.
-	queueNum := ts.Hash() % uint64(s.cfg.Connections)
+	queueNum := ts.Hash() % uint64(s.desiredConnections)
 	s.writeBuffers[queueNum].ForceAdd(ctx, ts)
 }

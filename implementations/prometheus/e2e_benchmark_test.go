@@ -101,7 +101,8 @@ func newComponentBenchmark(t *testing.B, l log.Logger, url string) (Queue, error
 		MaxRetryAttempts: 1,
 		BatchCount:       2000,
 		FlushInterval:    1 * time.Second,
-		Connections:      20,
+		MinConnections:   20,
+		MaxConnections:   20,
 	}, t.TempDir(), 10_000, 1*time.Second, 1*time.Hour, prometheus.NewRegistry(), "alloy", l)
 }
 

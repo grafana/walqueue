@@ -48,6 +48,8 @@ type queue struct {
 	stats          *PrometheusStats
 	metaStats      *PrometheusStats
 	externalLabels map[string]string
+	ctx            context.Context
+	cncl           context.CancelFunc
 }
 
 // NewQueue creates and returns a new Queue instance, initializing its components
@@ -80,6 +82,8 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	if err != nil {
 		return nil, err
 	}
+	ctx := context.Background()
+	ctx, cncl := context.WithCancel(ctx)
 	q := &queue{
 		incoming:       actor.NewMailbox[types.DataHandle](),
 		stats:          stats,
@@ -88,6 +92,8 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		logger:         logger,
 		ttl:            ttl,
 		externalLabels: cc.ExternalLabels,
+		ctx:            ctx,
+		cncl:           cncl,
 	}
 	fq, err := filequeue.NewQueue(directory, func(ctx context.Context, dh types.DataHandle) {
 		sendErr := q.incoming.Send(ctx, dh)
@@ -114,9 +120,9 @@ func (q *queue) Start() {
 	q.self = actor.New(q)
 	q.self.Start()
 	q.incoming.Start()
-	q.network.Start()
+	q.network.Start(q.ctx)
 	q.queue.Start()
-	q.serializer.Start(context.TODO())
+	q.serializer.Start(q.ctx)
 }
 
 func (q *queue) Stop() {
@@ -125,6 +131,7 @@ func (q *queue) Stop() {
 	q.network.Stop()
 	q.queue.Stop()
 	q.serializer.Stop()
+	q.cncl()
 
 	q.stats.Unregister()
 	q.metaStats.Unregister()

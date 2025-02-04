@@ -11,6 +11,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v0.0.4
 	github.com/prometheus/client_golang v1.20.5
+	github.com/prometheus/client_model v0.6.1
 	github.com/prometheus/common v0.61.0
 	github.com/prometheus/prometheus v0.55.1
 	github.com/stretchr/testify v1.10.0
@@ -18,6 +19,7 @@ require (
 	github.com/vladopajic/go-actor v0.9.1-0.20241115212052-39d92aec6093
 	go.uber.org/atomic v1.11.0
 	go.uber.org/goleak v1.3.0
+	golang.design/x/chann v0.1.2
 )
 
 require (
@@ -35,7 +37,6 @@ require (
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.56.0 // indirect

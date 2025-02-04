@@ -1,10 +1,22 @@
 package types
 
 import (
+	"context"
 	"time"
 )
 
-// TODO @mattdurham separate this into more manageable chunks, and likely 3 stats series: series, metadata and new ones.
+type StatsHub interface {
+	Start(context.Context)
+	Stop()
+	SendSeriesNetworkStats(NetworkStats)
+	SendSerializerStats(SerializerStats)
+	SendMetadataNetworkStats(NetworkStats)
+	RegisterSeriesNetwork(func(NetworkStats)) NotificationRelease
+	RegisterMetadataNetwork(func(NetworkStats)) NotificationRelease
+	RegisterSerializer(func(SerializerStats)) NotificationRelease
+}
+
+type NotificationRelease func()
 
 type SerializerStats struct {
 	SeriesStored           int

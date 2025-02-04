@@ -68,7 +68,6 @@ func (l *write) trySend(buf []byte, ctx context.Context) {
 		// Sleep between attempts.
 		time.Sleep(result.retryAfter)
 	}
-
 }
 
 type sendResult struct {

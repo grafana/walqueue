@@ -50,7 +50,9 @@ func TestSending(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {}, drift)
 	wr.Start(ctx)
 	defer wr.Stop()
 
@@ -83,8 +85,9 @@ func TestUpdatingConfig(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-
-	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {}, drift)
 	require.NoError(t, err)
 	ctx := context.Background()
 	wr.Start(ctx)
@@ -152,8 +155,9 @@ func TestDrain(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-
-	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {}, drift)
 	require.NoError(t, err)
 	ctx := context.Background()
 	wr.Start(ctx)
@@ -215,7 +219,9 @@ func TestRetry(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {}, drift)
 	require.NoError(t, err)
 	wr.Start(ctx)
 	defer wr.Stop()
@@ -251,7 +257,9 @@ func TestRetryBounded(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {}, drift)
 	wr.Start(ctx)
 	defer wr.Stop()
 	require.NoError(t, err)
@@ -286,9 +294,11 @@ func TestRecoverable(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
 	wr, err := New(cc, logger, func(s types.NetworkStats) {
 		recoverable.Add(uint32(s.Total5XX()))
-	}, func(s types.NetworkStats) {})
+	}, func(s types.NetworkStats) {}, drift)
 	require.NoError(t, err)
 	wr.Start(ctx)
 	defer wr.Stop()
@@ -327,9 +337,11 @@ func TestNonRecoverable(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
 	wr, err := New(cc, logger, func(s types.NetworkStats) {
 		nonRecoverable.Add(uint32(s.TotalFailed()))
-	}, func(s types.NetworkStats) {})
+	}, func(s types.NetworkStats) {}, drift)
 	wr.Start(ctx)
 	defer wr.Stop()
 	require.NoError(t, err)

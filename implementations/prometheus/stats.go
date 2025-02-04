@@ -1,6 +1,7 @@
 package prometheus
 
 import (
+	"context"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"sync/atomic"
@@ -10,6 +11,7 @@ type PrometheusStats struct {
 	serializerIn atomic.Int64
 	networkOut   atomic.Int64
 	register     prometheus.Registerer
+	driftNotify  *types.Mailbox[uint]
 	// Network Stats
 	NetworkSeriesSent                prometheus.Counter
 	NetworkFailures                  prometheus.Counter
@@ -307,6 +309,12 @@ func (s *PrometheusStats) updateDrift() {
 	// We always want to ensure that we have real values, else there is a window where this can be
 	// timestamp - 0 which gives a result in the years.
 	if s.serializerIn.Load() != 0 && s.networkOut.Load() != 0 {
-		s.TimestampDriftSeconds.Set(float64(s.serializerIn.Load() - s.networkOut.Load()))
+		drift := uint(s.serializerIn.Load() - s.networkOut.Load())
+		s.TimestampDriftSeconds.Set(float64(drift))
+		s.driftNotify.Send(context.TODO(), drift)
 	}
+}
+
+func (s *PrometheusStats) DriftNotify() *types.Mailbox[uint] {
+	return s.driftNotify
 }

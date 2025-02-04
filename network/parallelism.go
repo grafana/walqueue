@@ -4,23 +4,28 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/grafana/walqueue/types"
 )
 
 type parallelism struct {
-	mut           sync.Mutex
-	resetInterval time.Duration
+	mut         sync.RWMutex
+	cfg         parallelismConfig
+	statshub    types.StatsHub
+	driftNotify *types.Mailbox[uint]
 	// networkErrors is any 4xx,5xx.
 	networkErrors         []time.Time
-	timestampDriftSeconds uint
-	allowedDriftSeconds   uint
-	maxLoops              uint
-	minLoops              uint
+	networkSuccesses      []time.Time
+	timestampDriftSeconds int64
 	currentLoops          uint
 	out                   chan uint
 	stop                  chan struct{}
-	networkError          chan time.Time
 	// previous is the number of previous desired instances. This is to prevent flapping.
-	previous []previousDesired
+	previous                   []previousDesired
+	networkRelease             types.NotificationRelease
+	serializerRelease          types.NotificationRelease
+	timestampNetworkSeconds    int64
+	timestampSerializerSeconds int64
 }
 
 type previousDesired struct {
@@ -28,30 +33,77 @@ type previousDesired struct {
 	recorded time.Time
 }
 
-func newParallelism(resetInterval time.Duration, allowedDriftSeconds uint, maxLoops uint, minLoops uint, out chan uint) *parallelism {
-	return &parallelism{
-		resetInterval:       resetInterval,
-		maxLoops:            maxLoops,
-		minLoops:            minLoops,
-		currentLoops:        minLoops,
-		out:                 out,
-		allowedDriftSeconds: allowedDriftSeconds,
-		stop:                make(chan struct{}),
+type parallelismConfig struct {
+	allowedDriftSeconds        int64
+	maxLoops                   uint
+	minLoops                   uint
+	resetInterval              time.Duration
+	lookback                   time.Duration
+	checkInterval              time.Duration
+	allowedNetworkErrorPercent float64
+}
+
+func newParallelism(cfg parallelismConfig, out chan uint, statshub types.StatsHub) *parallelism {
+	p := &parallelism{
+		cfg:          cfg,
+		statshub:     statshub,
+		currentLoops: cfg.minLoops,
+		out:          out,
+		stop:         make(chan struct{}),
 	}
+	p.networkRelease = p.statshub.RegisterSeriesNetwork(func(ns types.NetworkStats) {
+		p.mut.Lock()
+		defer p.mut.Unlock()
+
+		// These refer to the number of series but this is generated on each send or retry.
+		if ns.Total429() > 0 || ns.Total5XX() > 0 || ns.TotalFailed() > 0 || ns.TotalRetried() > 0 {
+			p.networkErrors = append(p.networkErrors, time.Now())
+		}
+		if ns.TotalSent() > 0 {
+			p.networkSuccesses = append(p.networkSuccesses, time.Now())
+		}
+
+		if ns.NewestTimestampSeconds > p.timestampNetworkSeconds {
+			p.timestampNetworkSeconds = ns.NewestTimestampSeconds
+		}
+
+		if p.timestampNetworkSeconds > 0 && p.timestampSerializerSeconds > 0 {
+			p.timestampDriftSeconds = p.timestampSerializerSeconds - p.timestampNetworkSeconds
+		}
+	})
+
+	p.serializerRelease = p.statshub.RegisterSerializer(func(ss types.SerializerStats) {
+		p.mut.Lock()
+		defer p.mut.Unlock()
+
+		if ss.NewestTimestampSeconds > p.timestampSerializerSeconds {
+			p.timestampSerializerSeconds = ss.NewestTimestampSeconds
+		}
+		if p.timestampNetworkSeconds > 0 && p.timestampSerializerSeconds > 0 {
+			p.timestampDriftSeconds = p.timestampSerializerSeconds - p.timestampNetworkSeconds
+		}
+	})
+	return p
 }
 
 func (p *parallelism) Stop() {
+	p.serializerRelease()
+	p.networkRelease()
 	p.stop <- struct{}{}
 }
 
 func (p *parallelism) Run(ctx context.Context) {
 	for {
+		var checkInterval time.Duration
+		p.mut.RLock()
+		checkInterval = p.cfg.checkInterval
+		p.mut.RUnlock()
 		select {
 		case <-ctx.Done():
 			return
 		case <-p.stop:
 			return
-		case <-time.After(10 * time.Second):
+		case <-time.After(checkInterval):
 			p.desiredLoops()
 		}
 	}
@@ -64,54 +116,70 @@ func (p *parallelism) AddNetworkError() {
 	p.networkErrors = append(p.networkErrors, time.Now())
 }
 
-func (p *parallelism) SetDriftSeconds(seconds uint) {
-	p.mut.Lock()
-	defer p.mut.Unlock()
-
-	p.timestampDriftSeconds = seconds
-}
-
 func (p *parallelism) desiredLoops() {
 	p.mut.Lock()
 	defer p.mut.Unlock()
 
 	// Dont bother calculating if loops are the same value.
-	if p.minLoops == p.maxLoops {
+	if p.cfg.minLoops == p.cfg.maxLoops {
 		p.changeParallelism(p.currentLoops)
 	}
 
 	// Loop over network errors and remove them if the ttl expired.
 	for _, err := range p.networkErrors {
-		if time.Since(err) > p.resetInterval {
+		if time.Since(err) > p.cfg.resetInterval {
 			p.networkErrors = p.networkErrors[1:]
 		}
 	}
 
+	for _, err := range p.networkSuccesses {
+		if time.Since(err) > p.cfg.resetInterval {
+			p.networkSuccesses = p.networkSuccesses[1:]
+		}
+	}
+
 	// If we have network errors then ramp down the number of loops.
-	if len(p.networkErrors) > 0 {
+	if p.cfg.allowedNetworkErrorPercent != 0.0 && p.networkErrorRate() >= p.cfg.allowedNetworkErrorPercent {
 		// Need to keep the value between min and max.
-		if p.currentLoops-1 >= p.minLoops {
+		if p.currentLoops-1 >= p.cfg.minLoops {
 			p.changeParallelism(p.currentLoops - 1)
 		}
 		return
 	}
 	// If we are drifting too much then ramp up the number of loops.
-	if p.timestampDriftSeconds > p.allowedDriftSeconds {
+	if p.timestampDriftSeconds > p.cfg.allowedDriftSeconds {
 		// Need to keep the value between min and max.
-		if p.currentLoops+1 <= p.maxLoops {
+		if p.currentLoops+1 <= p.cfg.maxLoops {
 			p.changeParallelism(p.currentLoops + 1)
 		}
 		return
 	}
 
 	// Can we ramp down, only ramp down if we are 10% below the target.
-	if p.timestampDriftSeconds+uint(float64(p.allowedDriftSeconds)*1.1) < p.allowedDriftSeconds {
+	if p.timestampDriftSeconds+int64(float64(p.cfg.allowedDriftSeconds)*0.1) < p.cfg.allowedDriftSeconds {
 		// Need to keep the value between min and max.
-		if p.currentLoops+1 <= p.maxLoops {
-			p.currentLoops++
+		if p.currentLoops+1 >= p.cfg.minLoops {
+			p.changeParallelism(p.currentLoops - 1)
 		}
-		p.out <- p.currentLoops
 	}
+}
+
+func (p *parallelism) networkErrorRate() float64 {
+	// If nothing has happened assume success
+	if len(p.networkSuccesses) == 0 && len(p.networkErrors) == 0 {
+		return 0.0
+	}
+
+	if len(p.networkErrors) == 0 {
+		return 0.0
+	}
+
+	if len(p.networkSuccesses) == 0 {
+		return 1.0
+	}
+
+	errorRate := float64(len(p.networkErrors)) / float64(len(p.networkSuccesses))
+	return errorRate
 }
 
 func (p *parallelism) changeParallelism(desired uint) {
@@ -131,7 +199,7 @@ func (p *parallelism) changeParallelism(desired uint) {
 		// Let's see if we are going to catch the flapping issues.
 		for _, previous := range p.previous {
 			// Remove any outliers
-			if time.Since(previous.recorded) > 5*time.Minute {
+			if time.Since(previous.recorded) > p.cfg.lookback {
 				p.previous = p.previous[1:]
 				continue
 			}

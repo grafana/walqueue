@@ -2,11 +2,12 @@ package network
 
 import (
 	"context"
+	"time"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
 	"golang.design/x/chann"
-	"time"
 )
 
 // manager manages writeBuffers. Mostly it exists to control their lifecycle and send work to them.
@@ -19,8 +20,7 @@ type manager struct {
 	desiredOutbox      chan uint
 	configInbox        *types.SyncMailbox[types.ConnectionConfig, bool]
 	cfg                types.ConnectionConfig
-	stats              func(types.NetworkStats)
-	metaStats          func(types.NetworkStats)
+	statshub           types.StatsHub
 	bufferedMetric     types.MetricDatum
 	bufferedMetadata   types.MetadataDatum
 	lastFlushTime      time.Time
@@ -30,29 +30,18 @@ type manager struct {
 
 var _ types.NetworkClient = (*manager)(nil)
 
-func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStats func(types.NetworkStats)) (types.NetworkClient, error) {
+func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) (types.NetworkClient, error) {
 	desiredOutbox := make(chan uint)
-	p := newParallelism(10*time.Second, 60, cc.MaxConnections, cc.MinConnections, desiredOutbox)
+	p := newParallelism(10*time.Second, 5*time.Minute, 10*time.Second, 60, cc.MaxConnections, cc.MinConnections, desiredOutbox, driftNotify)
 	s := &manager{
-		writeBuffers:     make([]*writeBuffer[types.MetricDatum], 0, cc.MinConnections),
-		logger:           logger,
-		inbox:            types.NewMailbox[types.MetricDatum](chann.Cap(1)),
-		metaInbox:        types.NewMailbox[types.MetadataDatum](chann.Cap(1)),
-		bufferedMetric:   nil,
-		bufferedMetadata: nil,
-		configInbox:      types.NewSyncMailbox[types.ConnectionConfig, bool](),
-		stats: func(ns types.NetworkStats) {
-			if ns.Total5XX() > 0 || ns.Total429() > 0 || ns.TotalFailed() > 0 {
-				p.AddNetworkError()
-			}
-			seriesStats(ns)
-		},
-		metaStats: func(ns types.NetworkStats) {
-			if ns.Total5XX() > 0 || ns.Total429() > 0 || ns.TotalFailed() > 0 {
-				p.AddNetworkError()
-			}
-			metadataStats(ns)
-		},
+		writeBuffers:       make([]*writeBuffer[types.MetricDatum], 0, cc.MinConnections),
+		logger:             logger,
+		inbox:              types.NewMailbox[types.MetricDatum](chann.Cap(1)),
+		metaInbox:          types.NewMailbox[types.MetadataDatum](chann.Cap(1)),
+		bufferedMetric:     nil,
+		bufferedMetadata:   nil,
+		configInbox:        types.NewSyncMailbox[types.ConnectionConfig, bool](),
+		statshub:           statshub,
 		cfg:                cc,
 		lastFlushTime:      time.Now(),
 		desiredOutbox:      desiredOutbox,
@@ -63,11 +52,11 @@ func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStat
 
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](cc, seriesStats, false, logger)
+		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, logger)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, metadataStats, true, logger)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, logger)
 	s.metadata = metadata
 	return s, nil
 }
@@ -268,7 +257,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 
 	s.writeBuffers = make([]*writeBuffer[types.MetricDatum], 0, desiredConnections)
 	for i := uint(0); i < desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](cc, s.stats, false, s.logger)
+		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, s.logger)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 	// Force adding of metrics, note this may cause the system to go above the batch count.
@@ -276,7 +265,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 		s.forceQueue(ctx, d)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, s.metaStats, true, s.logger)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, s.logger)
 	for _, d := range drainedMeta {
 		s.metadata.ForceAdd(ctx, d)
 	}

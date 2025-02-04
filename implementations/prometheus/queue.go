@@ -78,7 +78,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	stats.SeriesBackwardsCompatibility(reg)
 	meta := NewStats("alloy", "queue_metadata", reg)
 	meta.MetaBackwardsCompatibility(reg)
-	networkClient, err := network.New(cc, logger, stats.UpdateNetwork, meta.UpdateNetwork)
+	networkClient, err := network.New(cc, logger, stats.UpdateNetwork, meta.UpdateNetwork, stats.driftNotify)
 	if err != nil {
 		return nil, err
 	}

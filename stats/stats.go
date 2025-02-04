@@ -36,7 +36,7 @@ func (s *stats) Stop() {
 
 func (s *stats) RegisterMetadataNetwork(f func(types.NetworkStats)) types.NotificationRelease {
 	s.mut.Lock()
-	defer s.mut.Lock()
+	defer s.mut.Unlock()
 
 	s.metadataNetowrk[s.index] = f
 	index := s.index
@@ -52,7 +52,7 @@ func (s *stats) RegisterMetadataNetwork(f func(types.NetworkStats)) types.Notifi
 
 func (s *stats) RegisterSeriesNetwork(f func(types.NetworkStats)) types.NotificationRelease {
 	s.mut.Lock()
-	defer s.mut.Lock()
+	defer s.mut.Unlock()
 
 	s.seriesNetwork[s.index] = f
 	index := s.index
@@ -104,7 +104,7 @@ func (s *stats) SendSeriesNetworkStats(st types.NetworkStats) {
 
 func (s *stats) SendMetadataNetworkStats(st types.NetworkStats) {
 	s.mut.RLock()
-	defer s.mut.Unlock()
+	defer s.mut.RUnlock()
 
 	for _, v := range s.metadataNetowrk {
 		v(st)

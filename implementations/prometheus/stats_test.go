@@ -1,17 +1,20 @@
 package prometheus
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
+	"github.com/grafana/walqueue/stats"
 	"github.com/grafana/walqueue/types"
 	prom "github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )
 
 func TestDriftSerializer(t *testing.T) {
-	ps := NewStats("test", "test", prom.NewRegistry())
+	sh := stats.NewStats()
+	ps := NewStats("test", "test", prom.NewRegistry(), sh)
 	ps.UpdateSerializer(types.SerializerStats{
 		SeriesStored:           1,
 		MetadataStored:         1,
@@ -26,7 +29,8 @@ func TestDriftSerializer(t *testing.T) {
 }
 
 func TestDriftNetwork(t *testing.T) {
-	ps := NewStats("test", "test", prom.NewRegistry())
+	sh := stats.NewStats()
+	ps := NewStats("test", "test", prom.NewRegistry(), sh)
 	ps.UpdateNetwork(types.NetworkStats{
 		NewestTimestampSeconds: time.Now().Unix(),
 	})

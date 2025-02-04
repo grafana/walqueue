@@ -32,7 +32,16 @@ var _ types.NetworkClient = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) (types.NetworkClient, error) {
 	desiredOutbox := make(chan uint)
-	p := newParallelism(10*time.Second, 5*time.Minute, 10*time.Second, 60, cc.MaxConnections, cc.MinConnections, desiredOutbox, driftNotify)
+	parCfg := parallelismConfig{
+		allowedDriftSeconds:        60,
+		maxLoops:                   cc.MaxConnections,
+		minLoops:                   cc.MinConnections,
+		resetInterval:              5 * time.Minute,
+		lookback:                   5 * time.Minute,
+		checkInterval:              10 * time.Second,
+		allowedNetworkErrorPercent: 0.05,
+	}
+	p := newParallelism(parCfg, desiredOutbox, statshub, logger)
 	s := &manager{
 		writeBuffers:       make([]*writeBuffer[types.MetricDatum], 0, cc.MinConnections),
 		logger:             logger,

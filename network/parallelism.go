@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
 )
 
@@ -26,6 +28,7 @@ type parallelism struct {
 	serializerRelease          types.NotificationRelease
 	timestampNetworkSeconds    int64
 	timestampSerializerSeconds int64
+	l                          log.Logger
 }
 
 type previousDesired struct {
@@ -43,13 +46,14 @@ type parallelismConfig struct {
 	allowedNetworkErrorPercent float64
 }
 
-func newParallelism(cfg parallelismConfig, out chan uint, statshub types.StatsHub) *parallelism {
+func newParallelism(cfg parallelismConfig, out chan uint, statshub types.StatsHub, l log.Logger) *parallelism {
 	p := &parallelism{
 		cfg:          cfg,
 		statshub:     statshub,
 		currentLoops: cfg.minLoops,
 		out:          out,
 		stop:         make(chan struct{}),
+		l:            l,
 	}
 	p.networkRelease = p.statshub.RegisterSeriesNetwork(func(ns types.NetworkStats) {
 		p.mut.Lock()
@@ -122,6 +126,7 @@ func (p *parallelism) desiredLoops() {
 
 	// Dont bother calculating if loops are the same value.
 	if p.cfg.minLoops == p.cfg.maxLoops {
+		level.Debug(p.l).Log("msg", "min and max loops are same no change", "desired", p.cfg.minLoops)
 		p.changeParallelism(p.currentLoops)
 	}
 
@@ -142,6 +147,7 @@ func (p *parallelism) desiredLoops() {
 	if p.cfg.allowedNetworkErrorPercent != 0.0 && p.networkErrorRate() >= p.cfg.allowedNetworkErrorPercent {
 		// Need to keep the value between min and max.
 		if p.currentLoops-1 >= p.cfg.minLoops {
+			level.Debug(p.l).Log("msg", "triggering lower desired due to network errors", "desired", p.currentLoops-1)
 			p.changeParallelism(p.currentLoops - 1)
 		}
 		return
@@ -150,6 +156,7 @@ func (p *parallelism) desiredLoops() {
 	if p.timestampDriftSeconds > p.cfg.allowedDriftSeconds {
 		// Need to keep the value between min and max.
 		if p.currentLoops+1 <= p.cfg.maxLoops {
+			level.Debug(p.l).Log("msg", "increasing desired due to timestamp drift", "desired", p.currentLoops+1, "drift", p.timestampDriftSeconds)
 			p.changeParallelism(p.currentLoops + 1)
 		}
 		return
@@ -158,7 +165,8 @@ func (p *parallelism) desiredLoops() {
 	// Can we ramp down, only ramp down if we are 10% below the target.
 	if p.timestampDriftSeconds+int64(float64(p.cfg.allowedDriftSeconds)*0.1) < p.cfg.allowedDriftSeconds {
 		// Need to keep the value between min and max.
-		if p.currentLoops+1 >= p.cfg.minLoops {
+		if p.currentLoops-1 >= p.cfg.minLoops {
+			level.Debug(p.l).Log("msg", "decreasing desired due to drift lowering", "desired", p.currentLoops-1, "drift", p.timestampDriftSeconds)
 			p.changeParallelism(p.currentLoops - 1)
 		}
 	}
@@ -191,6 +199,7 @@ func (p *parallelism) changeParallelism(desired uint) {
 		})
 	}()
 	if desired == p.currentLoops {
+		level.Debug(p.l).Log("msg", "desired is equal to current", "desired", desired)
 		return
 	}
 	actualValue := desired
@@ -205,6 +214,7 @@ func (p *parallelism) changeParallelism(desired uint) {
 			}
 			// If we previously said we needed a higher value then keep to that previous value.
 			if actualValue < previous.desired {
+				level.Debug(p.l).Log("msg", "lookback on previous values is higher, using higher value", "desired", actualValue, "previous", previous.desired)
 				actualValue = previous.desired
 			}
 		}
@@ -212,11 +222,13 @@ func (p *parallelism) changeParallelism(desired uint) {
 		// No need to notify if the same.
 		if actualValue != p.currentLoops {
 			p.currentLoops = actualValue
+			level.Debug(p.l).Log("msg", "sending desired", p.currentLoops)
 			p.out <- actualValue
 		}
 	} else {
 		// Going up is always allowed. Scaling up should be easy, scaling down should be slow.
 		p.currentLoops = desired
+		level.Debug(p.l).Log("msg", "sending desired", p.currentLoops)
 		p.out <- p.currentLoops
 	}
 }

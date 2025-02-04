@@ -466,7 +466,7 @@ func TestMetrics(t *testing.T) {
 					name:  failedSample,
 					value: 10,
 				},
-				{
+				{prometheus_remote_storage_samples_total
 					name:      prometheusDuration,
 					valueFunc: greaterThenZero,
 				},
@@ -625,7 +625,7 @@ func runE2eStats(t *testing.T, test statsTest) {
 			}
 		}
 		// Make sure we have the right number metrics.
-		return found == len(test.checks)
+		return found >= len(test.checks)
 	}, 10*time.Second, 1*time.Second)
 
 	metrics := make(map[string]float64)

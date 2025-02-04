@@ -2,9 +2,11 @@ package prometheus
 
 import (
 	"context"
-	v2 "github.com/grafana/walqueue/types/v2"
 	"sync"
 	"time"
+
+	"github.com/grafana/walqueue/stats"
+	v2 "github.com/grafana/walqueue/types/v2"
 
 	snappy "github.com/eapache/go-xerial-snappy"
 	"github.com/go-kit/log"
@@ -73,12 +75,14 @@ type queue struct {
 // - Queue: An initialized Queue instance.
 // - error: An error if any of the components fail to initialize.
 func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSignalsToBatch uint32, flushInterval time.Duration, ttl time.Duration, registerer prometheus.Registerer, namespace string, logger log.Logger) (Queue, error) {
+	sh := stats.NewStats()
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"endpoint": name}, registerer)
-	stats := NewStats(namespace, "queue_series", reg)
-	stats.SeriesBackwardsCompatibility(reg)
-	meta := NewStats("alloy", "queue_metadata", reg)
+	statsHub := NewStats(namespace, "queue_series", reg, sh)
+	statsHub.SeriesBackwardsCompatibility(reg)
+	meta := NewStats("alloy", "queue_metadata", reg, sh)
 	meta.MetaBackwardsCompatibility(reg)
-	networkClient, err := network.New(cc, logger, stats.UpdateNetwork, meta.UpdateNetwork, stats.driftNotify)
+
+	networkClient, err := network.New(cc, logger, sh)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +90,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	ctx, cncl := context.WithCancel(ctx)
 	q := &queue{
 		incoming:       actor.NewMailbox[types.DataHandle](),
-		stats:          stats,
+		stats:          statsHub,
 		metaStats:      meta,
 		network:        networkClient,
 		logger:         logger,
@@ -108,7 +112,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	serial, err := serialization.NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: maxSignalsToBatch,
 		FlushFrequency:    flushInterval,
-	}, q.queue, stats.UpdateSerializer, logger)
+	}, q.queue, statsHub.UpdateSerializer, logger)
 	if err != nil {
 		return nil, err
 	}

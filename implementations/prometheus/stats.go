@@ -1,17 +1,19 @@
 package prometheus
 
 import (
-	"context"
+	"sync/atomic"
+
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/client_golang/prometheus"
-	"sync/atomic"
 )
 
 type PrometheusStats struct {
-	serializerIn atomic.Int64
-	networkOut   atomic.Int64
-	register     prometheus.Registerer
-	driftNotify  *types.Mailbox[uint]
+	serializerIn   atomic.Int64
+	networkOut     atomic.Int64
+	register       prometheus.Registerer
+	stats          types.StatsHub
+	serialRelease  types.NotificationRelease
+	networkRelease types.NotificationRelease
 	// Network Stats
 	NetworkSeriesSent                prometheus.Counter
 	NetworkFailures                  prometheus.Counter
@@ -54,8 +56,9 @@ type PrometheusStats struct {
 	RemoteStorageDuration     prometheus.Histogram
 }
 
-func NewStats(namespace, subsystem string, registry prometheus.Registerer) *PrometheusStats {
+func NewStats(namespace, subsystem string, registry prometheus.Registerer, sh types.StatsHub) *PrometheusStats {
 	s := &PrometheusStats{
+		stats:    sh,
 		register: registry,
 		SerializerInSeries: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
@@ -181,6 +184,12 @@ func NewStats(namespace, subsystem string, registry prometheus.Registerer) *Prom
 			Help: "The total number of bytes of metadata sent by the queue after compression.",
 		}),
 	}
+	if subsystem == "queue_metadata" {
+		s.networkRelease = s.stats.RegisterMetadataNetwork(s.UpdateNetwork)
+	} else {
+		s.networkRelease = s.stats.RegisterSeriesNetwork(s.UpdateNetwork)
+	}
+	s.serialRelease = s.stats.RegisterSerializer(s.UpdateSerializer)
 	registry.MustRegister(
 		s.NetworkSentDuration,
 		s.NetworkRetries5XX,
@@ -233,6 +242,8 @@ func (s *PrometheusStats) Unregister() {
 	for _, g := range unregistered {
 		s.register.Unregister(g)
 	}
+	s.networkRelease()
+	s.serialRelease()
 
 }
 
@@ -311,10 +322,5 @@ func (s *PrometheusStats) updateDrift() {
 	if s.serializerIn.Load() != 0 && s.networkOut.Load() != 0 {
 		drift := uint(s.serializerIn.Load() - s.networkOut.Load())
 		s.TimestampDriftSeconds.Set(float64(drift))
-		s.driftNotify.Send(context.TODO(), drift)
 	}
-}
-
-func (s *PrometheusStats) DriftNotify() *types.Mailbox[uint] {
-	return s.driftNotify
 }

@@ -28,7 +28,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 
 	l := log.NewLogfmtLogger(os.Stdout)
 	p := newParallelism(cfg, out, fs, l)
-	go p.Run(ctx)
+	p.Run(ctx)
 	select {
 	case <-out:
 		require.Fail(t, "should not receive any changes")
@@ -55,7 +55,7 @@ func TestParallelismIncrease(t *testing.T) {
 
 	l := log.NewLogfmtLogger(os.Stdout)
 	p := newParallelism(cfg, out, fs, l)
-	go p.Run(ctx)
+	p.Run(ctx)
 	// This will create a difference of 100 seconds
 	fs.SendSerializerStats(types.SerializerStats{
 		NewestTimestampSeconds: 100,
@@ -90,7 +90,7 @@ func TestParallelismDecrease(t *testing.T) {
 	l := log.NewLogfmtLogger(os.Stdout)
 
 	p := newParallelism(cfg, out, fs, l)
-	go p.Run(ctx)
+	p.Run(ctx)
 	// This will create a difference of 99 seconds
 	fs.SendSerializerStats(types.SerializerStats{
 		NewestTimestampSeconds: 100,

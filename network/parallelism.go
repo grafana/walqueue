@@ -10,6 +10,7 @@ import (
 	"github.com/grafana/walqueue/types"
 )
 
+// parallelism drives the behavior on determining what the desired shards should be.
 type parallelism struct {
 	mut         sync.RWMutex
 	cfg         types.ParralelismConfig
@@ -87,6 +88,12 @@ func (p *parallelism) Stop() {
 }
 
 func (p *parallelism) Run(ctx context.Context) {
+	go func() {
+		p.run(ctx)
+	}()
+}
+
+func (p *parallelism) run(ctx context.Context) {
 	p.mut.Lock()
 	p.statshub.SendParralelismStats(types.ParralelismStats{
 		Min:     p.cfg.MinConnections,

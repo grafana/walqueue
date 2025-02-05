@@ -63,8 +63,8 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) 
 
 func (s *manager) Start(ctx context.Context) {
 	s.configInbox.Start()
-	go s.desiredParallelism.Run(ctx)
-	go s.Run(ctx)
+	s.desiredParallelism.Run(ctx)
+	s.Run(ctx)
 }
 
 func (s *manager) SendSeries(ctx context.Context, data types.MetricDatum) error {
@@ -88,6 +88,10 @@ const (
 )
 
 func (s *manager) Run(ctx context.Context) {
+	go s.run(ctx)
+}
+
+func (s *manager) run(ctx context.Context) {
 	// This is the primary run loop for the manager since it is no longer an actor.
 	for {
 		// CheckConfig is a priority to check the config. If no changes are found will default out
@@ -119,7 +123,6 @@ func (s *manager) Run(ctx context.Context) {
 			return
 		}
 	}
-
 }
 
 func (s *manager) checkConfig(ctx context.Context) flowcontrol {
@@ -133,7 +136,7 @@ func (s *manager) checkConfig(ctx context.Context) flowcontrol {
 			return Exit
 		}
 		var err error
-		if err = s.updateConfig(ctx, cfg.Value, s.desiredConnections); err == nil {
+		if err = s.updateConfig(ctx, cfg.Value, s.desiredConnections); err != nil {
 			successful = true
 		}
 		cfg.Notify(successful, err)

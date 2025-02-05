@@ -18,8 +18,8 @@ type PrometheusStats struct {
 	parralelismRelease types.NotificationRelease
 
 	// Parralelism
-	ParrallelismMin     prometheus.Gauge
-	ParrallelismMax     prometheus.Gauge
+	ParallelismMin      prometheus.Gauge
+	ParallelismMax      prometheus.Gauge
 	ParrallelismDesired prometheus.Gauge
 
 	// Network Stats
@@ -70,12 +70,12 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		stats:    sh,
 		register: registry,
 		isMeta:   isMeta,
-		ParrallelismMax: prometheus.NewGauge(prometheus.GaugeOpts{
+		ParallelismMax: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "parallelism_max",
 		}),
-		ParrallelismMin: prometheus.NewGauge(prometheus.GaugeOpts{
+		ParallelismMin: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "parallelism_min",
@@ -234,8 +234,8 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 	// Metadata doesn't scale, it has one dedicated connection.
 	if !isMeta {
 		registry.MustRegister(
-			s.ParrallelismMax,
-			s.ParrallelismMin,
+			s.ParallelismMax,
+			s.ParallelismMin,
 			s.ParrallelismDesired)
 	}
 	return s
@@ -273,7 +273,7 @@ func (s *PrometheusStats) Unregister() {
 	}
 	// Meta only has one connection so we dont need these for that.
 	if !s.isMeta {
-		unregistered = append(unregistered, s.ParrallelismMin, s.ParrallelismMax, s.ParrallelismDesired)
+		unregistered = append(unregistered, s.ParallelismMin, s.ParallelismMax, s.ParrallelismDesired)
 	}
 
 	for _, g := range unregistered {
@@ -356,8 +356,8 @@ func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
 }
 
 func (s *PrometheusStats) UpdateParralelism(stats types.ParralelismStats) {
-	s.ParrallelismMax.Set(float64(stats.MaxConnections))
-	s.ParrallelismMin.Set(float64(stats.MinConnections))
+	s.ParallelismMax.Set(float64(stats.MaxConnections))
+	s.ParallelismMin.Set(float64(stats.MinConnections))
 	s.ParrallelismDesired.Set(float64(stats.DesiredConnections))
 }
 

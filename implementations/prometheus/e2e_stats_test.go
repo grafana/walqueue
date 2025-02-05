@@ -52,13 +52,13 @@ const alloyNetworkTimestamp = "alloy_queue_series_network_timestamp_seconds"
 
 const alloyDrift = "alloy_queue_series_timestamp_drift_seconds"
 
-const alloyMin = "alloy_queue_series_parralelism_min"
-const alloyMax = "alloy_queue_series_parralelism_max"
-const alloyDesired = "alloy_queue_series_parralelism_desired"
+const alloyMin = "alloy_queue_series_parallelism_min"
+const alloyMax = "alloy_queue_series_parallelism_max"
+const alloyDesired = "alloy_queue_series_parallelism_desired"
 
-const alloyMetaMin = "alloy_queue_metadata_parralelism_min"
-const alloyMetaMax = "alloy_queue_metadata_parralelism_max"
-const alloyMetaDesired = "alloy_queue_metadata_parralelism_desired"
+const alloyMetaMin = "alloy_queue_metadata_parallelism_min"
+const alloyMetaMax = "alloy_queue_metadata_parallelism_max"
+const alloyMetaDesired = "alloy_queue_metadata_parallelism_desired"
 
 // TestMetadata is the large end to end testing for the queue based wal, specifically for metadata.
 func TestMetadata(t *testing.T) {

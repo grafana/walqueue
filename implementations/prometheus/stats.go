@@ -73,17 +73,17 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		ParrallelismMax: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "parralelism_max",
+			Name:      "parallelism_max",
 		}),
 		ParrallelismMin: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "parralelism_min",
+			Name:      "parallelism_min",
 		}),
 		ParrallelismDesired: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "parralelism_desired",
+			Name:      "parallelism_desired",
 		}),
 		SerializerInSeries: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,

@@ -92,13 +92,16 @@ func (s *manager) Run(ctx context.Context) {
 }
 
 func (s *manager) run(ctx context.Context) {
+	defer func() {
+		s.desiredParallelism.Stop()
+	}()
 	// This is the primary run loop for the manager since it is no longer an actor.
 	for {
 		// CheckConfig is a priority to check the config. If no changes are found will default out
 		// and return ContinueExecution
 		flow := s.checkConfig(ctx)
 		if flow == Exit {
-			s.desiredParallelism.Stop()
+
 			return
 		}
 		// Flush will check to see if we haven't sent data since the last flush.
@@ -119,7 +122,6 @@ func (s *manager) run(ctx context.Context) {
 		// Finally the main work loop where we pull new data.
 		flow = s.mainWork(ctx)
 		if flow == Exit {
-			s.desiredParallelism.Stop()
 			return
 		}
 	}
@@ -142,6 +144,7 @@ func (s *manager) checkConfig(ctx context.Context) flowcontrol {
 		cfg.Notify(successful, err)
 		return ContinueExecution
 	case desired, ok := <-s.desiredOutbox.ReceiveC():
+		// TODO: (@mattdurham) add a stat to record the actual value.
 		if !ok {
 			level.Debug(s.logger).Log("msg", "desired outbox closed")
 			return Exit

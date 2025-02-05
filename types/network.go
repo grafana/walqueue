@@ -64,9 +64,13 @@ type ConnectionConfig struct {
 	Parralelism ParralelismConfig
 }
 type ParralelismConfig struct {
-	// AllowedDriftSeconds is the maximum amount that is allowed before the connections scales up.
+	// AllowedDriftSeconds is the maximum amount of seconds that is allowed for the Newest Timestamp Serializer - Newest Timestamp Sent via Network before the connections scales up.
+	// Using non unix timestamp numbers. If Newest TS In Serializer sees 100s and Newest TS Out Network sees 20s then we have a drift of 80s. If AllowDriftSeconds is 60s that would
+	// trigger a scaling up event.
 	AllowedDriftSeconds int64
-	// MinimumScaleDownDriftSeconds is the amount if we go below that we can scale down.
+	// MinimumScaleDownDriftSeconds is the amount if we go below that we can scale down. Using the above if In is 100s and Out is 70s and MinimumScaleDownDriftSeconds is 30 then we wont scale
+	// down even though we are below the 60s. This is to keep the number of connections from flapping. In practice we should consider 30s MinimumScaleDownDriftSeconds and 60s AllowedDriftSeconds to be a sweet spot
+	// for general usage.
 	MinimumScaleDownDriftSeconds int64
 	// MaxConnections is the maximum number of concurrent connections to use.
 	MaxConnections uint
@@ -81,7 +85,7 @@ type ParralelismConfig struct {
 	// CheckInterval is how long to check for desired values.
 	CheckInterval time.Duration
 	// AllowedNetworkErrorPercent is the percentage of failed network requests that are allowable. This will
-	// trigger a scaled down if exceeded.
+	// trigger a decrease in connections if exceeded.
 	AllowedNetworkErrorPercent float64
 }
 type Parralelism struct {

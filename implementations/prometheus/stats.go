@@ -18,9 +18,9 @@ type PrometheusStats struct {
 	parralelismRelease types.NotificationRelease
 
 	// Parralelism
-	ParralelismMin     prometheus.Gauge
-	ParralelismMax     prometheus.Gauge
-	ParralelismDesired prometheus.Gauge
+	ParrallelismMin     prometheus.Gauge
+	ParrallelismMax     prometheus.Gauge
+	ParrallelismDesired prometheus.Gauge
 
 	// Network Stats
 	NetworkSeriesSent                prometheus.Counter
@@ -70,17 +70,17 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		stats:    sh,
 		register: registry,
 		isMeta:   isMeta,
-		ParralelismMax: prometheus.NewGauge(prometheus.GaugeOpts{
+		ParrallelismMax: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "parralelism_max",
 		}),
-		ParralelismMin: prometheus.NewGauge(prometheus.GaugeOpts{
+		ParrallelismMin: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "parralelism_min",
 		}),
-		ParralelismDesired: prometheus.NewGauge(prometheus.GaugeOpts{
+		ParrallelismDesired: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "parralelism_desired",
@@ -234,9 +234,9 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 	// Metadata doesn't scale, it has one dedicated connection.
 	if !isMeta {
 		registry.MustRegister(
-			s.ParralelismMax,
-			s.ParralelismMin,
-			s.ParralelismDesired)
+			s.ParrallelismMax,
+			s.ParrallelismMin,
+			s.ParrallelismDesired)
 	}
 	return s
 }
@@ -273,7 +273,7 @@ func (s *PrometheusStats) Unregister() {
 	}
 	// Meta only has one connection so we dont need these for that.
 	if !s.isMeta {
-		unregistered = append(unregistered, s.ParralelismMin, s.ParralelismMax, s.ParralelismDesired)
+		unregistered = append(unregistered, s.ParrallelismMin, s.ParrallelismMax, s.ParrallelismDesired)
 	}
 
 	for _, g := range unregistered {
@@ -281,6 +281,7 @@ func (s *PrometheusStats) Unregister() {
 	}
 	s.networkRelease()
 	s.serialRelease()
+	s.parralelismRelease()
 }
 
 func (s *PrometheusStats) SeriesBackwardsCompatibility(registry prometheus.Registerer) {
@@ -355,16 +356,18 @@ func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
 }
 
 func (s *PrometheusStats) UpdateParralelism(stats types.ParralelismStats) {
-	s.ParralelismMax.Set(float64(stats.MaxConnections))
-	s.ParralelismMin.Set(float64(stats.MinConnections))
-	s.ParralelismDesired.Set(float64(stats.DesiredConnections))
+	s.ParrallelismMax.Set(float64(stats.MaxConnections))
+	s.ParrallelismMin.Set(float64(stats.MinConnections))
+	s.ParrallelismDesired.Set(float64(stats.DesiredConnections))
 }
 
 func (s *PrometheusStats) updateDrift() {
 	// We always want to ensure that we have real values, else there is a window where this can be
 	// timestamp - 0 which gives a result in the years.
-	if s.serializerIn.Load() != 0 && s.networkOut.Load() != 0 {
-		drift := uint(s.serializerIn.Load() - s.networkOut.Load())
+	serializerIn := s.serializerIn.Load()
+	networkOut := s.networkOut.Load()
+	if networkOut != 0 && serializerIn >= networkOut {
+		drift := serializerIn - networkOut
 		s.TimestampDriftSeconds.Set(float64(drift))
 	}
 }

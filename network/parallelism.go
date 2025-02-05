@@ -10,15 +10,16 @@ import (
 	"github.com/grafana/walqueue/types"
 )
 
-// parallelism drives the behavior on determining what the desired shards should be.
+// parallelism drives the behavior on determining what the desired number of connections should be.
 type parallelism struct {
 	// mut covers all items here
 	mut      sync.RWMutex
 	cfg      types.ParralelismConfig
 	statshub types.StatsHub
+	ctx      context.Context
 	// networkErrors is any 4xx,5xx.
 	// network* holds the time any success or error occurs.
-	// This is used for the lookback so we can clear out any that are outside our lookback.
+	// This is used for the lookback so we can drop any that are older than our `cfg.Lookback`.
 	networkErrors    []time.Time
 	networkSuccesses []time.Time
 
@@ -73,7 +74,7 @@ func newParallelism(cfg types.ParralelismConfig, out *types.Mailbox[uint], stats
 		}
 	})
 
-	// Register serializer for tracking incming timestamp.
+	// Register serializer for tracking incoming timestamp.
 	p.serializerRelease = p.statshub.RegisterSerializer(func(ss types.SerializerStats) {
 		p.mut.Lock()
 		defer p.mut.Unlock()
@@ -102,6 +103,7 @@ func (p *parallelism) Run(ctx context.Context) {
 
 func (p *parallelism) run(ctx context.Context) {
 	p.mut.Lock()
+	p.ctx = ctx
 	p.statshub.SendParralelismStats(types.ParralelismStats{
 		MinConnections:     p.cfg.MinConnections,
 		MaxConnections:     p.cfg.MaxConnections,
@@ -119,7 +121,7 @@ func (p *parallelism) run(ctx context.Context) {
 		case <-p.stop:
 			return
 		case <-time.After(checkInterval):
-			p.desiredLoops()
+			p.desiredLoop()
 		}
 	}
 }
@@ -135,15 +137,25 @@ func (p *parallelism) UpdateConfig(cfg types.ParralelismConfig) {
 	})
 }
 
-func (p *parallelism) desiredLoops() {
+func (p *parallelism) desiredLoop() {
 	p.mut.Lock()
 	defer p.mut.Unlock()
 
 	// Dont bother calculating if connections are the same value.
 	if p.cfg.MinConnections == p.cfg.MaxConnections {
-		level.Debug(p.l).Log("msg", "min and max loops are same no change", "desired", p.cfg.MinConnections)
-		p.changeParallelism(p.currentDesired)
+		p.calculateDesiredParallelism(p.currentDesired)
+		return
 	}
+
+	// Prune the previous lookback to prevent flapping the desired amount.
+	previousInLookback := make([]previousDesired, 0, len(p.previous))
+	for _, previous := range p.previous {
+		// Remove any outliers
+		if time.Since(previous.recorded) <= p.cfg.Lookback {
+			previousInLookback = append(previousInLookback, previous)
+		}
+	}
+	p.previous = previousInLookback
 
 	// Loop over network errors and remove them if the ttl expired.
 	keepErrors := make([]time.Time, 0, len(p.networkErrors))
@@ -155,9 +167,9 @@ func (p *parallelism) desiredLoops() {
 	p.networkErrors = keepErrors
 
 	keepSuccesses := make([]time.Time, 0, len(p.networkSuccesses))
-	for _, err := range p.networkSuccesses {
-		if time.Since(err) <= p.cfg.ResetInterval {
-			keepSuccesses = append(keepSuccesses, err)
+	for _, success := range p.networkSuccesses {
+		if time.Since(success) <= p.cfg.ResetInterval {
+			keepSuccesses = append(keepSuccesses, success)
 		}
 	}
 	p.networkSuccesses = keepSuccesses
@@ -167,7 +179,7 @@ func (p *parallelism) desiredLoops() {
 		// Need to keep the value between min and max.
 		if p.currentDesired-1 >= p.cfg.MinConnections {
 			level.Debug(p.l).Log("msg", "triggering lower desired due to network errors", "desired", p.currentDesired-1)
-			p.changeParallelism(p.currentDesired - 1)
+			p.calculateDesiredParallelism(p.currentDesired - 1)
 		}
 		return
 	}
@@ -176,7 +188,7 @@ func (p *parallelism) desiredLoops() {
 		// Need to keep the value between min and max.
 		if p.currentDesired+1 <= p.cfg.MaxConnections {
 			level.Debug(p.l).Log("msg", "increasing desired due to timestamp drift", "desired", p.currentDesired+1, "drift", p.timestampDriftSeconds)
-			p.changeParallelism(p.currentDesired + 1)
+			p.calculateDesiredParallelism(p.currentDesired + 1)
 		}
 		return
 	}
@@ -186,8 +198,10 @@ func (p *parallelism) desiredLoops() {
 		// Need to keep the value between min and max.
 		if p.currentDesired-1 >= p.cfg.MinConnections {
 			level.Debug(p.l).Log("msg", "decreasing desired due to drift lowering", "desired", p.currentDesired-1, "drift", p.timestampDriftSeconds)
-			p.changeParallelism(p.currentDesired - 1)
+			p.calculateDesiredParallelism(p.currentDesired - 1)
+
 		}
+		return
 	}
 	level.Debug(p.l).Log("msg", "no changes needed", "desired", p.currentDesired)
 }
@@ -210,7 +224,7 @@ func (p *parallelism) networkErrorRate() float64 {
 	return errorRate
 }
 
-func (p *parallelism) changeParallelism(desired uint) {
+func (p *parallelism) calculateDesiredParallelism(desired uint) {
 	// Always add the desired to our previous entries.
 	defer func() {
 		p.previous = append(p.previous, previousDesired{
@@ -227,37 +241,28 @@ func (p *parallelism) changeParallelism(desired uint) {
 		level.Debug(p.l).Log("msg", "desired is equal to current", "desired", desired)
 		return
 	}
-	actualValue := desired
+	targetValue := desired
 	// Are we ramping down?
 	if desired < p.currentDesired {
-		// Let's see if we are going to catch the flapping issues.
-		previousInLookback := make([]previousDesired, 0, len(p.previous))
-		for _, previous := range p.previous {
-			// Remove any outliers
-			if time.Since(previous.recorded) <= p.cfg.Lookback {
-				previousInLookback = append(previousInLookback, previous)
-			}
-		}
-		p.previous = previousInLookback
 		for _, previous := range p.previous {
 			// If we previously said we needed a higher value then keep to that previous value.
-			if actualValue < previous.desired {
-				level.Debug(p.l).Log("msg", "lookback on previous values is higher, using higher value", "desired", actualValue, "previous", previous.desired)
-				actualValue = previous.desired
+			if targetValue < previous.desired {
+				level.Debug(p.l).Log("msg", "lookback on previous values is higher, using higher value", "desired", targetValue, "previous", previous.desired)
+				targetValue = previous.desired
 			}
 		}
 
 		// Finally set the value of current and out if the values are different.
 		// No need to notify if the same.
-		if actualValue != p.currentDesired {
-			p.currentDesired = actualValue
+		if targetValue != p.currentDesired {
+			p.currentDesired = targetValue
 			level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
-			p.out.Send(context.TODO(), actualValue)
+			p.out.Send(p.ctx, targetValue)
 		}
 	} else {
 		// Going up is always allowed. Scaling up should be easy, scaling down should be slow.
 		p.currentDesired = desired
 		level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
-		p.out.Send(context.TODO(), desired)
+		p.out.Send(p.ctx, desired)
 	}
 }

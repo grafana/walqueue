@@ -354,7 +354,7 @@ func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
 func (s *PrometheusStats) UpdateParralelism(stats types.ParralelismStats) {
 	s.ParralelismMax.Set(float64(stats.MaxConnections))
 	s.ParralelismMin.Set(float64(stats.MinConnections))
-	s.ParralelismDesired.Set(float64(stats.MaxConnections))
+	s.ParralelismDesired.Set(float64(stats.DesiredConnections))
 }
 
 func (s *PrometheusStats) updateDrift() {

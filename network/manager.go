@@ -146,8 +146,7 @@ func (s *manager) checkConfig(ctx context.Context) flowcontrol {
 			level.Debug(s.logger).Log("msg", "desired outbox closed")
 			return Exit
 		}
-		s.desiredConnections = desired
-		err := s.updateConfig(ctx, s.cfg, s.desiredConnections)
+		err := s.updateConfig(ctx, s.cfg, desired)
 		if err != nil {
 			level.Debug(s.logger).Log("msg", "update config failure", "err", err)
 		}
@@ -244,10 +243,11 @@ func (s *manager) mainWork(ctx context.Context) flowcontrol {
 }
 
 func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, desiredConnections uint) error {
-	// No need to do anything if the configuration is the same.
-	if s.cfg.Equals(cc) {
+	// No need to do anything if the configuration is the same or if we dont need to update connections.
+	if s.cfg.Equals(cc) && s.desiredConnections == desiredConnections {
 		return nil
 	}
+	s.desiredConnections = desiredConnections
 	s.cfg = cc
 	level.Debug(s.logger).Log("msg", "recreating write buffers due to configuration change.")
 	// Drain then stop the current writeBuffers.

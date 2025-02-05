@@ -12,8 +12,9 @@ var _ types.StatsHub = (*stats)(nil)
 type stats struct {
 	mut             sync.RWMutex
 	seriesNetwork   map[int]func(types.NetworkStats)
-	metadataNetowrk map[int]func(types.NetworkStats)
+	metadataNetwork map[int]func(types.NetworkStats)
 	serializer      map[int]func(types.SerializerStats)
+	parralelism     map[int]func(types.ParralelismStats)
 	index           int
 	ctx             context.Context
 }
@@ -22,7 +23,8 @@ func NewStats() types.StatsHub {
 	return &stats{
 		seriesNetwork:   make(map[int]func(types.NetworkStats)),
 		serializer:      make(map[int]func(types.SerializerStats)),
-		metadataNetowrk: make(map[int]func(types.NetworkStats)),
+		metadataNetwork: make(map[int]func(types.NetworkStats)),
+		parralelism:     make(map[int]func(types.ParralelismStats)),
 	}
 }
 
@@ -38,7 +40,7 @@ func (s *stats) RegisterMetadataNetwork(f func(types.NetworkStats)) types.Notifi
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
-	s.metadataNetowrk[s.index] = f
+	s.metadataNetwork[s.index] = f
 	index := s.index
 	s.index++
 
@@ -46,7 +48,7 @@ func (s *stats) RegisterMetadataNetwork(f func(types.NetworkStats)) types.Notifi
 		s.mut.Lock()
 		defer s.mut.Unlock()
 
-		delete(s.metadataNetowrk, index)
+		delete(s.metadataNetwork, index)
 	}
 }
 
@@ -80,6 +82,22 @@ func (s *stats) RegisterSerializer(f func(types.SerializerStats)) types.Notifica
 
 		delete(s.serializer, index)
 	}
+}
+
+func (s *stats) RegisterParralelism(f func(types.ParralelismStats)) types.NotificationRelease {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.parralelism[s.index] = f
+	index := s.index
+	s.index++
+
+	return func() {
+		s.mut.Lock()
+		defer s.mut.Unlock()
+
+		delete(s.parralelism, index)
+	}
 
 }
 
@@ -106,7 +124,16 @@ func (s *stats) SendMetadataNetworkStats(st types.NetworkStats) {
 	s.mut.RLock()
 	defer s.mut.RUnlock()
 
-	for _, v := range s.metadataNetowrk {
+	for _, v := range s.metadataNetwork {
+		v(st)
+	}
+}
+
+func (s *stats) SendParralelismStats(st types.ParralelismStats) {
+	s.mut.RLock()
+	defer s.mut.RUnlock()
+
+	for _, v := range s.parralelism {
 		v(st)
 	}
 }

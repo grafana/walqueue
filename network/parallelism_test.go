@@ -15,14 +15,14 @@ func TestParallelismWithNoChanges(t *testing.T) {
 	out := make(chan uint)
 	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cncl()
-	cfg := parallelismConfig{
-		allowedDriftSeconds:        1,
-		maxLoops:                   1,
-		minLoops:                   1,
-		resetInterval:              1 * time.Minute,
-		lookback:                   1 * time.Minute,
-		checkInterval:              1 * time.Second,
-		allowedNetworkErrorPercent: 0,
+	cfg := types.ParralelismConfig{
+		AllowedDriftSeconds:        1,
+		MaxConnections:             1,
+		MinConnections:             1,
+		ResetInterval:              1 * time.Minute,
+		Lookback:                   1 * time.Minute,
+		CheckInterval:              1 * time.Second,
+		AllowedNetworkErrorPercent: 0,
 	}
 	fs := &fauxstats{}
 
@@ -42,14 +42,14 @@ func TestParallelismIncrease(t *testing.T) {
 	out := make(chan uint)
 	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cncl()
-	cfg := parallelismConfig{
-		allowedDriftSeconds:        1,
-		maxLoops:                   2,
-		minLoops:                   1,
-		resetInterval:              1 * time.Second,
-		lookback:                   1 * time.Minute,
-		checkInterval:              1 * time.Second,
-		allowedNetworkErrorPercent: 0,
+	cfg := types.ParralelismConfig{
+		AllowedDriftSeconds:        1,
+		MaxConnections:             2,
+		MinConnections:             1,
+		ResetInterval:              1 * time.Second,
+		Lookback:                   1 * time.Minute,
+		CheckInterval:              1 * time.Second,
+		AllowedNetworkErrorPercent: 0,
 	}
 	fs := &fauxstats{}
 
@@ -77,14 +77,14 @@ func TestParallelismDecrease(t *testing.T) {
 	out := make(chan uint)
 	ctx, cncl := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cncl()
-	cfg := parallelismConfig{
-		allowedDriftSeconds:        1,
-		maxLoops:                   2,
-		minLoops:                   1,
-		resetInterval:              1 * time.Second,
-		lookback:                   1 * time.Second,
-		checkInterval:              1 * time.Second,
-		allowedNetworkErrorPercent: 0,
+	cfg := types.ParralelismConfig{
+		AllowedDriftSeconds:        1,
+		MaxConnections:             2,
+		MinConnections:             1,
+		ResetInterval:              1 * time.Second,
+		Lookback:                   1 * time.Second,
+		CheckInterval:              1 * time.Second,
+		AllowedNetworkErrorPercent: 0,
 	}
 	fs := &fauxstats{}
 	l := log.NewLogfmtLogger(os.Stdout)
@@ -122,11 +122,21 @@ func TestParallelismDecrease(t *testing.T) {
 	}
 }
 
-var _ types.StatsHub = (*fakestats)(nil)
+var _ types.StatsHub = (*fauxstats)(nil)
 
 type fauxstats struct {
 	network func(types.NetworkStats)
 	serial  func(types.SerializerStats)
+}
+
+func (f fauxstats) SendParralelismStats(stats types.ParralelismStats) {
+
+}
+
+func (f fauxstats) RegisterParralelism(f2 func(types.ParralelismStats)) types.NotificationRelease {
+	return func() {
+
+	}
 }
 
 func (fauxstats) Start(_ context.Context) {

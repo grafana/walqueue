@@ -49,10 +49,7 @@ type ConnectionConfig struct {
 	// ExternalLabels specifies the external labels to be added to all samples
 	// sent to the Prometheus server.
 	ExternalLabels map[string]string
-	// MaxConnections is the maximum number of concurrent connections to use.
-	MaxConnections uint
-	// MinConnections is the minimum number of concurrent connections to use.
-	MinConnections uint
+
 	// TLSCert is the PEM-encoded certificate string for TLS client authentication
 	TLSCert string
 	// TLSKey is the PEM-encoded private key string for TLS client authentication
@@ -63,6 +60,30 @@ type ConnectionConfig struct {
 	InsecureSkipVerify bool
 	// UseRoundRobin
 	UseRoundRobin bool
+	// ParralelismConfig determines how many concurrent connections to have.
+	Parralelism ParralelismConfig
+}
+type ParralelismConfig struct {
+	// AllowedDriftSeconds is the maximum amount that is allowed before the connections scales up.
+	// If it drops below with a 10% threshold then will scale down.
+	AllowedDriftSeconds int64
+	// MaxConnections is the maximum number of concurrent connections to use.
+	MaxConnections uint
+	// MinConnections is the minimum number of concurrent connections to use.
+	MinConnections uint
+	// ResetInterval is how long to keep network successes and errors in memory for calculations.
+	ResetInterval time.Duration
+	// Lookback is how far to lookback for previous desired values. This is to prevent flapping.
+	// In a situation where in the past 5 minutes you have desired [1,2,1,1] and desired is 1 it will
+	// choose 2 since that was the greatest. This determines how fast you can scale down.
+	Lookback time.Duration
+	// CheckInterval is how long to check for desired values.
+	CheckInterval time.Duration
+	// AllowedNetworkErrorPercent is the percentage of failed network requests that are allowable. This will
+	// trigger a scaled down if exceeded.
+	AllowedNetworkErrorPercent float64
+}
+type Parralelism struct {
 }
 
 // ToPrometheusConfig converts a ConnectionConfig to a config.HTTPClientConfig

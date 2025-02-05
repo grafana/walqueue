@@ -8,15 +8,25 @@ import (
 type StatsHub interface {
 	Start(context.Context)
 	Stop()
+
 	SendSeriesNetworkStats(NetworkStats)
 	SendSerializerStats(SerializerStats)
 	SendMetadataNetworkStats(NetworkStats)
+	SendParralelismStats(stats ParralelismStats)
+
 	RegisterSeriesNetwork(func(NetworkStats)) NotificationRelease
 	RegisterMetadataNetwork(func(NetworkStats)) NotificationRelease
 	RegisterSerializer(func(SerializerStats)) NotificationRelease
+	RegisterParralelism(func(ParralelismStats)) NotificationRelease
 }
 
 type NotificationRelease func()
+
+type ParralelismStats struct {
+	Min     uint
+	Max     uint
+	Desired uint
+}
 
 type SerializerStats struct {
 	SeriesStored           int

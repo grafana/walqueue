@@ -41,12 +41,19 @@ func TestSending(t *testing.T) {
 	defer cncl()
 
 	cc := types.ConnectionConfig{
-		URL:            svr.URL,
-		Timeout:        1 * time.Second,
-		BatchCount:     10,
-		FlushInterval:  1 * time.Second,
-		MinConnections: 4,
-		MaxConnections: 4,
+		URL:           svr.URL,
+		Timeout:       1 * time.Second,
+		BatchCount:    10,
+		FlushInterval: 1 * time.Second,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             4,
+			MinConnections:             4,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
@@ -79,12 +86,19 @@ func TestUpdatingConfig(t *testing.T) {
 	defer svr.Close()
 
 	cc := types.ConnectionConfig{
-		URL:            svr.URL,
-		Timeout:        1 * time.Second,
-		BatchCount:     10,
-		FlushInterval:  5 * time.Second,
-		MinConnections: 1,
-		MaxConnections: 1,
+		URL:           svr.URL,
+		Timeout:       1 * time.Second,
+		BatchCount:    10,
+		FlushInterval: 5 * time.Second,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
@@ -100,12 +114,19 @@ func TestUpdatingConfig(t *testing.T) {
 	defer wr.Stop()
 
 	cc2 := types.ConnectionConfig{
-		URL:            svr.URL,
-		Timeout:        1 * time.Second,
-		BatchCount:     20,
-		FlushInterval:  5 * time.Second,
-		MinConnections: 1,
-		MaxConnections: 1,
+		URL:           svr.URL,
+		Timeout:       1 * time.Second,
+		BatchCount:    20,
+		FlushInterval: 5 * time.Second,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	success, err := wr.UpdateConfig(ctx, cc2)
@@ -154,10 +175,17 @@ func TestDrain(t *testing.T) {
 		Timeout:          1 * time.Second,
 		BatchCount:       1,
 		FlushInterval:    5 * time.Second,
-		MinConnections:   1,
-		MaxConnections:   1,
 		MaxRetryAttempts: 100,
 		RetryBackoff:     10 * time.Second,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
@@ -186,10 +214,17 @@ func TestDrain(t *testing.T) {
 		Timeout:          1 * time.Second,
 		BatchCount:       1,
 		FlushInterval:    5 * time.Second,
-		MinConnections:   4,
-		MaxConnections:   4,
 		MaxRetryAttempts: 100,
 		RetryBackoff:     10 * time.Second,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             4,
+			MinConnections:             4,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 	// Update the config which should NOT lose any data
 	wr.UpdateConfig(ctx, cc2)
@@ -218,13 +253,20 @@ func TestRetry(t *testing.T) {
 	defer cncl()
 
 	cc := types.ConnectionConfig{
-		URL:            svr.URL,
-		Timeout:        1 * time.Second,
-		BatchCount:     1,
-		FlushInterval:  1 * time.Second,
-		RetryBackoff:   100 * time.Millisecond,
-		MinConnections: 1,
-		MaxConnections: 1,
+		URL:           svr.URL,
+		Timeout:       1 * time.Second,
+		BatchCount:    1,
+		FlushInterval: 1 * time.Second,
+		RetryBackoff:  100 * time.Millisecond,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
@@ -264,8 +306,15 @@ func TestRetryBounded(t *testing.T) {
 		FlushInterval:    1 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		MinConnections:   1,
-		MaxConnections:   1,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
@@ -303,8 +352,15 @@ func TestRecoverable(t *testing.T) {
 		FlushInterval:    10 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		MinConnections:   10,
-		MaxConnections:   10,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             10,
+			MinConnections:             10,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
@@ -347,8 +403,15 @@ func TestNonRecoverable(t *testing.T) {
 		FlushInterval:    1 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		MinConnections:   1,
-		MaxConnections:   1,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
@@ -470,6 +533,16 @@ var _ types.StatsHub = (*fakestats)(nil)
 type fakestats struct {
 	recoverable    *atomic.Int32
 	nonrecoverable *atomic.Int32
+}
+
+func (fs fakestats) SendParralelismStats(stats types.ParralelismStats) {
+
+}
+
+func (fs fakestats) RegisterParralelism(f func(types.ParralelismStats)) types.NotificationRelease {
+	return func() {
+
+	}
 }
 
 func (fakestats) Start(_ context.Context) {

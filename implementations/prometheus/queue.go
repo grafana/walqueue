@@ -77,9 +77,9 @@ type queue struct {
 func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSignalsToBatch uint32, flushInterval time.Duration, ttl time.Duration, registerer prometheus.Registerer, namespace string, logger log.Logger) (Queue, error) {
 	sh := stats.NewStats()
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"endpoint": name}, registerer)
-	statsHub := NewStats(namespace, "queue_series", reg, sh)
+	statsHub := NewStats(namespace, "queue_series", false, reg, sh)
 	statsHub.SeriesBackwardsCompatibility(reg)
-	meta := NewStats("alloy", "queue_metadata", reg, sh)
+	meta := NewStats("alloy", "queue_metadata", true, reg, sh)
 	meta.MetaBackwardsCompatibility(reg)
 
 	networkClient, err := network.New(cc, logger, sh)

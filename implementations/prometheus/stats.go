@@ -8,12 +8,20 @@ import (
 )
 
 type PrometheusStats struct {
-	serializerIn   atomic.Int64
-	networkOut     atomic.Int64
-	register       prometheus.Registerer
-	stats          types.StatsHub
-	serialRelease  types.NotificationRelease
-	networkRelease types.NotificationRelease
+	serializerIn       atomic.Int64
+	networkOut         atomic.Int64
+	register           prometheus.Registerer
+	stats              types.StatsHub
+	isMeta             bool
+	serialRelease      types.NotificationRelease
+	networkRelease     types.NotificationRelease
+	parralelismRelease types.NotificationRelease
+
+	// Parralelism
+	ParralelismMin     prometheus.Gauge
+	ParralelismMax     prometheus.Gauge
+	ParralelismDesired prometheus.Gauge
+
 	// Network Stats
 	NetworkSeriesSent                prometheus.Counter
 	NetworkFailures                  prometheus.Counter
@@ -24,6 +32,7 @@ type PrometheusStats struct {
 	NetworkErrors                    prometheus.Counter
 	NetworkNewestOutTimeStampSeconds prometheus.Gauge
 	NetworkTTLDrops                  prometheus.Counter
+
 	// Drift between serializer input and network output
 	TimestampDriftSeconds prometheus.Gauge
 
@@ -56,10 +65,26 @@ type PrometheusStats struct {
 	RemoteStorageDuration     prometheus.Histogram
 }
 
-func NewStats(namespace, subsystem string, registry prometheus.Registerer, sh types.StatsHub) *PrometheusStats {
+func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Registerer, sh types.StatsHub) *PrometheusStats {
 	s := &PrometheusStats{
 		stats:    sh,
 		register: registry,
+		isMeta:   isMeta,
+		ParralelismMax: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "parralelism_max",
+		}),
+		ParralelismMin: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "parralelism_min",
+		}),
+		ParralelismDesired: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "parralelism_desired",
+		}),
 		SerializerInSeries: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
@@ -184,12 +209,13 @@ func NewStats(namespace, subsystem string, registry prometheus.Registerer, sh ty
 			Help: "The total number of bytes of metadata sent by the queue after compression.",
 		}),
 	}
-	if subsystem == "queue_metadata" {
+	if isMeta {
 		s.networkRelease = s.stats.RegisterMetadataNetwork(s.UpdateNetwork)
 	} else {
 		s.networkRelease = s.stats.RegisterSeriesNetwork(s.UpdateNetwork)
 	}
 	s.serialRelease = s.stats.RegisterSerializer(s.UpdateSerializer)
+	s.parralelismRelease = s.stats.RegisterParralelism(s.UpdateParralelism)
 	registry.MustRegister(
 		s.NetworkSentDuration,
 		s.NetworkRetries5XX,
@@ -205,6 +231,13 @@ func NewStats(namespace, subsystem string, registry prometheus.Registerer, sh ty
 		s.SerializerNewestInTimeStampSeconds,
 		s.TimestampDriftSeconds,
 	)
+	// Metadata doesn't scale, it has one dedicated connection.
+	if !isMeta {
+		registry.MustRegister(
+			s.ParralelismMax,
+			s.ParralelismMin,
+			s.ParralelismDesired)
+	}
 	return s
 }
 
@@ -237,6 +270,10 @@ func (s *PrometheusStats) Unregister() {
 		s.SerializerErrors,
 		s.SerializerNewestInTimeStampSeconds,
 		s.TimestampDriftSeconds,
+	}
+	// Meta only has one connection so we dont need these for that.
+	if !s.isMeta {
+		unregistered = append(unregistered, s.ParralelismMin, s.ParralelismMax, s.ParralelismDesired)
 	}
 
 	for _, g := range unregistered {
@@ -313,7 +350,12 @@ func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
 		s.SerializerNewestInTimeStampSeconds.Set(float64(stats.NewestTimestampSeconds))
 		s.RemoteStorageInTimestamp.Set(float64(stats.NewestTimestampSeconds))
 	}
+}
 
+func (s *PrometheusStats) UpdateParralelism(stats types.ParralelismStats) {
+	s.ParralelismMax.Set(float64(stats.Max))
+	s.ParralelismMin.Set(float64(stats.Min))
+	s.ParralelismDesired.Set(float64(stats.Max))
 }
 
 func (s *PrometheusStats) updateDrift() {

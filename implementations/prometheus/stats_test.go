@@ -14,7 +14,7 @@ import (
 
 func TestDriftSerializer(t *testing.T) {
 	sh := stats.NewStats()
-	ps := NewStats("test", "test", prom.NewRegistry(), sh)
+	ps := NewStats("test", "test", false, prom.NewRegistry(), sh)
 	ps.UpdateSerializer(types.SerializerStats{
 		SeriesStored:           1,
 		MetadataStored:         1,
@@ -30,7 +30,7 @@ func TestDriftSerializer(t *testing.T) {
 
 func TestDriftNetwork(t *testing.T) {
 	sh := stats.NewStats()
-	ps := NewStats("test", "test", prom.NewRegistry(), sh)
+	ps := NewStats("test", "test", false, prom.NewRegistry(), sh)
 	ps.UpdateNetwork(types.NetworkStats{
 		NewestTimestampSeconds: time.Now().Unix(),
 	})

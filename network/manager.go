@@ -32,18 +32,9 @@ var _ types.NetworkClient = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) (types.NetworkClient, error) {
 	desiredOutbox := make(chan uint)
-	parCfg := parallelismConfig{
-		allowedDriftSeconds:        60,
-		maxLoops:                   cc.MaxConnections,
-		minLoops:                   cc.MinConnections,
-		resetInterval:              5 * time.Minute,
-		lookback:                   5 * time.Minute,
-		checkInterval:              10 * time.Second,
-		allowedNetworkErrorPercent: 0.05,
-	}
-	p := newParallelism(parCfg, desiredOutbox, statshub, logger)
+	p := newParallelism(cc.Parralelism, desiredOutbox, statshub, logger)
 	s := &manager{
-		writeBuffers:       make([]*writeBuffer[types.MetricDatum], 0, cc.MinConnections),
+		writeBuffers:       make([]*writeBuffer[types.MetricDatum], 0, cc.Parralelism.MinConnections),
 		logger:             logger,
 		inbox:              types.NewMailbox[types.MetricDatum](chann.Cap(1)),
 		metaInbox:          types.NewMailbox[types.MetadataDatum](chann.Cap(1)),
@@ -57,7 +48,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) 
 		desiredParallelism: p,
 	}
 
-	s.desiredConnections = s.cfg.MinConnections
+	s.desiredConnections = s.cfg.Parralelism.MinConnections
 
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.desiredConnections; i++ {
@@ -279,6 +270,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 		s.metadata.ForceAdd(ctx, d)
 	}
 	s.metadata = metadata
+	s.desiredParallelism.UpdateConfig(cc.Parralelism)
 	return nil
 }
 

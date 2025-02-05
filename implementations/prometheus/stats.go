@@ -340,8 +340,11 @@ func (s *PrometheusStats) UpdateNetwork(stats types.NetworkStats) {
 }
 
 func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
+	// TODO add metadata support
+	if s.isMeta {
+		return
+	}
 	s.SerializerInSeries.Add(float64(stats.SeriesStored))
-	s.SerializerInSeries.Add(float64(stats.MetadataStored))
 	s.SerializerErrors.Add(float64(stats.Errors))
 	if stats.NewestTimestampSeconds != 0 {
 		s.serializerIn.Store(stats.NewestTimestampSeconds)

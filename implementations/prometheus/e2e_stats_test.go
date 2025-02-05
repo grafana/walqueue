@@ -72,10 +72,6 @@ func TestMetadata(t *testing.T) {
 			dtype:            Metadata,
 			checks: []check{
 				{
-					name:  serializerIncoming,
-					value: 10,
-				},
-				{
 					name:  remoteMetadata,
 					value: 10,
 				},
@@ -115,10 +111,6 @@ func TestMetadata(t *testing.T) {
 					value: 10,
 				},
 				{
-					name:  serializerIncoming,
-					value: 10,
-				},
-				{
 					name:  failedMetadata,
 					value: 10,
 				},
@@ -145,10 +137,6 @@ func TestMetadata(t *testing.T) {
 			returnStatusCode: http.StatusTooManyRequests,
 			dtype:            Metadata,
 			checks: []check{
-				{
-					name:  serializerIncoming,
-					value: 10,
-				},
 				{
 					name: retriedMetadata,
 					// This will be more than 10 since it retries in a loop.

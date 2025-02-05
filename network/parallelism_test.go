@@ -12,180 +12,277 @@ import (
 )
 
 func TestParallelismWithNoChanges(t *testing.T) {
-	out := make(chan uint)
-	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cncl()
-	cfg := types.ParralelismConfig{
-		AllowedDriftSeconds:        1,
-		MaxConnections:             1,
-		MinConnections:             1,
-		ResetInterval:              1 * time.Minute,
-		Lookback:                   1 * time.Minute,
-		CheckInterval:              1 * time.Second,
-		AllowedNetworkErrorPercent: 0,
-	}
-	fs := &parStats{}
-
-	l := log.NewLogfmtLogger(os.Stdout)
-	p := newParallelism(cfg, out, fs, l)
-	p.Run(ctx)
-	select {
-	case <-out:
-		require.Fail(t, "should not receive any changes")
-	case <-ctx.Done():
-		require.True(t, true)
-		return
-	}
-}
-
-func TestParallelismIncrease(t *testing.T) {
-	out := make(chan uint)
-	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cncl()
-	cfg := types.ParralelismConfig{
-		AllowedDriftSeconds:        1,
-		MaxConnections:             2,
-		MinConnections:             1,
-		ResetInterval:              1 * time.Second,
-		Lookback:                   1 * time.Minute,
-		CheckInterval:              1 * time.Second,
-		AllowedNetworkErrorPercent: 0,
-	}
-	fs := &parStats{}
-
-	l := log.NewLogfmtLogger(os.Stdout)
-	p := newParallelism(cfg, out, fs, l)
-	p.Run(ctx)
-	// This will create a difference of 100 seconds
-	fs.SendSerializerStats(types.SerializerStats{
-		NewestTimestampSeconds: 100,
-	})
-	fs.SendSeriesNetworkStats(types.NetworkStats{
-		NewestTimestampSeconds: 1,
-	})
-
-	select {
-	case desired := <-out:
-		require.True(t, desired == 2)
-	case <-ctx.Done():
-		require.Fail(t, "should have gotten desired 2")
-		return
-	}
-}
-
-func TestParallelismDecrease(t *testing.T) {
-	out := make(chan uint)
-	ctx, cncl := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cncl()
-	cfg := types.ParralelismConfig{
-		AllowedDriftSeconds:          1,
-		MaxConnections:               2,
-		MinConnections:               1,
-		ResetInterval:                1 * time.Second,
-		Lookback:                     1 * time.Second,
-		CheckInterval:                1 * time.Second,
-		MinimumScaleDownDriftSeconds: 1,
-		AllowedNetworkErrorPercent:   0,
-	}
-	fs := &parStats{}
-	l := log.NewLogfmtLogger(os.Stdout)
-
-	p := newParallelism(cfg, out, fs, l)
-	p.Run(ctx)
-	// This will create a difference of 99 seconds
-	fs.SendSerializerStats(types.SerializerStats{
-		NewestTimestampSeconds: 100,
-	})
-	fs.SendSeriesNetworkStats(types.NetworkStats{
-		NewestTimestampSeconds: 1,
-	})
-
-	select {
-	case desired := <-out:
-		require.True(t, desired == 2)
-	case <-ctx.Done():
-		require.Fail(t, "should have gotten desired 2")
-		return
-	}
-	fs.SendSerializerStats(types.SerializerStats{
-		NewestTimestampSeconds: 300,
-	})
-	fs.SendSeriesNetworkStats(types.NetworkStats{
-		NewestTimestampSeconds: 300,
-	})
-
-	select {
-	case desired := <-out:
-		require.True(t, desired == 1)
-	case <-ctx.Done():
-		require.Fail(t, "should have gotten desired 1")
-		return
-	}
-}
-
-func TestParallelismMinimumDrift(t *testing.T) {
-	out := make(chan uint)
-	ctx, cncl := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cncl()
-	cfg := types.ParralelismConfig{
-		AllowedDriftSeconds:          10,
-		MinimumScaleDownDriftSeconds: 5,
-		MaxConnections:               2,
-		MinConnections:               1,
-		ResetInterval:                1 * time.Second,
-		Lookback:                     1 * time.Second,
-		CheckInterval:                1 * time.Second,
-		AllowedNetworkErrorPercent:   0,
-	}
-	fs := &parStats{}
-	l := log.NewLogfmtLogger(os.Stdout)
-
-	p := newParallelism(cfg, out, fs, l)
-	p.Run(ctx)
-	// This will create a difference of 99 seconds
-	fs.SendSerializerStats(types.SerializerStats{
-		NewestTimestampSeconds: 12,
-	})
-	fs.SendSeriesNetworkStats(types.NetworkStats{
-		NewestTimestampSeconds: 1,
-	})
-
-	select {
-	case desired := <-out:
-		require.True(t, desired == 2)
-	case <-ctx.Done():
-		require.Fail(t, "should have gotten desired 2")
-		return
-	}
-	// This should not trigger a scale down.
-	fs.SendSerializerStats(types.SerializerStats{
-		NewestTimestampSeconds: 17,
-	})
-	fs.SendSeriesNetworkStats(types.NetworkStats{
-		NewestTimestampSeconds: 12,
-	})
-
-	select {
-	case desired := <-out:
-		require.Falsef(t, true, "this should not trigger got value %d", desired)
-		// Allow this to trigger for 2-3 desired triggers.
-	case <-time.After(3 * time.Second):
+	type stage struct {
+		desired           uint
+		noChange          bool
+		increaseTimeStamp int
+		// failurePercentile should be between 0 and 100.
+		failurePercentile int
+		waitFor           time.Duration
 	}
 
-	// This should trigger a scale down, since we fall below the minimum threshold.
-	fs.SendSerializerStats(types.SerializerStats{
-		NewestTimestampSeconds: 20,
-	})
-	fs.SendSeriesNetworkStats(types.NetworkStats{
-		NewestTimestampSeconds: 19,
-	})
+	type test struct {
+		name   string
+		stages []stage
+		cfg    types.ParralelismConfig
+	}
 
-	select {
-	case desired := <-out:
-		require.True(t, desired == 1)
-	case <-ctx.Done():
-		require.Fail(t, "should have gotten desired 1")
-		return
+	tests := []test{
+		{
+			name: "no changes",
+			stages: []stage{
+				{
+					noChange: true,
+				},
+			},
+		},
+		{
+			name: "increase",
+			cfg: types.ParralelismConfig{
+				MaxConnections: 2,
+			},
+			stages: []stage{
+				{
+					desired:           2,
+					increaseTimeStamp: 100,
+				},
+			},
+		},
+		{
+			name: "decrease with minimum",
+			cfg: types.ParralelismConfig{
+				MaxConnections:               2,
+				AllowedDriftSeconds:          10,
+				MinimumScaleDownDriftSeconds: 5,
+			},
+			stages: []stage{
+				{
+					desired:           2,
+					increaseTimeStamp: 100,
+				},
+				{
+					// This small timestamp should trigger a lower value.
+					desired:           1,
+					increaseTimeStamp: 1,
+				},
+			},
+		},
+		{
+			name: "network hard down",
+			cfg: types.ParralelismConfig{
+				MaxConnections:               2,
+				AllowedDriftSeconds:          10,
+				MinimumScaleDownDriftSeconds: 5,
+				AllowedNetworkErrorPercent:   0.89,
+				ResetInterval:                5 * time.Second,
+			},
+			stages: []stage{
+				{
+					// This will bump it up.
+					desired:           2,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Everything will fail, even though the timestamp is legit.
+					// We fail .90 and our threshold is 0.89.
+					failurePercentile: 90,
+					desired:           1,
+					increaseTimeStamp: 100,
+				},
+			},
+		},
+		{
+			name: "network not hard down",
+			cfg: types.ParralelismConfig{
+				MaxConnections:               2,
+				AllowedDriftSeconds:          10,
+				MinimumScaleDownDriftSeconds: 5,
+				AllowedNetworkErrorPercent:   0.90,
+			},
+			stages: []stage{
+				{
+					// This will bump it up.
+					desired:           2,
+					increaseTimeStamp: 100,
+				},
+				{
+
+					// Just barely above the threshhold to not trigger.
+					failurePercentile: 89,
+					noChange:          true,
+					increaseTimeStamp: 100,
+				},
+			},
+		},
+		{
+			name: "network was down but errors fall off",
+			cfg: types.ParralelismConfig{
+				MaxConnections:               2,
+				AllowedDriftSeconds:          10,
+				MinimumScaleDownDriftSeconds: 5,
+				AllowedNetworkErrorPercent:   0.89,
+				ResetInterval:                1 * time.Second,
+			},
+			stages: []stage{
+				{
+					// This will bump it up.
+					desired:           2,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Everything will fail, even though the timestamp is legit.
+					// We fail .90 and our threshold is 0.89.
+					failurePercentile: 90,
+					desired:           1,
+					increaseTimeStamp: 100,
+				},
+				{
+					// but I got better, this gives time for the reset interval to clear out the errors.
+					waitFor: 2 * time.Second,
+				},
+				{
+					// Lets get back to normal.
+					desired:           2,
+					increaseTimeStamp: 100,
+				},
+			},
+		},
+		{
+			name: "lookback",
+			cfg: types.ParralelismConfig{
+				MaxConnections:               2,
+				AllowedDriftSeconds:          10,
+				MinimumScaleDownDriftSeconds: 5,
+				AllowedNetworkErrorPercent:   0.89,
+				ResetInterval:                1 * time.Second,
+				Lookback:                     5 * time.Second,
+			},
+			stages: []stage{
+				{
+					// This will bump it up.
+					desired:           2,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Normally this would wind down due to the minimum scale down triggers,
+					// but since we have lookback enabled then it will see the previous desired and keep it going.
+					noChange:          true,
+					increaseTimeStamp: 1,
+				},
+			},
+		},
+		{
+			name: "lookback interval",
+			cfg: types.ParralelismConfig{
+				MaxConnections:               2,
+				AllowedDriftSeconds:          10,
+				MinimumScaleDownDriftSeconds: 5,
+				AllowedNetworkErrorPercent:   0.89,
+				ResetInterval:                1 * time.Second,
+				Lookback:                     5 * time.Second,
+			},
+			stages: []stage{
+				{
+					// This will bump it up.
+					desired:           2,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Normally this would wind down due to the minimum scale down triggers,
+					// but since we have lookback enabled then it will see the previous desired and keep it going.
+					noChange:          true,
+					increaseTimeStamp: 1,
+				},
+				{
+					// This should cause the lookback to get removed.
+					waitFor: 6 * time.Second,
+				},
+				{
+					// Now that all the lookbacks are removed we can scale down again.
+					desired:           1,
+					increaseTimeStamp: 1,
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := types.NewMailbox[uint]()
+			ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cncl()
+			cfg := types.ParralelismConfig{
+				AllowedDriftSeconds:          max(tc.cfg.AllowedDriftSeconds, 1),
+				MaxConnections:               max(tc.cfg.MaxConnections, 1),
+				MinConnections:               max(tc.cfg.MinConnections, 1),
+				ResetInterval:                min(tc.cfg.ResetInterval, 1*time.Minute),
+				Lookback:                     max(tc.cfg.Lookback, 0),
+				CheckInterval:                100 * time.Millisecond,
+				AllowedNetworkErrorPercent:   max(tc.cfg.AllowedNetworkErrorPercent, 0),
+				MinimumScaleDownDriftSeconds: max(tc.cfg.MinimumScaleDownDriftSeconds, 1),
+			}
+
+			fs := &parStats{}
+			l := log.NewLogfmtLogger(os.Stdout)
+			p := newParallelism(cfg, out, fs, l)
+			ts := 1
+			p.Run(ctx)
+
+			for i, st := range tc.stages {
+				println("stage ", i)
+				nextTS := ts + st.increaseTimeStamp
+				// If failurePercentile is greater 0 then write some failed records.
+				if st.failurePercentile > 0 {
+					successes := 100 - st.failurePercentile
+					for sIndex := 0; sIndex < successes; sIndex++ {
+						fs.SendSeriesNetworkStats(types.NetworkStats{
+							Series: types.CategoryStats{SeriesSent: 1},
+						})
+					}
+					failures := 100 - successes
+					for sIndex := 0; sIndex < failures; sIndex++ {
+						fs.SendSeriesNetworkStats(types.NetworkStats{
+							Series: types.CategoryStats{FailedSamples: 1},
+						})
+					}
+
+				}
+				// Serializer should always be newer than network.
+				fs.SendSerializerStats(types.SerializerStats{
+					NewestTimestampSeconds: int64(nextTS),
+				})
+				fs.SendSeriesNetworkStats(types.NetworkStats{
+					NewestTimestampSeconds: int64(ts),
+				})
+
+				// set our starting to next + 1
+				ts = nextTS + 1
+
+				if st.waitFor > 0 {
+					time.Sleep(st.waitFor)
+					continue
+				}
+
+				if st.noChange {
+					select {
+					case <-out.ReceiveC():
+						require.Fail(t, "should not receive any changes")
+					case <-time.After(1 * time.Second):
+						require.True(t, true)
+					}
+					continue
+				}
+				// Check for the desired state.
+				select {
+				case desired := <-out.ReceiveC():
+					require.True(t, desired == st.desired)
+					continue
+				case <-time.After(1 * time.Second):
+					require.Failf(t, "should have gotten desired ", "%d", st.desired)
+					return
+				}
+
+			}
+		})
 	}
 }
 

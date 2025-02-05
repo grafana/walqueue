@@ -17,7 +17,7 @@ type manager struct {
 	logger             log.Logger
 	inbox              *types.Mailbox[types.MetricDatum]
 	metaInbox          *types.Mailbox[types.MetadataDatum]
-	desiredOutbox      chan uint
+	desiredOutbox      *types.Mailbox[uint]
 	configInbox        *types.SyncMailbox[types.ConnectionConfig, bool]
 	cfg                types.ConnectionConfig
 	statshub           types.StatsHub
@@ -31,7 +31,7 @@ type manager struct {
 var _ types.NetworkClient = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) (types.NetworkClient, error) {
-	desiredOutbox := make(chan uint)
+	desiredOutbox := types.NewMailbox[uint]()
 	p := newParallelism(cc.Parralelism, desiredOutbox, statshub, logger)
 	s := &manager{
 		writeBuffers:       make([]*writeBuffer[types.MetricDatum], 0, cc.Parralelism.MinConnections),
@@ -141,7 +141,7 @@ func (s *manager) checkConfig(ctx context.Context) flowcontrol {
 		}
 		cfg.Notify(successful, err)
 		return ContinueExecution
-	case desired, ok := <-s.desiredOutbox:
+	case desired, ok := <-s.desiredOutbox.ReceiveC():
 		if !ok {
 			level.Debug(s.logger).Log("msg", "desired outbox closed")
 			return Exit

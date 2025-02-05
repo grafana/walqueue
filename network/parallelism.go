@@ -24,7 +24,7 @@ type parallelism struct {
 
 	timestampDriftSeconds int64
 	currentDesired        uint
-	out                   chan uint
+	out                   *types.Mailbox[uint]
 	stop                  chan struct{}
 	// previous is the number of previous desired instances. This is to prevent flapping.
 	previous                   []previousDesired
@@ -40,7 +40,7 @@ type previousDesired struct {
 	recorded time.Time
 }
 
-func newParallelism(cfg types.ParralelismConfig, out chan uint, statshub types.StatsHub, l log.Logger) *parallelism {
+func newParallelism(cfg types.ParralelismConfig, out *types.Mailbox[uint], statshub types.StatsHub, l log.Logger) *parallelism {
 	p := &parallelism{
 		cfg:            cfg,
 		statshub:       statshub,
@@ -160,9 +160,10 @@ func (p *parallelism) desiredLoops() {
 			keepSuccesses = append(keepSuccesses, err)
 		}
 	}
-
+	p.networkSuccesses = keepSuccesses
+	errorRate := p.networkErrorRate()
 	// If we have network errors then ramp down the number of loops.
-	if p.cfg.AllowedNetworkErrorPercent != 0.0 && p.networkErrorRate() >= p.cfg.AllowedNetworkErrorPercent {
+	if p.cfg.AllowedNetworkErrorPercent != 0.0 && errorRate >= p.cfg.AllowedNetworkErrorPercent {
 		// Need to keep the value between min and max.
 		if p.currentDesired-1 >= p.cfg.MinConnections {
 			level.Debug(p.l).Log("msg", "triggering lower desired due to network errors", "desired", p.currentDesired-1)
@@ -205,7 +206,7 @@ func (p *parallelism) networkErrorRate() float64 {
 		return 1.0
 	}
 
-	errorRate := float64(len(p.networkErrors)) / float64(len(p.networkSuccesses))
+	errorRate := float64(len(p.networkErrors)) / float64(len(p.networkSuccesses)+len(p.networkErrors))
 	return errorRate
 }
 
@@ -230,29 +231,33 @@ func (p *parallelism) changeParallelism(desired uint) {
 	// Are we ramping down?
 	if desired < p.currentDesired {
 		// Let's see if we are going to catch the flapping issues.
+		previousInLookback := make([]previousDesired, 0, len(p.previous))
 		for _, previous := range p.previous {
 			// Remove any outliers
-			if time.Since(previous.recorded) > p.cfg.Lookback {
-				p.previous = p.previous[1:]
-				continue
+			if time.Since(previous.recorded) <= p.cfg.Lookback {
+				previousInLookback = append(previousInLookback, previous)
 			}
+		}
+		p.previous = previousInLookback
+		for _, previous := range p.previous {
 			// If we previously said we needed a higher value then keep to that previous value.
 			if actualValue < previous.desired {
 				level.Debug(p.l).Log("msg", "lookback on previous values is higher, using higher value", "desired", actualValue, "previous", previous.desired)
 				actualValue = previous.desired
 			}
 		}
+
 		// Finally set the value of current and out if the values are different.
 		// No need to notify if the same.
 		if actualValue != p.currentDesired {
 			p.currentDesired = actualValue
 			level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
-			p.out <- actualValue
+			p.out.Send(context.TODO(), actualValue)
 		}
 	} else {
 		// Going up is always allowed. Scaling up should be easy, scaling down should be slow.
 		p.currentDesired = desired
 		level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
-		p.out <- p.currentDesired
+		p.out.Send(context.TODO(), desired)
 	}
 }

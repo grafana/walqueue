@@ -12,13 +12,19 @@ import (
 )
 
 func TestParallelismWithNoChanges(t *testing.T) {
+	// stage is used to simulate time or changes to parrallelism.
 	type stage struct {
-		desired           uint
-		noChange          bool
+		// desired is what the desired value should be for a stage
+		desired uint
+		// noChange is used when a stage should ensure that no changes occur.
+		noChange bool
+		// increaseTimeStamp is how much to increase the timestamp.
+		// It will add it to previous stages timestamp.
 		increaseTimeStamp int
 		// failurePercentile should be between 0 and 100.
 		failurePercentile int
-		waitFor           time.Duration
+		// waitFor is used when a stage should do nothing but pass time, generally to clear network success/error values.
+		waitFor time.Duration
 	}
 
 	type test struct {
@@ -257,11 +263,13 @@ func TestParallelismWithNoChanges(t *testing.T) {
 				// set our starting to next + 1
 				ts = nextTS + 1
 
+				// If we want to sleep then thats all the stage does.
 				if st.waitFor > 0 {
 					time.Sleep(st.waitFor)
 					continue
 				}
 
+				// changes are only sent if they are different, in this we are checking that no requests come in.s
 				if st.noChange {
 					select {
 					case <-out.ReceiveC():

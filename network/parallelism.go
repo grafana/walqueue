@@ -12,13 +12,16 @@ import (
 
 // parallelism drives the behavior on determining what the desired shards should be.
 type parallelism struct {
-	mut         sync.RWMutex
-	cfg         types.ParralelismConfig
-	statshub    types.StatsHub
-	driftNotify *types.Mailbox[uint]
+	// mut covers all items here
+	mut      sync.RWMutex
+	cfg      types.ParralelismConfig
+	statshub types.StatsHub
 	// networkErrors is any 4xx,5xx.
-	networkErrors         []time.Time
-	networkSuccesses      []time.Time
+	// network* holds the time any success or error occurs.
+	// This is used for the lookback so we can clear out any that are outside our lookback.
+	networkErrors    []time.Time
+	networkSuccesses []time.Time
+
 	timestampDriftSeconds int64
 	currentDesired        uint
 	out                   chan uint
@@ -46,6 +49,7 @@ func newParallelism(cfg types.ParralelismConfig, out chan uint, statshub types.S
 		stop:           make(chan struct{}),
 		l:              l,
 	}
+	// Register the network callback so we can track network in and outs.
 	p.networkRelease = p.statshub.RegisterSeriesNetwork(func(ns types.NetworkStats) {
 		p.mut.Lock()
 		defer p.mut.Unlock()
@@ -62,11 +66,14 @@ func newParallelism(cfg types.ParralelismConfig, out chan uint, statshub types.S
 			p.timestampNetworkSeconds = ns.NewestTimestampSeconds
 		}
 
+		// Only record drift if we have valid values for both. There is a small window
+		// where we get a serializer value but have 0 for timestamp.:
 		if p.timestampNetworkSeconds > 0 && p.timestampSerializerSeconds > 0 {
 			p.timestampDriftSeconds = p.timestampSerializerSeconds - p.timestampNetworkSeconds
 		}
 	})
 
+	// Register serializer for tracking incming timestamp.
 	p.serializerRelease = p.statshub.RegisterSerializer(func(ss types.SerializerStats) {
 		p.mut.Lock()
 		defer p.mut.Unlock()
@@ -96,9 +103,9 @@ func (p *parallelism) Run(ctx context.Context) {
 func (p *parallelism) run(ctx context.Context) {
 	p.mut.Lock()
 	p.statshub.SendParralelismStats(types.ParralelismStats{
-		Min:     p.cfg.MinConnections,
-		Max:     p.cfg.MaxConnections,
-		Desired: p.currentDesired,
+		MinConnections:     p.cfg.MinConnections,
+		MaxConnections:     p.cfg.MaxConnections,
+		DesiredConnections: p.currentDesired,
 	})
 	p.mut.Unlock()
 	for {
@@ -122,9 +129,9 @@ func (p *parallelism) UpdateConfig(cfg types.ParralelismConfig) {
 	defer p.mut.Unlock()
 	p.cfg = cfg
 	p.statshub.SendParralelismStats(types.ParralelismStats{
-		Min:     p.cfg.MinConnections,
-		Max:     p.cfg.MaxConnections,
-		Desired: p.currentDesired,
+		MinConnections:     p.cfg.MinConnections,
+		MaxConnections:     p.cfg.MaxConnections,
+		DesiredConnections: p.currentDesired,
 	})
 }
 
@@ -210,9 +217,9 @@ func (p *parallelism) changeParallelism(desired uint) {
 			recorded: time.Now(),
 		})
 		p.statshub.SendParralelismStats(types.ParralelismStats{
-			Max:     p.cfg.MaxConnections,
-			Min:     p.cfg.MinConnections,
-			Desired: desired,
+			MaxConnections:     p.cfg.MaxConnections,
+			MinConnections:     p.cfg.MinConnections,
+			DesiredConnections: desired,
 		})
 	}()
 	if desired == p.currentDesired {

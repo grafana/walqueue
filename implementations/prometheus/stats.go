@@ -281,7 +281,6 @@ func (s *PrometheusStats) Unregister() {
 	}
 	s.networkRelease()
 	s.serialRelease()
-
 }
 
 func (s *PrometheusStats) SeriesBackwardsCompatibility(registry prometheus.Registerer) {
@@ -353,9 +352,9 @@ func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
 }
 
 func (s *PrometheusStats) UpdateParralelism(stats types.ParralelismStats) {
-	s.ParralelismMax.Set(float64(stats.Max))
-	s.ParralelismMin.Set(float64(stats.Min))
-	s.ParralelismDesired.Set(float64(stats.Max))
+	s.ParralelismMax.Set(float64(stats.MaxConnections))
+	s.ParralelismMin.Set(float64(stats.MinConnections))
+	s.ParralelismDesired.Set(float64(stats.MaxConnections))
 }
 
 func (s *PrometheusStats) updateDrift() {

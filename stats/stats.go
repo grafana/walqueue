@@ -1,7 +1,6 @@
 package stats
 
 import (
-	"context"
 	"sync"
 
 	"github.com/grafana/walqueue/types"
@@ -9,6 +8,10 @@ import (
 
 var _ types.StatsHub = (*stats)(nil)
 
+// stats is used to collect and distribute stats to interested party.
+// It does this by keeping track of interested parties to each type.
+// Whenever a interested party registers they are given a NotificationRelease
+// that cleans up.
 type stats struct {
 	mut             sync.RWMutex
 	seriesNetwork   map[int]func(types.NetworkStats)
@@ -16,7 +19,6 @@ type stats struct {
 	serializer      map[int]func(types.SerializerStats)
 	parralelism     map[int]func(types.ParralelismStats)
 	index           int
-	ctx             context.Context
 }
 
 func NewStats() types.StatsHub {
@@ -26,14 +28,6 @@ func NewStats() types.StatsHub {
 		metadataNetwork: make(map[int]func(types.NetworkStats)),
 		parralelism:     make(map[int]func(types.ParralelismStats)),
 	}
-}
-
-func (s *stats) Start(ctx context.Context) {
-	s.ctx = ctx
-}
-
-func (s *stats) Stop() {
-
 }
 
 func (s *stats) RegisterMetadataNetwork(f func(types.NetworkStats)) types.NotificationRelease {
@@ -98,7 +92,6 @@ func (s *stats) RegisterParralelism(f func(types.ParralelismStats)) types.Notifi
 
 		delete(s.parralelism, index)
 	}
-
 }
 
 func (s *stats) SendSerializerStats(st types.SerializerStats) {
@@ -108,7 +101,6 @@ func (s *stats) SendSerializerStats(st types.SerializerStats) {
 	for _, v := range s.serializer {
 		v(st)
 	}
-
 }
 
 func (s *stats) SendSeriesNetworkStats(st types.NetworkStats) {

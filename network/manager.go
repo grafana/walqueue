@@ -136,7 +136,7 @@ func (s *manager) checkConfig(ctx context.Context) flowcontrol {
 			return Exit
 		}
 		var err error
-		if err = s.updateConfig(ctx, cfg.Value, s.desiredConnections); err != nil {
+		if err = s.updateConfig(ctx, cfg.Value, s.desiredConnections); err == nil {
 			successful = true
 		}
 		cfg.Notify(successful, err)

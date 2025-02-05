@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// StatsHub allows types to register to receive stats and to also send stats to fanout to receivers.
 type StatsHub interface {
 	Start(context.Context)
 	Stop()

@@ -65,8 +65,9 @@ type ConnectionConfig struct {
 }
 type ParralelismConfig struct {
 	// AllowedDriftSeconds is the maximum amount that is allowed before the connections scales up.
-	// If it drops below with a 10% threshold then will scale down.
 	AllowedDriftSeconds int64
+	// MinimumScaleDownDriftSeconds is the amount if we go below that we can scale down.
+	MinimumScaleDownDriftSeconds int64
 	// MaxConnections is the maximum number of concurrent connections to use.
 	MaxConnections uint
 	// MinConnections is the minimum number of concurrent connections to use.

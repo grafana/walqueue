@@ -173,14 +173,15 @@ func (p *parallelism) desiredLoops() {
 		return
 	}
 
-	// Can we ramp down, only ramp down if we are 10% below the target.
-	if p.timestampDriftSeconds+int64(float64(p.cfg.AllowedDriftSeconds)*0.1) < p.cfg.AllowedDriftSeconds {
+	// Can we ramp down, if we have dropped below our minimum scale down.
+	if p.timestampDriftSeconds < p.cfg.MinimumScaleDownDriftSeconds {
 		// Need to keep the value between min and max.
 		if p.currentDesired-1 >= p.cfg.MinConnections {
 			level.Debug(p.l).Log("msg", "decreasing desired due to drift lowering", "desired", p.currentDesired-1, "drift", p.timestampDriftSeconds)
 			p.changeParallelism(p.currentDesired - 1)
 		}
 	}
+	level.Debug(p.l).Log("msg", "no changes needed", "desired", p.currentDesired)
 }
 
 func (p *parallelism) networkErrorRate() float64 {
@@ -238,13 +239,13 @@ func (p *parallelism) changeParallelism(desired uint) {
 		// No need to notify if the same.
 		if actualValue != p.currentDesired {
 			p.currentDesired = actualValue
-			level.Debug(p.l).Log("msg", "sending desired", p.currentDesired)
+			level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
 			p.out <- actualValue
 		}
 	} else {
 		// Going up is always allowed. Scaling up should be easy, scaling down should be slow.
 		p.currentDesired = desired
-		level.Debug(p.l).Log("msg", "sending desired", p.currentDesired)
+		level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
 		p.out <- p.currentDesired
 	}
 }

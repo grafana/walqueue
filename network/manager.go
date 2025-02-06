@@ -7,6 +7,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
+	"github.com/panjf2000/ants/v2"
 	"golang.design/x/chann"
 )
 
@@ -26,12 +27,17 @@ type manager struct {
 	lastFlushTime      time.Time
 	desiredParallelism *parallelism
 	desiredConnections uint
+	routinePool        *ants.Pool
 }
 
 var _ types.NetworkClient = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) (types.NetworkClient, error) {
 	desiredOutbox := types.NewMailbox[uint]()
+	goPool, err := ants.NewPool(int(cc.Parralelism.MaxConnections))
+	if err != nil {
+		return nil, err
+	}
 	p := newParallelism(cc.Parralelism, desiredOutbox, statshub, logger)
 	s := &manager{
 		writeBuffers:       make([]*writeBuffer[types.MetricDatum], 0, cc.Parralelism.MinConnections),
@@ -46,17 +52,18 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) 
 		lastFlushTime:      time.Now(),
 		desiredOutbox:      desiredOutbox,
 		desiredParallelism: p,
+		routinePool:        goPool,
 	}
 
 	s.desiredConnections = s.cfg.Parralelism.MinConnections
 
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, logger)
+		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, logger, s.routinePool)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, logger)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, logger, s.routinePool)
 	s.metadata = metadata
 	return s, nil
 }
@@ -251,6 +258,9 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 		return nil
 	}
 	s.desiredConnections = desiredConnections
+	if cc.Parralelism.MaxConnections != s.cfg.Parralelism.MaxConnections {
+		s.routinePool.Tune(int(cc.Parralelism.MaxConnections))
+	}
 	s.cfg = cc
 	level.Debug(s.logger).Log("msg", "recreating write buffers due to configuration change.")
 	// Drain then stop the current writeBuffers.
@@ -263,7 +273,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 
 	s.writeBuffers = make([]*writeBuffer[types.MetricDatum], 0, desiredConnections)
 	for i := uint(0); i < desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, s.logger)
+		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, s.logger, s.routinePool)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 	// Force adding of metrics, note this may cause the system to go above the batch count.
@@ -271,7 +281,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 		s.forceQueue(ctx, d)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, s.logger)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, s.logger, s.routinePool)
 	for _, d := range drainedMeta {
 		s.metadata.ForceAdd(ctx, d)
 	}
@@ -282,6 +292,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 
 func (s *manager) Stop() {
 	s.configInbox.Stop()
+	s.routinePool.Release()
 }
 
 // queue adds anything thats not metadata to the queue.

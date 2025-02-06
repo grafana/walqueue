@@ -7,6 +7,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
+	"github.com/panjf2000/ants/v2"
 	"go.uber.org/atomic"
 )
 
@@ -22,9 +23,10 @@ type writeBuffer[T types.Datum] struct {
 	cfg             types.ConnectionConfig
 	stats           func(stats types.NetworkStats)
 	isMeta          bool
+	routinePool     *ants.Pool
 }
 
-func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger) *writeBuffer[T] {
+func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger, pool *ants.Pool) *writeBuffer[T] {
 	return &writeBuffer[T]{
 		items:           make([]T, 0),
 		writeInProgress: atomic.NewBool(false),
@@ -32,6 +34,7 @@ func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networ
 		stats:           stats,
 		isMeta:          isMeta,
 		log:             l,
+		routinePool:     pool,
 	}
 }
 
@@ -81,7 +84,7 @@ func (w *writeBuffer[T]) Send(ctx context.Context) {
 		sendingItems := w.getItems()
 		// About to kick off a write request so the write is no longer available.
 		w.writeInProgress.Store(true)
-		go func() {
+		w.routinePool.Submit(func() {
 			defer w.writeInProgress.Store(false)
 			s := newSignalsInfo[T](sendingItems)
 			var err error
@@ -93,7 +96,7 @@ func (w *writeBuffer[T]) Send(ctx context.Context) {
 				return
 			}
 			w.send(w.snappyBuf, s, ctx)
-		}()
+		})
 	}
 }
 

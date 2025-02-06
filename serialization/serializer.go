@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	snappy "github.com/eapache/go-xerial-snappy"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/prometheus/model/histogram"
@@ -146,7 +146,7 @@ func (s *serializer) flushToDisk(ctx actor.Context) error {
 		meta["version"] = string(types.AlloyFileVersionV2)
 		meta["compression"] = "snappy"
 		// TODO: reusing a buffer here likely increases performance.
-		out = snappy.Encode(buf)
+		out = snappy.Encode(nil, buf)
 		return s.queue.Store(ctx, meta, out)
 	})
 	return err

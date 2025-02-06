@@ -2,18 +2,18 @@ package prometheus
 
 import (
 	"context"
-	v2 "github.com/grafana/walqueue/types/v2"
 	"sync"
 	"time"
 
-	snappy "github.com/eapache/go-xerial-snappy"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/filequeue"
 	"github.com/grafana/walqueue/network"
 	"github.com/grafana/walqueue/serialization"
 	"github.com/grafana/walqueue/types"
 	v1 "github.com/grafana/walqueue/types/v1"
+	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/vladopajic/go-actor/actor"
@@ -161,11 +161,7 @@ func (q *queue) Appender(ctx context.Context) storage.Appender {
 }
 
 func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, buf []byte) {
-	var err error
-	uncompressedBuf := pool.Get().([]byte)
-	defer pool.Put(uncompressedBuf)
-
-	uncompressedBuf, err = snappy.DecodeInto(uncompressedBuf, buf)
+	uncompressedBuf, err := snappy.Decode(nil, buf)
 	if err != nil {
 		level.Debug(q.logger).Log("msg", "error snappy decoding", "err", err)
 		return

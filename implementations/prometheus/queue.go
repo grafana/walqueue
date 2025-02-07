@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"github.com/grafana/walqueue/stats"
 	"sync"
 	"time"
 

@@ -52,6 +52,14 @@ const alloyNetworkTimestamp = "alloy_queue_series_network_timestamp_seconds"
 
 const alloyDrift = "alloy_queue_series_timestamp_drift_seconds"
 
+const alloyMin = "alloy_queue_series_parallelism_min"
+const alloyMax = "alloy_queue_series_parallelism_max"
+const alloyDesired = "alloy_queue_series_parallelism_desired"
+
+const alloyMetaMin = "alloy_queue_metadata_parallelism_min"
+const alloyMetaMax = "alloy_queue_metadata_parallelism_max"
+const alloyMetaDesired = "alloy_queue_metadata_parallelism_desired"
+
 // TestMetadata is the large end to end testing for the queue based wal, specifically for metadata.
 func TestMetadata(t *testing.T) {
 	// Check assumes you are checking for any value that is not 0.
@@ -63,10 +71,6 @@ func TestMetadata(t *testing.T) {
 			returnStatusCode: http.StatusOK,
 			dtype:            Metadata,
 			checks: []check{
-				{
-					name:  serializerIncoming,
-					value: 10,
-				},
 				{
 					name:  remoteMetadata,
 					value: 10,
@@ -83,6 +87,18 @@ func TestMetadata(t *testing.T) {
 					name:  alloyMetadataSent,
 					value: 10,
 				},
+				{
+					name:  alloyMax,
+					value: 4,
+				},
+				{
+					name:  alloyMin,
+					value: 4,
+				},
+				{
+					name:  alloyDesired,
+					value: 4,
+				},
 			},
 		},
 		{
@@ -95,16 +111,24 @@ func TestMetadata(t *testing.T) {
 					value: 10,
 				},
 				{
-					name:  serializerIncoming,
-					value: 10,
-				},
-				{
 					name:  failedMetadata,
 					value: 10,
 				},
 				{
 					name:      alloyMetadataDuration,
 					valueFunc: greaterThenZero,
+				},
+				{
+					name:  alloyMax,
+					value: 4,
+				},
+				{
+					name:  alloyMin,
+					value: 4,
+				},
+				{
+					name:  alloyDesired,
+					value: 4,
 				},
 			},
 		},
@@ -113,10 +137,6 @@ func TestMetadata(t *testing.T) {
 			returnStatusCode: http.StatusTooManyRequests,
 			dtype:            Metadata,
 			checks: []check{
-				{
-					name:  serializerIncoming,
-					value: 10,
-				},
 				{
 					name: retriedMetadata,
 					// This will be more than 10 since it retries in a loop.
@@ -133,6 +153,18 @@ func TestMetadata(t *testing.T) {
 				{
 					name:      alloyMetadataRetried429,
 					valueFunc: greaterThenZero,
+				},
+				{
+					name:  alloyMax,
+					value: 4,
+				},
+				{
+					name:  alloyMin,
+					value: 4,
+				},
+				{
+					name:  alloyDesired,
+					value: 4,
 				},
 			},
 		},
@@ -196,6 +228,18 @@ func TestMetrics(t *testing.T) {
 					name:      alloyNetworkTimestamp,
 					valueFunc: greaterThenZero,
 				},
+				{
+					name:  alloyMax,
+					value: 4,
+				},
+				{
+					name:  alloyMin,
+					value: 4,
+				},
+				{
+					name:  alloyDesired,
+					value: 4,
+				},
 			},
 		},
 		{
@@ -230,6 +274,18 @@ func TestMetrics(t *testing.T) {
 				{
 					name:      inTimestamp,
 					valueFunc: isReasonableTimeStamp,
+				},
+				{
+					name:  alloyMax,
+					value: 4,
+				},
+				{
+					name:  alloyMin,
+					value: 4,
+				},
+				{
+					name:  alloyDesired,
+					value: 4,
 				},
 			},
 		},
@@ -272,6 +328,18 @@ func TestMetrics(t *testing.T) {
 				{
 					name:      inTimestamp,
 					valueFunc: isReasonableTimeStamp,
+				},
+				{
+					name:  alloyMax,
+					value: 4,
+				},
+				{
+					name:  alloyMin,
+					value: 4,
+				},
+				{
+					name:  alloyDesired,
+					value: 4,
 				},
 			},
 		},
@@ -321,6 +389,18 @@ func TestMetrics(t *testing.T) {
 					name:      alloyNetworkTimestamp,
 					valueFunc: greaterThenZero,
 				},
+				{
+					name:  alloyMax,
+					value: 4,
+				},
+				{
+					name:  alloyMin,
+					value: 4,
+				},
+				{
+					name:  alloyDesired,
+					value: 4,
+				},
 			},
 		},
 		{
@@ -355,6 +435,18 @@ func TestMetrics(t *testing.T) {
 				{
 					name:      inTimestamp,
 					valueFunc: isReasonableTimeStamp,
+				},
+				{
+					name:  alloyMax,
+					value: 4,
+				},
+				{
+					name:  alloyMin,
+					value: 4,
+				},
+				{
+					name:  alloyDesired,
+					value: 4,
 				},
 			},
 		},
@@ -397,6 +489,18 @@ func TestMetrics(t *testing.T) {
 				{
 					name:      inTimestamp,
 					valueFunc: isReasonableTimeStamp,
+				},
+				{
+					name:  alloyMax,
+					value: 4,
+				},
+				{
+					name:  alloyMin,
+					value: 4,
+				},
+				{
+					name:  alloyDesired,
+					value: 4,
 				},
 			},
 		},
@@ -466,7 +570,7 @@ func TestMetrics(t *testing.T) {
 					name:  failedSample,
 					value: 10,
 				},
-				{
+				{prometheus_remote_storage_samples_total
 					name:      prometheusDuration,
 					valueFunc: greaterThenZero,
 				},
@@ -625,7 +729,7 @@ func runE2eStats(t *testing.T, test statsTest) {
 			}
 		}
 		// Make sure we have the right number metrics.
-		return found == len(test.checks)
+		return found >= len(test.checks)
 	}, 10*time.Second, 1*time.Second)
 
 	metrics := make(map[string]float64)

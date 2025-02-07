@@ -45,11 +45,24 @@ func TestSending(t *testing.T) {
 		Timeout:       1 * time.Second,
 		BatchCount:    10,
 		FlushInterval: 1 * time.Second,
-		Connections:   4,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             4,
+			MinConnections:             4,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
-	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	wr, err := New(cc, logger, &fakestats{
+		recoverable:    atomic.NewInt32(0),
+		nonrecoverable: atomic.NewInt32(0),
+	})
 	wr.Start(ctx)
 	defer wr.Stop()
 
@@ -77,12 +90,24 @@ func TestUpdatingConfig(t *testing.T) {
 		Timeout:       1 * time.Second,
 		BatchCount:    10,
 		FlushInterval: 5 * time.Second,
-		Connections:   1,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
-
-	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	wr, err := New(cc, logger, &fakestats{
+		recoverable:    atomic.NewInt32(0),
+		nonrecoverable: atomic.NewInt32(0),
+	})
 	require.NoError(t, err)
 	ctx := context.Background()
 	wr.Start(ctx)
@@ -93,7 +118,15 @@ func TestUpdatingConfig(t *testing.T) {
 		Timeout:       1 * time.Second,
 		BatchCount:    20,
 		FlushInterval: 5 * time.Second,
-		Connections:   1,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	success, err := wr.UpdateConfig(ctx, cc2)
@@ -142,14 +175,26 @@ func TestDrain(t *testing.T) {
 		Timeout:          1 * time.Second,
 		BatchCount:       1,
 		FlushInterval:    5 * time.Second,
-		Connections:      1,
 		MaxRetryAttempts: 100,
 		RetryBackoff:     10 * time.Second,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
-
-	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	wr, err := New(cc, logger, &fakestats{
+		recoverable:    atomic.NewInt32(0),
+		nonrecoverable: atomic.NewInt32(0),
+	})
 	require.NoError(t, err)
 	ctx := context.Background()
 	wr.Start(ctx)
@@ -169,9 +214,17 @@ func TestDrain(t *testing.T) {
 		Timeout:          1 * time.Second,
 		BatchCount:       1,
 		FlushInterval:    5 * time.Second,
-		Connections:      4,
 		MaxRetryAttempts: 100,
 		RetryBackoff:     10 * time.Second,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             4,
+			MinConnections:             4,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 	// Update the config which should NOT lose any data
 	wr.UpdateConfig(ctx, cc2)
@@ -205,11 +258,24 @@ func TestRetry(t *testing.T) {
 		BatchCount:    1,
 		FlushInterval: 1 * time.Second,
 		RetryBackoff:  100 * time.Millisecond,
-		Connections:   1,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
-	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	wr, err := New(cc, logger, &fakestats{
+		recoverable:    atomic.NewInt32(0),
+		nonrecoverable: atomic.NewInt32(0),
+	})
 	require.NoError(t, err)
 	wr.Start(ctx)
 	defer wr.Stop()
@@ -240,11 +306,24 @@ func TestRetryBounded(t *testing.T) {
 		FlushInterval:    1 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		Connections:      1,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
-	wr, err := New(cc, logger, func(s types.NetworkStats) {}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	wr, err := New(cc, logger, &fakestats{
+		recoverable:    atomic.NewInt32(0),
+		nonrecoverable: atomic.NewInt32(0),
+	})
 	wr.Start(ctx)
 	defer wr.Stop()
 	require.NoError(t, err)
@@ -261,7 +340,6 @@ func TestRetryBounded(t *testing.T) {
 }
 
 func TestRecoverable(t *testing.T) {
-	recoverable := atomic.Uint32{}
 	svr := httptest.NewServer(handler(t, http.StatusInternalServerError, func(wr *prompb.WriteRequest) {
 	}))
 	defer svr.Close()
@@ -274,13 +352,25 @@ func TestRecoverable(t *testing.T) {
 		FlushInterval:    10 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		Connections:      10,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             10,
+			MinConnections:             10,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
-	wr, err := New(cc, logger, func(s types.NetworkStats) {
-		recoverable.Add(uint32(s.Total5XX()))
-	}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	fs := &fakestats{
+		recoverable:    atomic.NewInt32(0),
+		nonrecoverable: atomic.NewInt32(0),
+	}
+	wr, err := New(cc, logger, fs)
 	require.NoError(t, err)
 	wr.Start(ctx)
 	defer wr.Stop()
@@ -289,16 +379,15 @@ func TestRecoverable(t *testing.T) {
 	}
 	require.Eventuallyf(t, func() bool {
 		// We send 10 but each one gets retried once so 20 total.
-		return recoverable.Load() == 10*2
-	}, 40*time.Second, 100*time.Millisecond, "recoverable should be 20 but is %d", recoverable.Load())
+		return fs.recoverable.Load() == 10*2
+	}, 40*time.Second, 100*time.Millisecond, "recoverable should be 20 but is %d", fs.recoverable.Load())
 	time.Sleep(2 * time.Second)
 	// Ensure we dont get any more.
-	require.True(t, recoverable.Load() == 10*2)
+	require.True(t, fs.recoverable.Load() == 10*2)
 }
 
 func TestNonRecoverable(t *testing.T) {
 
-	nonRecoverable := atomic.Uint32{}
 	svr := httptest.NewServer(handler(t, http.StatusBadRequest, func(wr *prompb.WriteRequest) {
 	}))
 
@@ -314,13 +403,25 @@ func TestNonRecoverable(t *testing.T) {
 		FlushInterval:    1 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		Connections:      1,
+		Parralelism: types.ParralelismConfig{
+			AllowedDriftSeconds:        60,
+			MaxConnections:             1,
+			MinConnections:             1,
+			ResetInterval:              5 * time.Minute,
+			Lookback:                   5 * time.Minute,
+			CheckInterval:              10 * time.Second,
+			AllowedNetworkErrorPercent: 0.05,
+		},
 	}
 
 	logger := log.NewNopLogger()
-	wr, err := New(cc, logger, func(s types.NetworkStats) {
-		nonRecoverable.Add(uint32(s.TotalFailed()))
-	}, func(s types.NetworkStats) {})
+	drift := types.NewMailbox[uint]()
+	defer drift.Close()
+	fs := &fakestats{
+		recoverable:    atomic.NewInt32(0),
+		nonrecoverable: atomic.NewInt32(0),
+	}
+	wr, err := New(cc, logger, fs)
 	wr.Start(ctx)
 	defer wr.Stop()
 	require.NoError(t, err)
@@ -328,11 +429,11 @@ func TestNonRecoverable(t *testing.T) {
 		send(t, i, wr, ctx)
 	}
 	require.Eventuallyf(t, func() bool {
-		return nonRecoverable.Load() == 10
-	}, 10*time.Second, 100*time.Millisecond, "non recoverable should be 10 but is %d", nonRecoverable.Load())
+		return fs.nonrecoverable.Load() == 10
+	}, 10*time.Second, 100*time.Millisecond, "non recoverable should be 10 but is %d", fs.nonrecoverable.Load())
 	time.Sleep(2 * time.Second)
 	// Ensure we dont get any more.
-	require.True(t, nonRecoverable.Load() == 10)
+	require.True(t, fs.nonrecoverable.Load() == 10)
 }
 
 func send(t *testing.T, i int, wr types.NetworkClient, ctx context.Context) {
@@ -425,4 +526,43 @@ func (m metric) FileFormat() types.FileFormat {
 }
 
 func (m *metric) Free() {
+}
+
+var _ types.StatsHub = (*fakestats)(nil)
+
+type fakestats struct {
+	recoverable    *atomic.Int32
+	nonrecoverable *atomic.Int32
+}
+
+func (fs fakestats) SendParralelismStats(stats types.ParralelismStats) {
+
+}
+
+func (fs fakestats) RegisterParralelism(f func(types.ParralelismStats)) types.NotificationRelease {
+	return func() {
+
+	}
+}
+
+func (fakestats) Start(_ context.Context) {
+}
+func (fakestats) Stop() {
+}
+func (fs *fakestats) SendSeriesNetworkStats(ns types.NetworkStats) {
+	fs.nonrecoverable.Add(int32(ns.TotalFailed()))
+	fs.recoverable.Add(int32(ns.Total5XX()))
+}
+func (fakestats) SendSerializerStats(_ types.SerializerStats) {
+}
+func (fakestats) SendMetadataNetworkStats(_ types.NetworkStats) {
+}
+func (fakestats) RegisterSeriesNetwork(_ func(types.NetworkStats)) (_ types.NotificationRelease) {
+	return func() {}
+}
+func (fakestats) RegisterMetadataNetwork(_ func(types.NetworkStats)) (_ types.NotificationRelease) {
+	return func() {}
+}
+func (fakestats) RegisterSerializer(_ func(types.SerializerStats)) (_ types.NotificationRelease) {
+	return func() {}
 }

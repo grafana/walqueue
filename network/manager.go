@@ -2,62 +2,69 @@ package network
 
 import (
 	"context"
+	"time"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
 	"golang.design/x/chann"
-	"time"
 )
 
 // manager manages writeBuffers. Mostly it exists to control their lifecycle and send work to them.
 type manager struct {
-	writeBuffers     []*writeBuffer[types.MetricDatum]
-	metadata         *writeBuffer[types.MetadataDatum]
-	logger           log.Logger
-	inbox            *types.Mailbox[types.MetricDatum]
-	metaInbox        *types.Mailbox[types.MetadataDatum]
-	configInbox      *types.SyncMailbox[types.ConnectionConfig, bool]
-	cfg              types.ConnectionConfig
-	stats            func(types.NetworkStats)
-	metaStats        func(types.NetworkStats)
-	bufferedMetric   types.MetricDatum
-	bufferedMetadata types.MetadataDatum
-	lastFlushTime    time.Time
+	writeBuffers       []*writeBuffer[types.MetricDatum]
+	metadata           *writeBuffer[types.MetadataDatum]
+	logger             log.Logger
+	inbox              *types.Mailbox[types.MetricDatum]
+	metaInbox          *types.Mailbox[types.MetadataDatum]
+	desiredOutbox      *types.Mailbox[uint]
+	configInbox        *types.SyncMailbox[types.ConnectionConfig, bool]
+	cfg                types.ConnectionConfig
+	statshub           types.StatsHub
+	bufferedMetric     types.MetricDatum
+	bufferedMetadata   types.MetadataDatum
+	lastFlushTime      time.Time
+	desiredParallelism *parallelism
+	desiredConnections uint
 }
 
 var _ types.NetworkClient = (*manager)(nil)
 
-func New(cc types.ConnectionConfig, logger log.Logger, seriesStats, metadataStats func(types.NetworkStats)) (types.NetworkClient, error) {
+func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) (types.NetworkClient, error) {
+	desiredOutbox := types.NewMailbox[uint]()
+	p := newParallelism(cc.Parralelism, desiredOutbox, statshub, logger)
 	s := &manager{
-		writeBuffers: make([]*writeBuffer[types.MetricDatum], 0, cc.Connections),
-		logger:       logger,
-		// This provides blocking to only handle one at a time, so that if a queue blocks
-		// it will stop the filequeue from feeding more. Without passing true the minimum is actually 64 instead of 1.
-		inbox:            types.NewMailbox[types.MetricDatum](chann.Cap(1)),
-		metaInbox:        types.NewMailbox[types.MetadataDatum](chann.Cap(1)),
-		bufferedMetric:   nil,
-		bufferedMetadata: nil,
-		configInbox:      types.NewSyncMailbox[types.ConnectionConfig, bool](),
-		stats:            seriesStats,
-		metaStats:        metadataStats,
-		cfg:              cc,
-		lastFlushTime:    time.Now(),
+		writeBuffers:       make([]*writeBuffer[types.MetricDatum], 0, cc.Parralelism.MinConnections),
+		logger:             logger,
+		inbox:              types.NewMailbox[types.MetricDatum](chann.Cap(1)),
+		metaInbox:          types.NewMailbox[types.MetadataDatum](chann.Cap(1)),
+		bufferedMetric:     nil,
+		bufferedMetadata:   nil,
+		configInbox:        types.NewSyncMailbox[types.ConnectionConfig, bool](),
+		statshub:           statshub,
+		cfg:                cc,
+		lastFlushTime:      time.Now(),
+		desiredOutbox:      desiredOutbox,
+		desiredParallelism: p,
 	}
 
+	s.desiredConnections = s.cfg.Parralelism.MinConnections
+
 	// start kicks off a number of concurrent connections.
-	for i := uint(0); i < s.cfg.Connections; i++ {
-		l := newWriteBuffer[types.MetricDatum](cc, seriesStats, false, logger)
+	for i := uint(0); i < s.desiredConnections; i++ {
+		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, logger)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, metadataStats, true, logger)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, logger)
 	s.metadata = metadata
 	return s, nil
 }
 
 func (s *manager) Start(ctx context.Context) {
 	s.configInbox.Start()
-	go s.Run(ctx)
+	s.desiredParallelism.Run(ctx)
+	s.Run(ctx)
 }
 
 func (s *manager) SendSeries(ctx context.Context, data types.MetricDatum) error {
@@ -81,13 +88,20 @@ const (
 )
 
 func (s *manager) Run(ctx context.Context) {
+	go s.run(ctx)
+}
+
+func (s *manager) run(ctx context.Context) {
+	defer func() {
+		s.desiredParallelism.Stop()
+	}()
 	// This is the primary run loop for the manager since it is no longer an actor.
 	for {
-
 		// CheckConfig is a priority to check the config. If no changes are found will default out
 		// and return ContinueExecution
 		flow := s.checkConfig(ctx)
 		if flow == Exit {
+
 			return
 		}
 		// Flush will check to see if we haven't sent data since the last flush.
@@ -111,7 +125,6 @@ func (s *manager) Run(ctx context.Context) {
 			return
 		}
 	}
-
 }
 
 func (s *manager) checkConfig(ctx context.Context) flowcontrol {
@@ -125,10 +138,21 @@ func (s *manager) checkConfig(ctx context.Context) flowcontrol {
 			return Exit
 		}
 		var err error
-		if err = s.updateConfig(ctx, cfg.Value); err == nil {
+		if err = s.updateConfig(ctx, cfg.Value, s.desiredConnections); err == nil {
 			successful = true
 		}
 		cfg.Notify(successful, err)
+		return ContinueExecution
+	case desired, ok := <-s.desiredOutbox.ReceiveC():
+		// TODO: (@mattdurham) add a stat to record the actual value.
+		if !ok {
+			level.Debug(s.logger).Log("msg", "desired outbox closed")
+			return Exit
+		}
+		err := s.updateConfig(ctx, s.cfg, desired)
+		if err != nil {
+			level.Debug(s.logger).Log("msg", "update config failure", "err", err)
+		}
 		return ContinueExecution
 	default:
 		return ContinueExecution
@@ -210,7 +234,7 @@ func (s *manager) mainWork(ctx context.Context) flowcontrol {
 			return Exit
 		}
 		var err error
-		if err = s.updateConfig(ctx, cfg.Value); err == nil {
+		if err = s.updateConfig(ctx, cfg.Value, s.desiredConnections); err == nil {
 			successful = true
 		}
 		cfg.Notify(successful, err)
@@ -221,11 +245,12 @@ func (s *manager) mainWork(ctx context.Context) flowcontrol {
 	}
 }
 
-func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig) error {
-	// No need to do anything if the configuration is the same.
-	if s.cfg.Equals(cc) {
+func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, desiredConnections uint) error {
+	// No need to do anything if the configuration is the same or if we dont need to update connections.
+	if s.cfg.Equals(cc) && s.desiredConnections == desiredConnections {
 		return nil
 	}
+	s.desiredConnections = desiredConnections
 	s.cfg = cc
 	level.Debug(s.logger).Log("msg", "recreating write buffers due to configuration change.")
 	// Drain then stop the current writeBuffers.
@@ -236,9 +261,9 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig) e
 
 	drainedMeta := s.metadata.Drain()
 
-	s.writeBuffers = make([]*writeBuffer[types.MetricDatum], 0, s.cfg.Connections)
-	for i := uint(0); i < s.cfg.Connections; i++ {
-		l := newWriteBuffer[types.MetricDatum](cc, s.stats, false, s.logger)
+	s.writeBuffers = make([]*writeBuffer[types.MetricDatum], 0, desiredConnections)
+	for i := uint(0); i < desiredConnections; i++ {
+		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, s.logger)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 	// Force adding of metrics, note this may cause the system to go above the batch count.
@@ -246,11 +271,12 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig) e
 		s.forceQueue(ctx, d)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, s.metaStats, true, s.logger)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, s.logger)
 	for _, d := range drainedMeta {
 		s.metadata.ForceAdd(ctx, d)
 	}
 	s.metadata = metadata
+	s.desiredParallelism.UpdateConfig(cc.Parralelism)
 	return nil
 }
 
@@ -261,7 +287,7 @@ func (s *manager) Stop() {
 // queue adds anything thats not metadata to the queue.
 func (s *manager) queue(ctx context.Context, ts types.MetricDatum) bool {
 	// Based on a hash which is the label hash add to the queue.
-	queueNum := ts.Hash() % uint64(s.cfg.Connections)
+	queueNum := ts.Hash() % uint64(s.desiredConnections)
 	// This will block if the queue is full.
 	return s.writeBuffers[queueNum].Add(ctx, ts)
 }
@@ -269,6 +295,6 @@ func (s *manager) queue(ctx context.Context, ts types.MetricDatum) bool {
 // forceQueue forces data to be added ignoring queue limits, this should only be used in cases where we are draining then reapplying.
 func (s *manager) forceQueue(ctx context.Context, ts types.MetricDatum) {
 	// Based on a hash which is the label hash add to the queue.
-	queueNum := ts.Hash() % uint64(s.cfg.Connections)
+	queueNum := ts.Hash() % uint64(s.desiredConnections)
 	s.writeBuffers[queueNum].ForceAdd(ctx, ts)
 }

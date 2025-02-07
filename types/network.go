@@ -49,8 +49,7 @@ type ConnectionConfig struct {
 	// ExternalLabels specifies the external labels to be added to all samples
 	// sent to the Prometheus server.
 	ExternalLabels map[string]string
-	// Connections is the number of concurrent connections to use for sending data.
-	Connections uint
+
 	// TLSCert is the PEM-encoded certificate string for TLS client authentication
 	TLSCert string
 	// TLSKey is the PEM-encoded private key string for TLS client authentication
@@ -61,6 +60,35 @@ type ConnectionConfig struct {
 	InsecureSkipVerify bool
 	// UseRoundRobin
 	UseRoundRobin bool
+	// ParralelismConfig determines how many concurrent connections to have.
+	Parralelism ParralelismConfig
+}
+type ParralelismConfig struct {
+	// AllowedDriftSeconds is the maximum amount of seconds that is allowed for the Newest Timestamp Serializer - Newest Timestamp Sent via Network before the connections scales up.
+	// Using non unix timestamp numbers. If Newest TS In Serializer sees 100s and Newest TS Out Network sees 20s then we have a drift of 80s. If AllowDriftSeconds is 60s that would
+	// trigger a scaling up event.
+	AllowedDriftSeconds int64
+	// MinimumScaleDownDriftSeconds is the amount if we go below that we can scale down. Using the above if In is 100s and Out is 70s and MinimumScaleDownDriftSeconds is 30 then we wont scale
+	// down even though we are below the 60s. This is to keep the number of connections from flapping. In practice we should consider 30s MinimumScaleDownDriftSeconds and 60s AllowedDriftSeconds to be a sweet spot
+	// for general usage.
+	MinimumScaleDownDriftSeconds int64
+	// MaxConnections is the maximum number of concurrent connections to use.
+	MaxConnections uint
+	// MinConnections is the minimum number of concurrent connections to use.
+	MinConnections uint
+	// ResetInterval is how long to keep network successes and errors in memory for calculations.
+	ResetInterval time.Duration
+	// Lookback is how far to lookback for previous desired values. This is to prevent flapping.
+	// In a situation where in the past 5 minutes you have desired [1,2,1,1] and desired is 1 it will
+	// choose 2 since that was the greatest. This determines how fast you can scale down.
+	Lookback time.Duration
+	// CheckInterval is how long to check for desired values.
+	CheckInterval time.Duration
+	// AllowedNetworkErrorPercent is the percentage of failed network requests that are allowable. This will
+	// trigger a decrease in connections if exceeded.
+	AllowedNetworkErrorPercent float64
+}
+type Parralelism struct {
 }
 
 // ToPrometheusConfig converts a ConnectionConfig to a config.HTTPClientConfig

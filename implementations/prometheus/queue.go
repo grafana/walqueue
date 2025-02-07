@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"github.com/grafana/walqueue/stats"
 	"sync"
 	"time"
 
@@ -73,12 +74,14 @@ type queue struct {
 // - Queue: An initialized Queue instance.
 // - error: An error if any of the components fail to initialize.
 func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSignalsToBatch uint32, flushInterval time.Duration, ttl time.Duration, registerer prometheus.Registerer, namespace string, logger log.Logger) (Queue, error) {
+	statshub := stats.NewStats()
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"endpoint": name}, registerer)
-	stats := NewStats(namespace, "queue_series", reg)
-	stats.SeriesBackwardsCompatibility(reg)
-	meta := NewStats("alloy", "queue_metadata", reg)
+	seriesStats := NewStats(namespace, "queue_series", false, reg, statshub)
+	seriesStats.SeriesBackwardsCompatibility(reg)
+	meta := NewStats("alloy", "queue_metadata", true, reg, statshub)
 	meta.MetaBackwardsCompatibility(reg)
-	networkClient, err := network.New(cc, logger, stats.UpdateNetwork, meta.UpdateNetwork)
+
+	networkClient, err := network.New(cc, logger, statshub)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +89,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	ctx, cncl := context.WithCancel(ctx)
 	q := &queue{
 		incoming:       actor.NewMailbox[types.DataHandle](),
-		stats:          stats,
+		stats:          seriesStats,
 		metaStats:      meta,
 		network:        networkClient,
 		logger:         logger,
@@ -108,7 +111,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	serial, err := serialization.NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: maxSignalsToBatch,
 		FlushFrequency:    flushInterval,
-	}, q.queue, stats.UpdateSerializer, logger)
+	}, q.queue, statshub.SendSerializerStats, logger)
 	if err != nil {
 		return nil, err
 	}

@@ -4,7 +4,28 @@ import (
 	"time"
 )
 
-// TODO @mattdurham separate this into more manageable chunks, and likely 3 stats series: series, metadata and new ones.
+// StatsHub allows types to register to receive stats and to also send stats to fanout to receivers.
+type StatsHub interface {
+	SendSeriesNetworkStats(NetworkStats)
+	SendSerializerStats(SerializerStats)
+	SendMetadataNetworkStats(NetworkStats)
+	SendParralelismStats(stats ParralelismStats)
+
+	// The register functions are used to tell statshub to send stats for a specific types of data.
+	// This calls should be thread safe and not block, since each one is called in turn.
+	RegisterSeriesNetwork(func(NetworkStats)) NotificationRelease
+	RegisterMetadataNetwork(func(NetworkStats)) NotificationRelease
+	RegisterSerializer(func(SerializerStats)) NotificationRelease
+	RegisterParralelism(func(ParralelismStats)) NotificationRelease
+}
+
+type NotificationRelease func()
+
+type ParralelismStats struct {
+	MinConnections     uint
+	MaxConnections     uint
+	DesiredConnections uint
+}
 
 type SerializerStats struct {
 	SeriesStored           int

@@ -65,8 +65,12 @@ func (l *write) trySend(buf []byte, ctx context.Context) {
 			level.Debug(l.log).Log("msg", "max retry attempts reached", "attempts", attempts)
 			return
 		}
-		// Sleep between attempts.
-		time.Sleep(result.retryAfter)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(result.retryAfter):
+			continue
+		}
 	}
 }
 

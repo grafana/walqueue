@@ -34,13 +34,13 @@ var _ types.NetworkClient = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) (types.NetworkClient, error) {
 	desiredOutbox := types.NewMailbox[uint]()
-	goPool, err := ants.NewPool(int(cc.Parralelism.MaxConnections))
+	goPool, err := ants.NewPool(int(cc.Parallelism.MaxConnections))
 	if err != nil {
 		return nil, err
 	}
-	p := newParallelism(cc.Parralelism, desiredOutbox, statshub, logger)
+	p := newParallelism(cc.Parallelism, desiredOutbox, statshub, logger)
 	s := &manager{
-		writeBuffers:       make([]*writeBuffer[types.MetricDatum], 0, cc.Parralelism.MinConnections),
+		writeBuffers:       make([]*writeBuffer[types.MetricDatum], 0, cc.Parallelism.MinConnections),
 		logger:             logger,
 		inbox:              types.NewMailbox[types.MetricDatum](chann.Cap(1)),
 		metaInbox:          types.NewMailbox[types.MetadataDatum](chann.Cap(1)),
@@ -55,7 +55,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) 
 		routinePool:        goPool,
 	}
 
-	s.desiredConnections = s.cfg.Parralelism.MinConnections
+	s.desiredConnections = s.cfg.Parallelism.MinConnections
 
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.desiredConnections; i++ {
@@ -258,8 +258,8 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 		return nil
 	}
 	s.desiredConnections = desiredConnections
-	if cc.Parralelism.MaxConnections != s.cfg.Parralelism.MaxConnections {
-		s.routinePool.Tune(int(cc.Parralelism.MaxConnections))
+	if cc.Parallelism.MaxConnections != s.cfg.Parallelism.MaxConnections {
+		s.routinePool.Tune(int(cc.Parallelism.MaxConnections))
 	}
 	s.cfg = cc
 	level.Debug(s.logger).Log("msg", "recreating write buffers due to configuration change.")
@@ -286,7 +286,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 		s.metadata.ForceAdd(ctx, d)
 	}
 	s.metadata = metadata
-	s.desiredParallelism.UpdateConfig(cc.Parralelism)
+	s.desiredParallelism.UpdateConfig(cc.Parallelism)
 	return nil
 }
 

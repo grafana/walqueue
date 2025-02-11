@@ -343,14 +343,14 @@ func newComponent(t *testing.T, l log.Logger, url string, reg prometheus.Registe
 		MaxRetryAttempts: 1,
 		BatchCount:       5,
 		FlushInterval:    100 * time.Millisecond,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
-			MaxConnections:             4,
-			MinConnections:             4,
-			ResetInterval:              5 * time.Minute,
-			Lookback:                   5 * time.Minute,
-			CheckInterval:              10 * time.Second,
-			AllowedNetworkErrorPercent: 0.05,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:                60 * time.Second,
+			MaxConnections:              4,
+			MinConnections:              4,
+			ResetInterval:               5 * time.Minute,
+			Lookback:                    5 * time.Minute,
+			CheckInterval:               10 * time.Second,
+			AllowedNetworkErrorFraction: 0.05,
 		},
 	}, t.TempDir(), 10, 1*time.Second, 1*time.Hour, reg, "alloy", l)
 

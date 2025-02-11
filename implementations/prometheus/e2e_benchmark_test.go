@@ -101,14 +101,14 @@ func newComponentBenchmark(t *testing.B, l log.Logger, url string) (Queue, error
 		MaxRetryAttempts: 1,
 		BatchCount:       2000,
 		FlushInterval:    1 * time.Second,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
-			MaxConnections:             20,
-			MinConnections:             20,
-			ResetInterval:              5 * time.Minute,
-			Lookback:                   5 * time.Minute,
-			CheckInterval:              10 * time.Second,
-			AllowedNetworkErrorPercent: 0.05,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:                60 * time.Second,
+			MaxConnections:              20,
+			MinConnections:              20,
+			ResetInterval:               5 * time.Minute,
+			Lookback:                    5 * time.Minute,
+			CheckInterval:               10 * time.Second,
+			AllowedNetworkErrorFraction: 0.05,
 		},
 	}, t.TempDir(), 10_000, 1*time.Second, 1*time.Hour, prometheus.NewRegistry(), "alloy", l)
 }

@@ -14,7 +14,7 @@ import (
 type parallelism struct {
 	// mut covers all items here
 	mut      sync.RWMutex
-	cfg      types.ParralelismConfig
+	cfg      types.ParallelismConfig
 	statshub types.StatsHub
 	ctx      context.Context
 	// networkErrors is any 4xx,5xx.
@@ -41,7 +41,7 @@ type previousDesired struct {
 	recorded time.Time
 }
 
-func newParallelism(cfg types.ParralelismConfig, out *types.Mailbox[uint], statshub types.StatsHub, l log.Logger) *parallelism {
+func newParallelism(cfg types.ParallelismConfig, out *types.Mailbox[uint], statshub types.StatsHub, l log.Logger) *parallelism {
 	p := &parallelism{
 		cfg:            cfg,
 		statshub:       statshub,
@@ -126,7 +126,7 @@ func (p *parallelism) run(ctx context.Context) {
 	}
 }
 
-func (p *parallelism) UpdateConfig(cfg types.ParralelismConfig) {
+func (p *parallelism) UpdateConfig(cfg types.ParallelismConfig) {
 	p.mut.Lock()
 	defer p.mut.Unlock()
 	p.cfg = cfg
@@ -175,7 +175,7 @@ func (p *parallelism) desiredLoop() {
 	p.networkSuccesses = keepSuccesses
 	errorRate := p.networkErrorRate()
 	// If we have network errors then ramp down the number of loops.
-	if p.cfg.AllowedNetworkErrorPercent != 0.0 && errorRate >= p.cfg.AllowedNetworkErrorPercent {
+	if p.cfg.AllowedNetworkErrorFraction != 0.0 && errorRate >= p.cfg.AllowedNetworkErrorFraction {
 		// Need to keep the value between min and max.
 		if p.currentDesired-1 >= p.cfg.MinConnections {
 			level.Debug(p.l).Log("msg", "triggering lower desired due to network errors", "desired", p.currentDesired-1)
@@ -184,7 +184,7 @@ func (p *parallelism) desiredLoop() {
 		return
 	}
 	// If we are drifting too much then ramp up the number of loops.
-	if p.timestampDriftSeconds > p.cfg.AllowedDriftSeconds {
+	if float64(p.timestampDriftSeconds) > p.cfg.AllowedDrift.Seconds() {
 		// Need to keep the value between min and max.
 		if p.currentDesired+1 <= p.cfg.MaxConnections {
 			level.Debug(p.l).Log("msg", "increasing desired due to timestamp drift", "desired", p.currentDesired+1, "drift", p.timestampDriftSeconds)
@@ -194,7 +194,7 @@ func (p *parallelism) desiredLoop() {
 	}
 
 	// Can we ramp down, if we have dropped below our minimum scale down.
-	if p.timestampDriftSeconds < p.cfg.MinimumScaleDownDriftSeconds {
+	if float64(p.timestampDriftSeconds) < p.cfg.MinimumScaleDownDrift.Seconds() {
 		// Need to keep the value between min and max.
 		if p.currentDesired-1 >= p.cfg.MinConnections {
 			level.Debug(p.l).Log("msg", "decreasing desired due to drift lowering", "desired", p.currentDesired-1, "drift", p.timestampDriftSeconds)

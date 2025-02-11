@@ -175,7 +175,7 @@ func (p *parallelism) desiredLoop() {
 	p.networkSuccesses = keepSuccesses
 	errorRate := p.networkErrorRate()
 	// If we have network errors then ramp down the number of loops.
-	if p.cfg.AllowedNetworkErrorPercent != 0.0 && errorRate >= p.cfg.AllowedNetworkErrorPercent {
+	if p.cfg.AllowedNetworkErrorFraction != 0.0 && errorRate >= p.cfg.AllowedNetworkErrorFraction {
 		// Need to keep the value between min and max.
 		if p.currentDesired-1 >= p.cfg.MinConnections {
 			level.Debug(p.l).Log("msg", "triggering lower desired due to network errors", "desired", p.currentDesired-1)

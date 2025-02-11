@@ -84,9 +84,9 @@ type ParallelismConfig struct {
 	Lookback time.Duration
 	// CheckInterval is how long to check for desired values.
 	CheckInterval time.Duration
-	// AllowedNetworkErrorPercent is the percentage of failed network requests that are allowable. This will
+	// AllowedNetworkErrorFraction is the fraction of failed network requests that are allowable. This will
 	// trigger a decrease in connections if exceeded.
-	AllowedNetworkErrorPercent float64
+	AllowedNetworkErrorFraction float64
 }
 
 // ToPrometheusConfig converts a ConnectionConfig to a config.HTTPClientConfig

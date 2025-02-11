@@ -30,7 +30,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 	type test struct {
 		name   string
 		stages []stage
-		cfg    types.ParralelismConfig
+		cfg    types.ParallelismConfig
 	}
 
 	tests := []test{
@@ -44,7 +44,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		},
 		{
 			name: "increase",
-			cfg: types.ParralelismConfig{
+			cfg: types.ParallelismConfig{
 				MaxConnections: 2,
 			},
 			stages: []stage{
@@ -56,10 +56,10 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		},
 		{
 			name: "decrease with minimum",
-			cfg: types.ParralelismConfig{
-				MaxConnections:               2,
-				AllowedDriftSeconds:          10,
-				MinimumScaleDownDriftSeconds: 5,
+			cfg: types.ParallelismConfig{
+				MaxConnections:        2,
+				AllowedDrift:          10 * time.Second,
+				MinimumScaleDownDrift: 5 * time.Second,
 			},
 			stages: []stage{
 				{
@@ -75,12 +75,12 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		},
 		{
 			name: "network hard down",
-			cfg: types.ParralelismConfig{
-				MaxConnections:               2,
-				AllowedDriftSeconds:          10,
-				MinimumScaleDownDriftSeconds: 5,
-				AllowedNetworkErrorPercent:   0.89,
-				ResetInterval:                5 * time.Second,
+			cfg: types.ParallelismConfig{
+				MaxConnections:             2,
+				AllowedDrift:               10 * time.Second,
+				MinimumScaleDownDrift:      5 * time.Second,
+				AllowedNetworkErrorPercent: 0.89,
+				ResetInterval:              5 * time.Second,
 			},
 			stages: []stage{
 				{
@@ -99,11 +99,11 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		},
 		{
 			name: "network not hard down",
-			cfg: types.ParralelismConfig{
-				MaxConnections:               2,
-				AllowedDriftSeconds:          10,
-				MinimumScaleDownDriftSeconds: 5,
-				AllowedNetworkErrorPercent:   0.90,
+			cfg: types.ParallelismConfig{
+				MaxConnections:             2,
+				AllowedDrift:               10 * time.Second,
+				MinimumScaleDownDrift:      5 * time.Second,
+				AllowedNetworkErrorPercent: 0.90,
 			},
 			stages: []stage{
 				{
@@ -122,12 +122,12 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		},
 		{
 			name: "network was down but errors fall off",
-			cfg: types.ParralelismConfig{
-				MaxConnections:               2,
-				AllowedDriftSeconds:          10,
-				MinimumScaleDownDriftSeconds: 5,
-				AllowedNetworkErrorPercent:   0.89,
-				ResetInterval:                1 * time.Second,
+			cfg: types.ParallelismConfig{
+				MaxConnections:             2,
+				AllowedDrift:               10 * time.Second,
+				MinimumScaleDownDrift:      5 * time.Second,
+				AllowedNetworkErrorPercent: 0.89,
+				ResetInterval:              1 * time.Second,
 			},
 			stages: []stage{
 				{
@@ -155,13 +155,13 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		},
 		{
 			name: "lookback",
-			cfg: types.ParralelismConfig{
-				MaxConnections:               2,
-				AllowedDriftSeconds:          10,
-				MinimumScaleDownDriftSeconds: 5,
-				AllowedNetworkErrorPercent:   0.89,
-				ResetInterval:                1 * time.Second,
-				Lookback:                     5 * time.Second,
+			cfg: types.ParallelismConfig{
+				MaxConnections:             2,
+				AllowedDrift:               10 * time.Second,
+				MinimumScaleDownDrift:      5 * time.Second,
+				AllowedNetworkErrorPercent: 0.89,
+				ResetInterval:              1 * time.Second,
+				Lookback:                   5 * time.Second,
 			},
 			stages: []stage{
 				{
@@ -179,13 +179,13 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		},
 		{
 			name: "lookback interval",
-			cfg: types.ParralelismConfig{
-				MaxConnections:               2,
-				AllowedDriftSeconds:          10,
-				MinimumScaleDownDriftSeconds: 5,
-				AllowedNetworkErrorPercent:   0.89,
-				ResetInterval:                1 * time.Second,
-				Lookback:                     5 * time.Second,
+			cfg: types.ParallelismConfig{
+				MaxConnections:             2,
+				AllowedDrift:               10 * time.Second,
+				MinimumScaleDownDrift:      5 * time.Second,
+				AllowedNetworkErrorPercent: 0.89,
+				ResetInterval:              1 * time.Second,
+				Lookback:                   5 * time.Second,
 			},
 			stages: []stage{
 				{
@@ -216,15 +216,15 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			out := types.NewMailbox[uint]()
 			ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cncl()
-			cfg := types.ParralelismConfig{
-				AllowedDriftSeconds:          max(tc.cfg.AllowedDriftSeconds, 1),
-				MaxConnections:               max(tc.cfg.MaxConnections, 1),
-				MinConnections:               max(tc.cfg.MinConnections, 1),
-				ResetInterval:                min(tc.cfg.ResetInterval, 1*time.Minute),
-				Lookback:                     max(tc.cfg.Lookback, 0),
-				CheckInterval:                100 * time.Millisecond,
-				AllowedNetworkErrorPercent:   max(tc.cfg.AllowedNetworkErrorPercent, 0),
-				MinimumScaleDownDriftSeconds: max(tc.cfg.MinimumScaleDownDriftSeconds, 1),
+			cfg := types.ParallelismConfig{
+				AllowedDrift:               max(tc.cfg.AllowedDrift, 1*time.Second),
+				MaxConnections:             max(tc.cfg.MaxConnections, 1),
+				MinConnections:             max(tc.cfg.MinConnections, 1),
+				ResetInterval:              min(tc.cfg.ResetInterval, 1*time.Minute),
+				Lookback:                   max(tc.cfg.Lookback, 0),
+				CheckInterval:              100 * time.Millisecond,
+				AllowedNetworkErrorPercent: max(tc.cfg.AllowedNetworkErrorPercent, 0),
+				MinimumScaleDownDrift:      max(tc.cfg.MinimumScaleDownDrift, 1*time.Second),
 			}
 
 			fs := &parStats{}

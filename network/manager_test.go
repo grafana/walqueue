@@ -45,8 +45,8 @@ func TestSending(t *testing.T) {
 		Timeout:       1 * time.Second,
 		BatchCount:    10,
 		FlushInterval: 1 * time.Second,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:               60 * time.Second,
 			MaxConnections:             4,
 			MinConnections:             4,
 			ResetInterval:              5 * time.Minute,
@@ -90,8 +90,8 @@ func TestUpdatingConfig(t *testing.T) {
 		Timeout:       1 * time.Second,
 		BatchCount:    10,
 		FlushInterval: 5 * time.Second,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:               60 * time.Second,
 			MaxConnections:             1,
 			MinConnections:             1,
 			ResetInterval:              5 * time.Minute,
@@ -118,8 +118,8 @@ func TestUpdatingConfig(t *testing.T) {
 		Timeout:       1 * time.Second,
 		BatchCount:    20,
 		FlushInterval: 5 * time.Second,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:               60 * time.Second,
 			MaxConnections:             1,
 			MinConnections:             1,
 			ResetInterval:              5 * time.Minute,
@@ -177,8 +177,8 @@ func TestDrain(t *testing.T) {
 		FlushInterval:    5 * time.Second,
 		MaxRetryAttempts: 100,
 		RetryBackoff:     10 * time.Second,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:               60 * time.Second,
 			MaxConnections:             1,
 			MinConnections:             1,
 			ResetInterval:              5 * time.Minute,
@@ -216,8 +216,8 @@ func TestDrain(t *testing.T) {
 		FlushInterval:    5 * time.Second,
 		MaxRetryAttempts: 100,
 		RetryBackoff:     10 * time.Second,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:               60 * time.Second,
 			MaxConnections:             4,
 			MinConnections:             4,
 			ResetInterval:              5 * time.Minute,
@@ -258,8 +258,8 @@ func TestRetry(t *testing.T) {
 		BatchCount:    1,
 		FlushInterval: 1 * time.Second,
 		RetryBackoff:  100 * time.Millisecond,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:               60 * time.Second,
 			MaxConnections:             1,
 			MinConnections:             1,
 			ResetInterval:              5 * time.Minute,
@@ -306,8 +306,8 @@ func TestRetryBounded(t *testing.T) {
 		FlushInterval:    1 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:               60 * time.Second,
 			MaxConnections:             1,
 			MinConnections:             1,
 			ResetInterval:              5 * time.Minute,
@@ -352,8 +352,8 @@ func TestRecoverable(t *testing.T) {
 		FlushInterval:    10 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:               60 * time.Second,
 			MaxConnections:             10,
 			MinConnections:             10,
 			ResetInterval:              5 * time.Minute,
@@ -403,8 +403,8 @@ func TestNonRecoverable(t *testing.T) {
 		FlushInterval:    1 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		Parralelism: types.ParralelismConfig{
-			AllowedDriftSeconds:        60,
+		Parallelism: types.ParallelismConfig{
+			AllowedDrift:               60 * time.Second,
 			MaxConnections:             1,
 			MinConnections:             1,
 			ResetInterval:              5 * time.Minute,

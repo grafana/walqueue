@@ -84,8 +84,8 @@ func TestQueue_Appender(t *testing.T) {
 					FlushInterval:    1 * time.Second,
 					RetryBackoff:     100 * time.Millisecond,
 					MaxRetryAttempts: 1,
-					Parralelism: types.ParralelismConfig{
-						AllowedDriftSeconds:        60,
+					Parallelism: types.ParallelismConfig{
+						AllowedDrift:               60 * time.Second,
 						MaxConnections:             1,
 						MinConnections:             1,
 						ResetInterval:              5 * time.Minute,

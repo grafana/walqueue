@@ -104,9 +104,6 @@ func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult
 	ctx, cncl := context.WithTimeout(ctx, l.cfg.Timeout)
 	defer cncl()
 	resp, err := l.client.Do(httpReq.WithContext(ctx))
-	if resp != nil && resp.Body != nil {
-		defer resp.Body.Close()
-	}
 	// Network errors are recoverable.
 	if err != nil {
 		result.err = err
@@ -115,6 +112,8 @@ func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult
 		result.retryAfter = l.cfg.RetryBackoff
 		return result
 	}
+	defer resp.Body.Close()
+
 	result.statusCode = resp.StatusCode
 	// 500 errors are considered recoverable.
 	if resp.StatusCode/100 == 5 || resp.StatusCode == http.StatusTooManyRequests {

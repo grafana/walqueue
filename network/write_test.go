@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"github.com/panjf2000/ants/v2"
 	"io"
 	"math/big"
 	"net"
@@ -122,7 +123,8 @@ func TestTLSConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := log.NewNopLogger()
-			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {})
+			client := &http.Client{}
+			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {}, client)
 			if tt.wantErr {
 				require.Error(t, newErr)
 				require.Nil(t, l, "newWrite should return nil for invalid TLS config")
@@ -182,9 +184,10 @@ func TestTLSConfigValidation(t *testing.T) {
 		},
 	}
 
+	client := &http.Client{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {})
+			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {}, client)
 			if tt.wantLoop {
 				require.NoError(t, newErr)
 				require.NotNil(t, l, "newWrite should return a valid loop")
@@ -260,4 +263,20 @@ func generateTestCertificates(t *testing.T) (caCert, caKey, serverCert, serverKe
 	serverKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: serverPrivateBytes})
 
 	return caCertPEM, caKeyPEM, serverCertPEM, serverKeyPEM
+}
+
+func TestAnts(t *testing.T) {
+	pool, _ := ants.NewPool(1)
+	err := pool.Submit(func() {
+		time.Sleep(10 * time.Second)
+		println("done")
+	})
+	println("submitted")
+	require.NoError(t, err)
+	err = pool.Submit(func() {
+		time.Sleep(10 * time.Second)
+		println("done")
+	})
+	pool.Release()
+	require.NoError(t, err)
 }

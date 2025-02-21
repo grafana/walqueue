@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -24,9 +25,10 @@ type writeBuffer[T types.Datum] struct {
 	stats           func(stats types.NetworkStats)
 	isMeta          bool
 	routinePool     *ants.Pool
+	client          *http.Client
 }
 
-func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger, pool *ants.Pool) *writeBuffer[T] {
+func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger, pool *ants.Pool, client *http.Client) *writeBuffer[T] {
 	return &writeBuffer[T]{
 		items:           make([]T, 0),
 		writeInProgress: atomic.NewBool(false),
@@ -35,6 +37,7 @@ func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networ
 		isMeta:          isMeta,
 		log:             l,
 		routinePool:     pool,
+		client:          client,
 	}
 }
 
@@ -84,6 +87,7 @@ func (w *writeBuffer[T]) Send(ctx context.Context) {
 		sendingItems := w.getItems()
 		// About to kick off a write request so the write is no longer available.
 		w.writeInProgress.Store(true)
+		// This will block until a worker frees up.
 		w.routinePool.Submit(func() {
 			defer w.writeInProgress.Store(false)
 			s := newSignalsInfo[T](sendingItems)
@@ -104,7 +108,7 @@ func (w *writeBuffer[T]) send(bb []byte, s signalsInfo, ctx context.Context) {
 	stats := func(r sendResult) {
 		recordStats(s.seriesCount, s.histogramCount, s.metadataCount, s.newestTS, w.isMeta, w.stats, r, len(bb))
 	}
-	l, nlErr := newWrite(w.cfg, w.log, stats)
+	l, nlErr := newWrite(w.cfg, w.log, stats, w.client)
 	if nlErr != nil {
 		level.Error(w.log).Log("msg", "error creating write", "err", nlErr)
 		return

@@ -20,11 +20,14 @@ func TestFileQueue(t *testing.T) {
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
 	require.NoError(t, err)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	defer q.Stop()
 	err = q.Store(context.Background(), nil, []byte("test"))
 
@@ -51,10 +54,14 @@ func TestMetaFileQueue(t *testing.T) {
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
+
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
 	err = q.Store(context.Background(), map[string]string{"name": "bob"}, []byte("test"))
@@ -73,10 +80,14 @@ func TestCorruption(t *testing.T) {
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
+
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
 
@@ -114,10 +125,14 @@ func TestFileDeleted(t *testing.T) {
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
+
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
 
@@ -158,11 +173,14 @@ func TestOtherFiles(t *testing.T) {
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
 
@@ -180,10 +198,14 @@ func TestResuming(t *testing.T) {
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
+	defer mbx.Close()
+
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	require.NoError(t, err)
 
 	err = q.Store(context.Background(), nil, []byte("first"))
@@ -197,12 +219,14 @@ func TestResuming(t *testing.T) {
 	q.Stop()
 
 	mbx2 := types.NewMailbox[types.DataHandle]()
+	defer mbx2.Close()
 
 	q2, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx2.Send(ctx, dh)
 	}, log)
 	require.NoError(t, err)
-	q2.Start()
+
+	q2.Start(ctx)
 	defer q2.Stop()
 	err = q2.Store(context.Background(), nil, []byte("third"))
 

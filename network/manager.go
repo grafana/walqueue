@@ -291,7 +291,6 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 }
 
 func (s *manager) Stop() {
-	s.configInbox.Stop()
 	s.routinePool.Release()
 }
 

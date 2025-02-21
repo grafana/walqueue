@@ -74,7 +74,7 @@ func runBenchmark(t *testing.B, add func(b *testing.B, appendable storage.Append
 	require.NoError(t, err)
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
-	c.Start()
+	c.Start(ctx)
 	defer c.Stop()
 
 	app := c.Appender(ctx)

@@ -152,7 +152,7 @@ func runTest(t *testing.T, add func(index int, appendable storage.Appender) (flo
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
-	c.Start()
+	c.Start(ctx)
 	defer c.Stop()
 
 	index := atomic.NewInt64(0)

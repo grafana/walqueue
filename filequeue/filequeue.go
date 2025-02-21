@@ -75,10 +75,22 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 }
 
 func (q *queue) Start(ctx context.Context) {
+	// Queue up our existing items.
+	for _, name := range q.files {
+		q.out(ctx, types.DataHandle{
+			Name: name,
+			Pop: func() (map[string]string, []byte, error) {
+				return get(q.logger, name)
+			},
+		})
+	}
+	// We only want to process existing files once.
+	q.files = nil
 	go q.run(ctx)
 }
 
 func (q *queue) Stop() {
+	q.dataQueue.Close()
 }
 
 // Store will add records to the dataQueue that will add the data to the filesystem. This is an unbuffered channel.
@@ -107,17 +119,7 @@ func get(logger log.Logger, name string) (map[string]string, []byte, error) {
 
 // DoWork allows most of the queue to be single threaded with work only coming in and going out via mailboxes(channels).
 func (q *queue) run(ctx context.Context) {
-	// Queue up our existing items, we cant do this earlier since the actor isnt started.
-	for _, name := range q.files {
-		q.out(ctx, types.DataHandle{
-			Name: name,
-			Pop: func() (map[string]string, []byte, error) {
-				return get(q.logger, name)
-			},
-		})
-	}
-	// We only want to process existing files once.
-	q.files = nil
+
 	for {
 		select {
 		case <-ctx.Done():

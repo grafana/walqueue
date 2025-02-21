@@ -19,9 +19,6 @@ func NewSyncMailbox[T, R any](opt ...chann.Opt) *SyncMailbox[T, R] {
 func (sm *SyncMailbox[T, R]) Start() {
 }
 
-func (sm *SyncMailbox[T, R]) Stop() {
-}
-
 func (sm *SyncMailbox[T, R]) ReceiveC() <-chan *Callback[T, R] {
 	return sm.mbx.ReceiveC()
 }

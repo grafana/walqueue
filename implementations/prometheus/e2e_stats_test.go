@@ -685,7 +685,7 @@ func runE2eStats(t *testing.T, test statsTest) {
 	require.NoError(t, err)
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
-	c.Start()
+	c.Start(ctx)
 	defer c.Stop()
 
 	index := 0

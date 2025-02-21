@@ -117,7 +117,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 
 func (q *queue) Start(ctx context.Context) {
 	q.network.Start(q.ctx)
-	q.queue.Start()
+	q.queue.Start(ctx)
 	q.serializer.Start(q.ctx)
 	go q.run(ctx)
 }
@@ -127,9 +127,9 @@ func (q *queue) Stop() {
 	q.queue.Stop()
 	q.serializer.Stop()
 	q.cncl()
-
 	q.stats.Unregister()
 	q.metaStats.Unregister()
+	q.incoming.Close()
 }
 
 func (q *queue) run(ctx context.Context) {

@@ -103,11 +103,12 @@ func TestQueue_Appender(t *testing.T) {
 				logger,
 			)
 			require.NoError(t, err)
-			q.Start()
+			ctx, cncl := context.WithCancel(context.Background())
+			defer cncl()
+			q.Start(ctx)
 			defer q.Stop()
 
 			defer svr.Close()
-			ctx := context.Background()
 			app := q.Appender(ctx)
 			tt.testFunc(t, ctx, app)
 			require.Eventually(t, func() bool {
@@ -124,7 +125,9 @@ func TestStats(t *testing.T) {
 	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
 	require.NoError(t, err)
 	// This will unregister the metrics
-	end.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	end.Start(ctx)
 	// This sleep is to give the goroutines time to spin up.
 	time.Sleep(1 * time.Second)
 	end.Stop()
@@ -135,7 +138,7 @@ func TestStats(t *testing.T) {
 	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
 	require.NoError(t, err)
 
-	end2.Start()
+	end2.Start(ctx)
 	// This sleep is to give the goroutines time to spin up.
 	time.Sleep(1 * time.Second)
 	end2.Stop()

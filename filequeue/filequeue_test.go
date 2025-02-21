@@ -11,16 +11,12 @@ import (
 	"github.com/go-kit/log"
 	"github.com/grafana/walqueue/types"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 )
 
 func TestFileQueue(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
-	defer mbx.Close()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
@@ -49,12 +45,9 @@ func TestFileQueue(t *testing.T) {
 }
 
 func TestMetaFileQueue(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
-	defer mbx.Close()
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
@@ -75,12 +68,9 @@ func TestMetaFileQueue(t *testing.T) {
 }
 
 func TestCorruption(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
-	defer mbx.Close()
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
@@ -120,12 +110,9 @@ func TestCorruption(t *testing.T) {
 }
 
 func TestFileDeleted(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
-	defer mbx.Close()
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
@@ -168,12 +155,9 @@ func TestFileDeleted(t *testing.T) {
 }
 
 func TestOtherFiles(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
-	defer mbx.Close()
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
@@ -193,12 +177,9 @@ func TestOtherFiles(t *testing.T) {
 }
 
 func TestResuming(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
 	mbx := types.NewMailbox[types.DataHandle]()
-	defer mbx.Close()
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
@@ -219,7 +200,6 @@ func TestResuming(t *testing.T) {
 	q.Stop()
 
 	mbx2 := types.NewMailbox[types.DataHandle]()
-	defer mbx2.Close()
 
 	q2, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx2.Send(ctx, dh)

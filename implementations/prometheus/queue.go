@@ -122,7 +122,6 @@ func (q *queue) Stop() {
 	q.serializer.Stop()
 	q.stats.Unregister()
 	q.metaStats.Unregister()
-	q.incoming.Close()
 }
 
 func (q *queue) run(ctx context.Context) {

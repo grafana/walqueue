@@ -90,7 +90,6 @@ func (q *queue) Start(ctx context.Context) {
 }
 
 func (q *queue) Stop() {
-	q.dataQueue.Close()
 }
 
 // Store will add records to the dataQueue that will add the data to the filesystem. This is an unbuffered channel.

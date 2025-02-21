@@ -34,7 +34,7 @@ var _ types.NetworkClient = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) (types.NetworkClient, error) {
 	desiredOutbox := types.NewMailbox[uint]()
-	goPool, err := ants.NewPool(int(cc.Parallelism.MaxConnections))
+	goPool, err := ants.NewPool(int(cc.Parallelism.MaxConnections), ants.WithMaxBlockingTasks(int(cc.Parallelism.MaxConnections)))
 	if err != nil {
 		return nil, err
 	}

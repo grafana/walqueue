@@ -2,27 +2,24 @@ package types
 
 import (
 	gocontext "context"
-
-	"github.com/vladopajic/go-actor/actor"
+	"golang.design/x/chann"
 )
 
 // SyncMailbox is used to synchronously send data, and wait for it to process before returning.
 type SyncMailbox[T, R any] struct {
-	mbx actor.Mailbox[*Callback[T, R]]
+	mbx *Mailbox[*Callback[T, R]]
 }
 
-func NewSyncMailbox[T, R any](opts ...actor.MailboxOption) *SyncMailbox[T, R] {
+func NewSyncMailbox[T, R any](opt ...chann.Opt) *SyncMailbox[T, R] {
 	return &SyncMailbox[T, R]{
-		mbx: actor.NewMailbox[*Callback[T, R]](opts...),
+		mbx: NewMailbox[*Callback[T, R]](opt...),
 	}
 }
 
 func (sm *SyncMailbox[T, R]) Start() {
-	sm.mbx.Start()
 }
 
 func (sm *SyncMailbox[T, R]) Stop() {
-	sm.mbx.Stop()
 }
 
 func (sm *SyncMailbox[T, R]) ReceiveC() <-chan *Callback[T, R] {

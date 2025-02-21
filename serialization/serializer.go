@@ -12,13 +12,11 @@ import (
 	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/vladopajic/go-actor/actor"
 	"go.uber.org/atomic"
 )
 
 // serializer collects data from multiple appenders in-memory and will periodically flush the data to file.Storage.
 // serializer will flush based on configured time duration OR if it hits a certain number of items.
-// Because of how it interacts with an appender this is not an actor so all calls need to be wrapped with a mutex.
 type serializer struct {
 	mut                 sync.Mutex
 	ser                 types.PrometheusMarshaller
@@ -134,7 +132,7 @@ func (s *serializer) UpdateConfig(_ context.Context, cfg types.SerializerConfig)
 	return true, nil
 }
 
-func (s *serializer) flushToDisk(ctx actor.Context) error {
+func (s *serializer) flushToDisk(ctx context.Context) error {
 	var err error
 	defer func() {
 		s.lastFlush = time.Now()

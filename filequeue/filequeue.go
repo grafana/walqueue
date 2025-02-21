@@ -12,20 +12,17 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
-	"github.com/vladopajic/go-actor/actor"
 )
 
-var _ actor.Worker = (*queue)(nil)
 var _ types.FileStorage = (*queue)(nil)
 
 // queue represents an on-disk queue. This is a list implemented as files ordered by id with a name pattern: <id>.committed
 // Each file contains a byte buffer and an optional metatdata map.
 type queue struct {
-	self      actor.Actor
 	directory string
 	maxID     int
 	logger    log.Logger
-	dataQueue actor.Mailbox[types.Data]
+	dataQueue *types.Mailbox[types.Data]
 	// Out is where to send data when pulled from queue, it is assumed that it will
 	// block until ready for another record.
 	out func(ctx context.Context, dh types.DataHandle)
@@ -65,7 +62,7 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 		maxID:     currentMaxID,
 		logger:    logger,
 		out:       out,
-		dataQueue: actor.NewMailbox[types.Data](),
+		dataQueue: types.NewMailbox[types.Data](),
 		files:     make([]string, 0),
 	}
 
@@ -77,15 +74,11 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 	return q, nil
 }
 
-func (q *queue) Start() {
-	q.self = actor.New(q)
-	q.self.Start()
-	q.dataQueue.Start()
+func (q *queue) Start(ctx context.Context) {
+	go q.run(ctx)
 }
 
 func (q *queue) Stop() {
-	q.self.Stop()
-	q.dataQueue.Stop()
 }
 
 // Store will add records to the dataQueue that will add the data to the filesystem. This is an unbuffered channel.
@@ -113,7 +106,7 @@ func get(logger log.Logger, name string) (map[string]string, []byte, error) {
 }
 
 // DoWork allows most of the queue to be single threaded with work only coming in and going out via mailboxes(channels).
-func (q *queue) DoWork(ctx actor.Context) actor.WorkerStatus {
+func (q *queue) run(ctx context.Context) {
 	// Queue up our existing items, we cant do this earlier since the actor isnt started.
 	for _, name := range q.files {
 		q.out(ctx, types.DataHandle{
@@ -125,26 +118,27 @@ func (q *queue) DoWork(ctx actor.Context) actor.WorkerStatus {
 	}
 	// We only want to process existing files once.
 	q.files = nil
-	select {
-	case <-ctx.Done():
-		return actor.WorkerEnd
-	case item, ok := <-q.dataQueue.ReceiveC():
-		if !ok {
-			return actor.WorkerEnd
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case item, ok := <-q.dataQueue.ReceiveC():
+			if !ok {
+				return
+			}
+			name, err := q.add(item.Meta, item.Data)
+			if err != nil {
+				level.Error(q.logger).Log("msg", "error adding item - dropping data", "err", err)
+				continue
+			}
+			// The idea is that this will callee will block/process until the callee is ready for another file.
+			q.out(ctx, types.DataHandle{
+				Name: name,
+				Pop: func() (map[string]string, []byte, error) {
+					return get(q.logger, name)
+				},
+			})
 		}
-		name, err := q.add(item.Meta, item.Data)
-		if err != nil {
-			level.Error(q.logger).Log("msg", "error adding item - dropping data", "err", err)
-			return actor.WorkerContinue
-		}
-		// The idea is that this will callee will block/process until the callee is ready for another file.
-		q.out(ctx, types.DataHandle{
-			Name: name,
-			Pop: func() (map[string]string, []byte, error) {
-				return get(q.logger, name)
-			},
-		})
-		return actor.WorkerContinue
 	}
 }
 

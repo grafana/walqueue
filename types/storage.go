@@ -5,7 +5,7 @@ import (
 )
 
 type FileStorage interface {
-	Start()
+	Start(ctx context.Context)
 	Stop()
 	Store(ctx context.Context, meta map[string]string, value []byte) error
 }

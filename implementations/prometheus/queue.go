@@ -2,8 +2,6 @@ package prometheus
 
 import (
 	"context"
-	"github.com/grafana/walqueue/stats"
-	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -12,15 +10,14 @@ import (
 	"github.com/grafana/walqueue/filequeue"
 	"github.com/grafana/walqueue/network"
 	"github.com/grafana/walqueue/serialization"
+	"github.com/grafana/walqueue/stats"
 	"github.com/grafana/walqueue/types"
 	v1 "github.com/grafana/walqueue/types/v1"
 	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/vladopajic/go-actor/actor"
 )
 
-var pool = sync.Pool{New: func() interface{} { return make([]byte, 0) }}
 var _ storage.Appendable = (*queue)(nil)
 var _ Queue = (*queue)(nil)
 
@@ -32,7 +29,7 @@ var _ Queue = (*queue)(nil)
 //
 // Appender returns an Appender that writes to the queue.
 type Queue interface {
-	Start()
+	Start(ctx context.Context)
 	Stop()
 	Appender(ctx context.Context) storage.Appender
 }
@@ -43,9 +40,8 @@ type queue struct {
 	queue          types.FileStorage
 	logger         log.Logger
 	serializer     types.PrometheusSerializer
-	self           actor.Actor
 	ttl            time.Duration
-	incoming       actor.Mailbox[types.DataHandle]
+	incoming       *types.Mailbox[types.DataHandle]
 	stats          *PrometheusStats
 	metaStats      *PrometheusStats
 	externalLabels map[string]string
@@ -88,7 +84,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	ctx := context.Background()
 	ctx, cncl := context.WithCancel(ctx)
 	q := &queue{
-		incoming:       actor.NewMailbox[types.DataHandle](),
+		incoming:       types.NewMailbox[types.DataHandle](),
 		stats:          seriesStats,
 		metaStats:      meta,
 		network:        networkClient,
@@ -119,18 +115,14 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	return q, nil
 }
 
-func (q *queue) Start() {
-	q.self = actor.New(q)
-	q.self.Start()
-	q.incoming.Start()
+func (q *queue) Start(ctx context.Context) {
 	q.network.Start(q.ctx)
 	q.queue.Start()
 	q.serializer.Start(q.ctx)
+	go q.run(ctx)
 }
 
 func (q *queue) Stop() {
-	q.self.Stop()
-	q.incoming.Stop()
 	q.network.Stop()
 	q.queue.Stop()
 	q.serializer.Stop()
@@ -140,21 +132,22 @@ func (q *queue) Stop() {
 	q.metaStats.Unregister()
 }
 
-func (q *queue) DoWork(ctx actor.Context) actor.WorkerStatus {
-	select {
-	case <-ctx.Done():
-		return actor.WorkerEnd
-	case file, ok := <-q.incoming.ReceiveC():
-		if !ok {
-			return actor.WorkerEnd
+func (q *queue) run(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case file, ok := <-q.incoming.ReceiveC():
+			if !ok {
+				return
+			}
+			meta, buf, err := file.Pop()
+			if err != nil {
+				level.Error(q.logger).Log("msg", "unable to get file contents", "name", file.Name, "err", err)
+				continue
+			}
+			q.deserializeAndSend(ctx, meta, buf)
 		}
-		meta, buf, err := file.Pop()
-		if err != nil {
-			level.Error(q.logger).Log("msg", "unable to get file contents", "name", file.Name, "err", err)
-			return actor.WorkerContinue
-		}
-		q.deserializeAndSend(ctx, meta, buf)
-		return actor.WorkerContinue
 	}
 }
 

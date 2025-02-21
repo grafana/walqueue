@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"github.com/panjf2000/ants/v2"
+	"github.com/prometheus/common/config"
 	"io"
 	"math/big"
 	"net"
@@ -123,8 +124,11 @@ func TestTLSConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := log.NewNopLogger()
-			client := &http.Client{}
-			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {}, client)
+			var httpOpts []config.HTTPClientOption
+			cfg := tt.tlsConfig.ToPrometheusConfig()
+			httpClient, err := config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
+			require.NoError(t, err)
+			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {}, httpClient)
 			if tt.wantErr {
 				require.Error(t, newErr)
 				require.Nil(t, l, "newWrite should return nil for invalid TLS config")
@@ -184,10 +188,13 @@ func TestTLSConfigValidation(t *testing.T) {
 		},
 	}
 
-	client := &http.Client{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {}, client)
+			var httpOpts []config.HTTPClientOption
+			cfg := tt.tlsConfig.ToPrometheusConfig()
+			httpClient, err := config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
+			require.NoError(t, err)
+			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {}, httpClient)
 			if tt.wantLoop {
 				require.NoError(t, newErr)
 				require.NotNil(t, l, "newWrite should return a valid loop")

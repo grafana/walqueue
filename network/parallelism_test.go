@@ -45,11 +45,11 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		{
 			name: "increase",
 			cfg: types.ParallelismConfig{
-				MaxConnections: 2,
+				MaxConnections: 4,
 			},
 			stages: []stage{
 				{
-					desired:           2,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 			},
@@ -57,18 +57,18 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		{
 			name: "decrease with minimum",
 			cfg: types.ParallelismConfig{
-				MaxConnections:        2,
+				MaxConnections:        4,
 				AllowedDrift:          10 * time.Second,
 				MinimumScaleDownDrift: 5 * time.Second,
 			},
 			stages: []stage{
 				{
-					desired:           2,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
 					// This small timestamp should trigger a lower value.
-					desired:           1,
+					desired:           2,
 					increaseTimeStamp: 1,
 				},
 			},
@@ -76,7 +76,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		{
 			name: "network hard down",
 			cfg: types.ParallelismConfig{
-				MaxConnections:              2,
+				MaxConnections:              4,
 				AllowedDrift:                10 * time.Second,
 				MinimumScaleDownDrift:       5 * time.Second,
 				AllowedNetworkErrorFraction: 0.89,
@@ -85,14 +85,14 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// This will bump it up.
-					desired:           2,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
 					// Everything will fail, even though the timestamp is legit.
 					// We fail .90 and our threshold is 0.89.
 					failurePercentile: 90,
-					desired:           1,
+					desired:           2,
 					increaseTimeStamp: 100,
 				},
 			},
@@ -100,7 +100,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		{
 			name: "network not hard down",
 			cfg: types.ParallelismConfig{
-				MaxConnections:              2,
+				MaxConnections:              4,
 				AllowedDrift:                10 * time.Second,
 				MinimumScaleDownDrift:       5 * time.Second,
 				AllowedNetworkErrorFraction: 0.90,
@@ -108,14 +108,13 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// This will bump it up.
-					desired:           2,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
-
-					// Just barely above the threshhold to not trigger.
+					// Just barely above the threshhold to not trigger the decrease but increase will trigger.
 					failurePercentile: 89,
-					noChange:          true,
+					desired:           4,
 					increaseTimeStamp: 100,
 				},
 			},
@@ -123,7 +122,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		{
 			name: "network was down but errors fall off",
 			cfg: types.ParallelismConfig{
-				MaxConnections:              2,
+				MaxConnections:              4,
 				AllowedDrift:                10 * time.Second,
 				MinimumScaleDownDrift:       5 * time.Second,
 				AllowedNetworkErrorFraction: 0.89,
@@ -132,14 +131,14 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// This will bump it up.
-					desired:           2,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
 					// Everything will fail, even though the timestamp is legit.
 					// We fail .90 and our threshold is 0.89.
 					failurePercentile: 90,
-					desired:           1,
+					desired:           2,
 					increaseTimeStamp: 100,
 				},
 				{
@@ -148,7 +147,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 				},
 				{
 					// Lets get back to normal.
-					desired:           2,
+					desired:           1,
 					increaseTimeStamp: 100,
 				},
 			},
@@ -156,7 +155,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		{
 			name: "lookback",
 			cfg: types.ParallelismConfig{
-				MaxConnections:              2,
+				MaxConnections:              4,
 				AllowedDrift:                10 * time.Second,
 				MinimumScaleDownDrift:       5 * time.Second,
 				AllowedNetworkErrorFraction: 0.89,
@@ -166,7 +165,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// This will bump it up.
-					desired:           2,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
@@ -180,7 +179,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 		{
 			name: "lookback interval",
 			cfg: types.ParallelismConfig{
-				MaxConnections:              2,
+				MaxConnections:              4,
 				AllowedDrift:                10 * time.Second,
 				MinimumScaleDownDrift:       5 * time.Second,
 				AllowedNetworkErrorFraction: 0.89,
@@ -190,7 +189,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// This will bump it up.
-					desired:           2,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
@@ -205,7 +204,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 				},
 				{
 					// Now that all the lookbacks are removed we can scale down again.
-					desired:           1,
+					desired:           2,
 					increaseTimeStamp: 1,
 				},
 			},

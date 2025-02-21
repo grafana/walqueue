@@ -55,7 +55,8 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) 
 		routinePool:        goPool,
 	}
 
-	s.desiredConnections = s.cfg.Parallelism.MinConnections
+	// Set the initial default as the middle point between min and max.
+	s.desiredConnections = (s.cfg.Parallelism.MinConnections + s.cfg.Parallelism.MaxConnections) / 2
 
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.desiredConnections; i++ {
@@ -291,7 +292,6 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 }
 
 func (s *manager) Stop() {
-	s.configInbox.Stop()
 	s.routinePool.Release()
 }
 

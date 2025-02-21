@@ -11,8 +11,6 @@ type StatsHub interface {
 	SendMetadataNetworkStats(NetworkStats)
 	SendParralelismStats(stats ParralelismStats)
 
-	// The register functions are used to tell statshub to send stats for a specific types of data.
-	// This calls should be thread safe and not block, since each one is called in turn.
 	RegisterSeriesNetwork(func(NetworkStats)) NotificationRelease
 	RegisterMetadataNetwork(func(NetworkStats)) NotificationRelease
 	RegisterSerializer(func(SerializerStats)) NotificationRelease

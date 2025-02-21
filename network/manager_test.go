@@ -57,8 +57,6 @@ func TestSending(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	drift := types.NewMailbox[uint]()
-	defer drift.Close()
 	wr, err := New(cc, logger, &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
@@ -102,8 +100,6 @@ func TestUpdatingConfig(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	drift := types.NewMailbox[uint]()
-	defer drift.Close()
 	wr, err := New(cc, logger, &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
@@ -189,8 +185,6 @@ func TestDrain(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	drift := types.NewMailbox[uint]()
-	defer drift.Close()
 	wr, err := New(cc, logger, &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
@@ -270,8 +264,6 @@ func TestRetry(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	drift := types.NewMailbox[uint]()
-	defer drift.Close()
 	wr, err := New(cc, logger, &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
@@ -318,8 +310,6 @@ func TestRetryBounded(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	drift := types.NewMailbox[uint]()
-	defer drift.Close()
 	wr, err := New(cc, logger, &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
@@ -364,8 +354,6 @@ func TestRecoverable(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	drift := types.NewMailbox[uint]()
-	defer drift.Close()
 	fs := &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
@@ -415,8 +403,6 @@ func TestNonRecoverable(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	drift := types.NewMailbox[uint]()
-	defer drift.Close()
 	fs := &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),

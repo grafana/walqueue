@@ -5,7 +5,6 @@ package serialization
 import (
 	"context"
 	"fmt"
-	v2 "github.com/grafana/walqueue/types/v2"
 	"math/rand"
 	"sync/atomic"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
+	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
@@ -85,7 +85,7 @@ type fqq struct {
 	total atomic.Int64
 }
 
-func (f *fqq) Start() {
+func (f *fqq) Start(_ context.Context) {
 
 }
 
@@ -93,7 +93,7 @@ func (f *fqq) Stop() {
 
 }
 
-func (f *fqq) Store(ctx context.Context, meta map[string]string, value []byte) error {
+func (f *fqq) Store(_ context.Context, meta map[string]string, value []byte) error {
 	f.buf, _ = snappy.Decode(nil, value)
 	sg := v2.NewFormat()
 	items, err := sg.Unmarshal(meta, f.buf)

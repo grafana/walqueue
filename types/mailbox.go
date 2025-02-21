@@ -29,7 +29,3 @@ func (m *Mailbox[T]) Send(ctx context.Context, v T) error {
 		return nil
 	}
 }
-
-func (m *Mailbox[T]) Close() {
-	m.ch.Close()
-}

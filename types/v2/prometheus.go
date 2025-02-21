@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Copied from prometheus.
+// Package v2 Copied from prometheus.
 package v2
 
 import (

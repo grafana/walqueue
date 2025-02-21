@@ -52,7 +52,7 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 	}()
 	// Need to find any similar labels, if there is overlap.
 	totalLabels := len(lbls)
-	for k, _ := range externalLabels {
+	for k := range externalLabels {
 		if !lbls.Has(k) {
 			totalLabels += 1
 		}

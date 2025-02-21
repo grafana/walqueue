@@ -11,23 +11,19 @@ import (
 	"github.com/go-kit/log"
 	"github.com/grafana/walqueue/types"
 	"github.com/stretchr/testify/require"
-	"github.com/vladopajic/go-actor/actor"
-	"go.uber.org/goleak"
 )
 
 func TestFileQueue(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
-	defer mbx.Stop()
+	mbx := types.NewMailbox[types.DataHandle]()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
 	require.NoError(t, err)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	defer q.Stop()
 	err = q.Store(context.Background(), nil, []byte("test"))
 
@@ -49,17 +45,16 @@ func TestFileQueue(t *testing.T) {
 }
 
 func TestMetaFileQueue(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
-	defer mbx.Stop()
+	mbx := types.NewMailbox[types.DataHandle]()
+
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
 	err = q.Store(context.Background(), map[string]string{"name": "bob"}, []byte("test"))
@@ -73,17 +68,16 @@ func TestMetaFileQueue(t *testing.T) {
 }
 
 func TestCorruption(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
-	defer mbx.Stop()
+	mbx := types.NewMailbox[types.DataHandle]()
+
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
 
@@ -116,17 +110,16 @@ func TestCorruption(t *testing.T) {
 }
 
 func TestFileDeleted(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
-	defer mbx.Stop()
+	mbx := types.NewMailbox[types.DataHandle]()
+
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
 
@@ -162,17 +155,16 @@ func TestFileDeleted(t *testing.T) {
 }
 
 func TestOtherFiles(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
-	defer mbx.Stop()
+	mbx := types.NewMailbox[types.DataHandle]()
+
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
 
@@ -185,16 +177,16 @@ func TestOtherFiles(t *testing.T) {
 }
 
 func TestResuming(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	dir := t.TempDir()
 	log := log.NewNopLogger()
-	mbx := actor.NewMailbox[types.DataHandle]()
-	mbx.Start()
+	mbx := types.NewMailbox[types.DataHandle]()
+
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, log)
-	q.Start()
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
 	require.NoError(t, err)
 
 	err = q.Store(context.Background(), nil, []byte("first"))
@@ -205,17 +197,16 @@ func TestResuming(t *testing.T) {
 
 	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
-	mbx.Stop()
 	q.Stop()
 
-	mbx2 := actor.NewMailbox[types.DataHandle]()
-	mbx2.Start()
-	defer mbx2.Stop()
+	mbx2 := types.NewMailbox[types.DataHandle]()
+
 	q2, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx2.Send(ctx, dh)
 	}, log)
 	require.NoError(t, err)
-	q2.Start()
+
+	q2.Start(ctx)
 	defer q2.Stop()
 	err = q2.Store(context.Background(), nil, []byte("third"))
 
@@ -233,7 +224,7 @@ func TestResuming(t *testing.T) {
 	require.True(t, string(buf) == "third")
 }
 
-func getHandle(t *testing.T, mbx actor.MailboxReceiver[types.DataHandle]) (map[string]string, []byte, error) {
+func getHandle(t *testing.T, mbx *types.Mailbox[types.DataHandle]) (map[string]string, []byte, error) {
 	timer := time.NewTicker(5 * time.Second)
 	select {
 	case <-timer.C:

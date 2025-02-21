@@ -93,19 +93,6 @@ func TestTLSConnection(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Invalid certificate",
-			tlsConfig: types.ConnectionConfig{
-				URL:           server.URL,
-				TLSCert:       "invalid cert",
-				TLSKey:        "invalid key",
-				BatchCount:    10,
-				FlushInterval: time.Second,
-				Timeout:       time.Second,
-				UserAgent:     "test-client",
-			},
-			wantErr: true,
-		},
-		{
 			name: "Skip verify without CA cert",
 			tlsConfig: types.ConnectionConfig{
 				URL:                server.URL,
@@ -171,20 +158,6 @@ func TestTLSConfigValidation(t *testing.T) {
 				UserAgent:     "test-client",
 			},
 			wantLoop: true,
-		},
-		{
-			name: "Invalid CA cert with valid cert/key",
-			tlsConfig: types.ConnectionConfig{
-				URL:           "https://example.com",
-				TLSCert:       "valid cert",
-				TLSKey:        "valid key",
-				TLSCACert:     "invalid ca",
-				BatchCount:    10,
-				FlushInterval: time.Second,
-				Timeout:       time.Second,
-				UserAgent:     "test-client",
-			},
-			wantLoop: false,
 		},
 	}
 

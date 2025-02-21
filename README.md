@@ -42,15 +42,13 @@ The underlying storage format can and will change. New releases will support pre
 
 ## Major Parts
 
-### actors
+### actor like
 
-Underlying each of these major parts is a work loop in the form of the func `DoWork` or `Run`, each part is single threaded and only exposes a handful of functions for sending and receiving data. Telemetry, configuration and other types of data are passed in via the work loop and handled one at a time. There are some allowances for setting atomic variables for specific scenarios.
+Underlying each of these major parts is a work loop in the form of the func `run`, each part is single threaded and only exposes a handful of functions for sending and receiving data. Telemetry, configuration and other types of data are passed in via the work loop and handled one at a time. There are some allowances for setting atomic variables for specific scenarios.
 
 This means that the parts are inherently context free and single threaded which greatly simplifies the design. Communication is handled via [mailboxes] that are backed by channels underneath. By default these are asynchronous calls to an unbounded queue. Where that differs will be noted. 
 
-Using actors, mailboxes and messages creates a system that responds to actions instead of polling or calling functions from other threads. This allows us to handle bounded queues easily for if the network is slow or down the `network` queue is bounded and will block on anyone trying to send more work.
-
-The actual actor framework is never publicly exposed so that callers have no idea of what is running underneath.
+Using mailboxes and messages creates a system that responds to actions instead of polling or calling functions from other threads. This allows us to handle bounded queues easily for if the network is slow or down the `network` queue is bounded and will block on anyone trying to send more work.
 
 In general each actor exposes one to many `Send` function(s), `Start` and `Stop`. 
 

@@ -117,7 +117,7 @@ func get(logger log.Logger, name string) (map[string]string, []byte, error) {
 	return r.Meta, r.Data, nil
 }
 
-// DoWork allows most of the queue to be single threaded with work only coming in and going out via mailboxes(channels).
+// run allows most of the queue to be single threaded with work only coming in and going out via mailboxes(channels).
 func (q *queue) run(ctx context.Context) {
 
 	for {

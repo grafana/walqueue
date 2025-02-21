@@ -49,7 +49,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			},
 			stages: []stage{
 				{
-					desired:           4,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 			},
@@ -63,12 +63,12 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			},
 			stages: []stage{
 				{
-					desired:           4,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
 					// This small timestamp should trigger a lower value.
-					desired:           3,
+					desired:           2,
 					increaseTimeStamp: 1,
 				},
 			},
@@ -85,14 +85,14 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// This will bump it up.
-					desired:           4,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
 					// Everything will fail, even though the timestamp is legit.
 					// We fail .90 and our threshold is 0.89.
 					failurePercentile: 90,
-					desired:           3,
+					desired:           2,
 					increaseTimeStamp: 100,
 				},
 			},
@@ -108,14 +108,13 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// This will bump it up.
-					desired:           4,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
-
-					// Just barely above the threshhold to not trigger.
+					// Just barely above the threshhold to not trigger the decrease but increase will trigger.
 					failurePercentile: 89,
-					noChange:          true,
+					desired:           4,
 					increaseTimeStamp: 100,
 				},
 			},
@@ -132,14 +131,14 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// This will bump it up.
-					desired:           4,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
 					// Everything will fail, even though the timestamp is legit.
 					// We fail .90 and our threshold is 0.89.
 					failurePercentile: 90,
-					desired:           3,
+					desired:           2,
 					increaseTimeStamp: 100,
 				},
 				{
@@ -148,7 +147,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 				},
 				{
 					// Lets get back to normal.
-					desired:           2,
+					desired:           1,
 					increaseTimeStamp: 100,
 				},
 			},
@@ -166,7 +165,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// This will bump it up.
-					desired:           4,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
@@ -190,7 +189,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// This will bump it up.
-					desired:           4,
+					desired:           3,
 					increaseTimeStamp: 100,
 				},
 				{
@@ -205,7 +204,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 				},
 				{
 					// Now that all the lookbacks are removed we can scale down again.
-					desired:           3,
+					desired:           2,
 					increaseTimeStamp: 1,
 				},
 			},

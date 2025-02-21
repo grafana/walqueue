@@ -45,7 +45,7 @@ func newParallelism(cfg types.ParallelismConfig, out *types.Mailbox[uint], stats
 	p := &parallelism{
 		cfg:            cfg,
 		statshub:       statshub,
-		currentDesired: cfg.MinConnections + cfg.MaxConnections/2,
+		currentDesired: (cfg.MinConnections + cfg.MaxConnections) / 2,
 		out:            out,
 		stop:           make(chan struct{}),
 		l:              l,

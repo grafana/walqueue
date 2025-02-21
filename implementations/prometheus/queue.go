@@ -45,8 +45,6 @@ type queue struct {
 	stats          *Stats
 	metaStats      *Stats
 	externalLabels map[string]string
-	ctx            context.Context
-	cncl           context.CancelFunc
 }
 
 // NewQueue creates and returns a new Queue instance, initializing its components
@@ -81,8 +79,6 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	if err != nil {
 		return nil, err
 	}
-	ctx := context.Background()
-	ctx, cncl := context.WithCancel(ctx)
 	q := &queue{
 		incoming:       types.NewMailbox[types.DataHandle](),
 		stats:          seriesStats,
@@ -91,8 +87,6 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		logger:         logger,
 		ttl:            ttl,
 		externalLabels: cc.ExternalLabels,
-		ctx:            ctx,
-		cncl:           cncl,
 	}
 	fq, err := filequeue.NewQueue(directory, func(ctx context.Context, dh types.DataHandle) {
 		sendErr := q.incoming.Send(ctx, dh)
@@ -116,9 +110,9 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 }
 
 func (q *queue) Start(ctx context.Context) {
-	q.network.Start(q.ctx)
+	q.network.Start(ctx)
 	q.queue.Start(ctx)
-	q.serializer.Start(q.ctx)
+	q.serializer.Start(ctx)
 	go q.run(ctx)
 }
 
@@ -126,7 +120,6 @@ func (q *queue) Stop() {
 	q.network.Stop()
 	q.queue.Stop()
 	q.serializer.Stop()
-	q.cncl()
 	q.stats.Unregister()
 	q.metaStats.Unregister()
 	q.incoming.Close()

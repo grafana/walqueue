@@ -7,7 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type PrometheusStats struct {
+type Stats struct {
 	serializerIn       atomic.Int64
 	networkOut         atomic.Int64
 	register           prometheus.Registerer
@@ -15,12 +15,12 @@ type PrometheusStats struct {
 	isMeta             bool
 	serialRelease      types.NotificationRelease
 	networkRelease     types.NotificationRelease
-	parralelismRelease types.NotificationRelease
+	parallelismRelease types.NotificationRelease
 
-	// Parralelism
-	ParallelismMin      prometheus.Gauge
-	ParallelismMax      prometheus.Gauge
-	ParrallelismDesired prometheus.Gauge
+	// Parallelism
+	ParallelismMin     prometheus.Gauge
+	ParallelismMax     prometheus.Gauge
+	ParallelismDesired prometheus.Gauge
 
 	// Network Stats
 	NetworkSeriesSent                prometheus.Counter
@@ -65,8 +65,8 @@ type PrometheusStats struct {
 	RemoteStorageDuration     prometheus.Histogram
 }
 
-func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Registerer, sh types.StatsHub) *PrometheusStats {
-	s := &PrometheusStats{
+func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Registerer, sh types.StatsHub) *Stats {
+	s := &Stats{
 		stats:    sh,
 		register: registry,
 		isMeta:   isMeta,
@@ -80,7 +80,7 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			Subsystem: subsystem,
 			Name:      "parallelism_min",
 		}),
-		ParrallelismDesired: prometheus.NewGauge(prometheus.GaugeOpts{
+		ParallelismDesired: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "parallelism_desired",
@@ -215,7 +215,7 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		s.networkRelease = s.stats.RegisterSeriesNetwork(s.UpdateNetwork)
 	}
 	s.serialRelease = s.stats.RegisterSerializer(s.UpdateSerializer)
-	s.parralelismRelease = s.stats.RegisterParralelism(s.UpdateParralelism)
+	s.parallelismRelease = s.stats.RegisterParralelism(s.UpdateParralelism)
 	registry.MustRegister(
 		s.NetworkSentDuration,
 		s.NetworkRetries5XX,
@@ -236,12 +236,12 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		registry.MustRegister(
 			s.ParallelismMax,
 			s.ParallelismMin,
-			s.ParrallelismDesired)
+			s.ParallelismDesired)
 	}
 	return s
 }
 
-func (s *PrometheusStats) Unregister() {
+func (s *Stats) Unregister() {
 	unregistered := []prometheus.Collector{
 		s.RemoteStorageDuration,
 		s.RemoteStorageInTimestamp,
@@ -273,7 +273,7 @@ func (s *PrometheusStats) Unregister() {
 	}
 	// Meta only has one connection so we dont need these for that.
 	if !s.isMeta {
-		unregistered = append(unregistered, s.ParallelismMin, s.ParallelismMax, s.ParrallelismDesired)
+		unregistered = append(unregistered, s.ParallelismMin, s.ParallelismMax, s.ParallelismDesired)
 	}
 
 	for _, g := range unregistered {
@@ -281,10 +281,10 @@ func (s *PrometheusStats) Unregister() {
 	}
 	s.networkRelease()
 	s.serialRelease()
-	s.parralelismRelease()
+	s.parallelismRelease()
 }
 
-func (s *PrometheusStats) SeriesBackwardsCompatibility(registry prometheus.Registerer) {
+func (s *Stats) SeriesBackwardsCompatibility(registry prometheus.Registerer) {
 	registry.MustRegister(
 		s.RemoteStorageDuration,
 		s.RemoteStorageInTimestamp,
@@ -299,7 +299,7 @@ func (s *PrometheusStats) SeriesBackwardsCompatibility(registry prometheus.Regis
 	)
 }
 
-func (s *PrometheusStats) MetaBackwardsCompatibility(registry prometheus.Registerer) {
+func (s *Stats) MetaBackwardsCompatibility(registry prometheus.Registerer) {
 	registry.MustRegister(
 		s.MetadataTotal,
 		s.FailedMetadataTotal,
@@ -308,7 +308,7 @@ func (s *PrometheusStats) MetaBackwardsCompatibility(registry prometheus.Registe
 	)
 }
 
-func (s *PrometheusStats) UpdateNetwork(stats types.NetworkStats) {
+func (s *Stats) UpdateNetwork(stats types.NetworkStats) {
 	s.NetworkSeriesSent.Add(float64(stats.TotalSent()))
 	s.NetworkRetries.Add(float64(stats.TotalRetried()))
 	s.NetworkFailures.Add(float64(stats.TotalFailed()))
@@ -340,7 +340,7 @@ func (s *PrometheusStats) UpdateNetwork(stats types.NetworkStats) {
 	s.SentBytesTotal.Add(float64(stats.SeriesBytes))
 }
 
-func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
+func (s *Stats) UpdateSerializer(stats types.SerializerStats) {
 	// TODO add metadata support
 	if s.isMeta {
 		return
@@ -355,13 +355,13 @@ func (s *PrometheusStats) UpdateSerializer(stats types.SerializerStats) {
 	}
 }
 
-func (s *PrometheusStats) UpdateParralelism(stats types.ParralelismStats) {
+func (s *Stats) UpdateParralelism(stats types.ParralelismStats) {
 	s.ParallelismMax.Set(float64(stats.MaxConnections))
 	s.ParallelismMin.Set(float64(stats.MinConnections))
-	s.ParrallelismDesired.Set(float64(stats.DesiredConnections))
+	s.ParallelismDesired.Set(float64(stats.DesiredConnections))
 }
 
-func (s *PrometheusStats) updateDrift() {
+func (s *Stats) updateDrift() {
 	// We always want to ensure that we have real values, else there is a window where this can be
 	// timestamp - 0 which gives a result in the years.
 	serializerIn := s.serializerIn.Load()

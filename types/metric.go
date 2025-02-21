@@ -19,7 +19,7 @@ type Datum interface {
 	Bytes() []byte
 	Type() Type
 	FileFormat() FileFormat
-	// Free: datums are often pooled and this should be called when the datum is no longer needed.
+	// Free  datums are often pooled and this should be called when the datum is no longer needed.
 	Free()
 }
 

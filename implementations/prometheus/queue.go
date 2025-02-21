@@ -42,8 +42,8 @@ type queue struct {
 	serializer     types.PrometheusSerializer
 	ttl            time.Duration
 	incoming       *types.Mailbox[types.DataHandle]
-	stats          *PrometheusStats
-	metaStats      *PrometheusStats
+	stats          *Stats
+	metaStats      *Stats
 	externalLabels map[string]string
 	ctx            context.Context
 	cncl           context.CancelFunc

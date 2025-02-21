@@ -132,7 +132,7 @@ func (q *queue) run(ctx context.Context) {
 				level.Error(q.logger).Log("msg", "error adding item - dropping data", "err", err)
 				continue
 			}
-			// The idea is that this will callee will block/process until the callee is ready for another file.
+			// The idea is that this callee will block/process until the callee is ready for another file.
 			q.out(ctx, types.DataHandle{
 				Name: name,
 				Pop: func() (map[string]string, []byte, error) {

@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"github.com/prometheus/common/config"
+	"net/http"
 	"time"
 
 	"github.com/go-kit/log"
@@ -59,14 +60,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) 
 	// Set the initial default as the middle point between min and max.
 	s.desiredConnections = (s.cfg.Parallelism.MinConnections + s.cfg.Parallelism.MaxConnections) / 2
 
-	var httpOpts []config.HTTPClientOption
-	if cc.UseRoundRobin {
-		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}
-	}
-
-	cfg := cc.ToPrometheusConfig()
-	httpClient, err := config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
-
+	httpClient, err := s.createClient(cc)
 	if err != nil {
 		return nil, err
 	}
@@ -284,14 +278,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 
 	drainedMeta := s.metadata.Drain()
 
-	var httpOpts []config.HTTPClientOption
-	if cc.UseRoundRobin {
-		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}
-	}
-
-	cfg := cc.ToPrometheusConfig()
-	httpClient, err := config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
-
+	httpClient, err := s.createClient(cc)
 	if err != nil {
 		return err
 	}
@@ -331,4 +318,14 @@ func (s *manager) forceQueue(ctx context.Context, ts types.MetricDatum) {
 	// Based on a hash which is the label hash add to the queue.
 	queueNum := ts.Hash() % uint64(s.desiredConnections)
 	s.writeBuffers[queueNum].ForceAdd(ctx, ts)
+}
+
+func (s *manager) createClient(cc types.ConnectionConfig) (*http.Client, error) {
+	var httpOpts []config.HTTPClientOption
+	if cc.UseRoundRobin {
+		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}
+	}
+
+	cfg := cc.ToPrometheusConfig()
+	return config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
 }

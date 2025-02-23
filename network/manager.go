@@ -2,6 +2,8 @@ package network
 
 import (
 	"context"
+	"github.com/prometheus/common/config"
+	"net/http"
 	"time"
 
 	"github.com/go-kit/log"
@@ -58,13 +60,17 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) 
 	// Set the initial default as the middle point between min and max.
 	s.desiredConnections = (s.cfg.Parallelism.MinConnections + s.cfg.Parallelism.MaxConnections) / 2
 
+	httpClient, err := s.createClient(cc)
+	if err != nil {
+		return nil, err
+	}
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, logger, s.routinePool)
+		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, logger, s.routinePool, httpClient)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, logger, s.routinePool)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, logger, s.routinePool, httpClient)
 	s.metadata = metadata
 	return s, nil
 }
@@ -272,9 +278,13 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 
 	drainedMeta := s.metadata.Drain()
 
+	httpClient, err := s.createClient(cc)
+	if err != nil {
+		return err
+	}
 	s.writeBuffers = make([]*writeBuffer[types.MetricDatum], 0, desiredConnections)
 	for i := uint(0); i < desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, s.logger, s.routinePool)
+		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, s.logger, s.routinePool, httpClient)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 	// Force adding of metrics, note this may cause the system to go above the batch count.
@@ -282,7 +292,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 		s.forceQueue(ctx, d)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, s.logger, s.routinePool)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, s.logger, s.routinePool, httpClient)
 	for _, d := range drainedMeta {
 		s.metadata.ForceAdd(ctx, d)
 	}
@@ -308,4 +318,14 @@ func (s *manager) forceQueue(ctx context.Context, ts types.MetricDatum) {
 	// Based on a hash which is the label hash add to the queue.
 	queueNum := ts.Hash() % uint64(s.desiredConnections)
 	s.writeBuffers[queueNum].ForceAdd(ctx, ts)
+}
+
+func (s *manager) createClient(cc types.ConnectionConfig) (*http.Client, error) {
+	var httpOpts []config.HTTPClientOption
+	if cc.UseRoundRobin {
+		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}
+	}
+
+	cfg := cc.ToPrometheusConfig()
+	return config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
 }

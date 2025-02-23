@@ -13,7 +13,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
-	"github.com/prometheus/common/config"
 )
 
 // write is a fire and forget client.
@@ -25,20 +24,10 @@ type write struct {
 	stats  func(r sendResult)
 }
 
-func newWrite(cc types.ConnectionConfig, l log.Logger, statsResult func(r sendResult)) (*write, error) {
-	var httpOpts []config.HTTPClientOption
-	if cc.UseRoundRobin {
-		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}
-	}
+func newWrite(cc types.ConnectionConfig, l log.Logger, statsResult func(r sendResult), client *http.Client) (*write, error) {
 
-	cfg := cc.ToPrometheusConfig()
-	httpClient, err := config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
-
-	if err != nil {
-		return nil, err
-	}
 	return &write{
-		client: httpClient,
+		client: client,
 		cfg:    cc,
 		log:    log.With(l, "name", "loop", "url", cc.URL),
 		stats:  statsResult,
@@ -123,8 +112,9 @@ func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult
 		result.retryAfter = l.cfg.RetryBackoff
 		return result
 	}
-	result.statusCode = resp.StatusCode
 	defer resp.Body.Close()
+
+	result.statusCode = resp.StatusCode
 	// 500 errors are considered recoverable.
 	if resp.StatusCode/100 == 5 || resp.StatusCode == http.StatusTooManyRequests {
 		result.err = fmt.Errorf("server responded with status code %d", resp.StatusCode)

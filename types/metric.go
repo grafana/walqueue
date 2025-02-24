@@ -4,6 +4,7 @@ type FileFormat string
 
 const AlloyFileVersionV1 = FileFormat("alloy.metrics.queue.v1")
 const AlloyFileVersionV2 = FileFormat("alloy.metrics.queue.v2")
+const OtelFileVersionV3 = FileFormat("otel.queue.v3")
 
 type Type string
 
@@ -12,6 +13,10 @@ const PrometheusMetricV1 = Type("prometheus.metric.v1")
 
 // PrometheusMetadataV1	corresponds to prompb.MetricMetadata byte format.
 const PrometheusMetadataV1 = Type("prometheus.metadata.v1")
+
+const OtelMetricV1 = Type("otel.metric.v1")
+const OtelTraceV1 = Type("otel.trace.v1")
+const OtelLogV1 = Type("otel.log.v1")
 
 // Datum represent one item of data.
 type Datum interface {

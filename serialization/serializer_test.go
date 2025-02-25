@@ -46,7 +46,13 @@ func TestRoundTripSerialization(t *testing.T) {
 				Value: fmt.Sprintf("value_%d_%d", i, j),
 			}
 		}
-		sendErr := s.SendMetric(context.Background(), lbls, time.Now().UnixMilli(), rand.Float64(), nil, nil, nil)
+		sendErr := s.SendMetrics(context.Background(), []*types.PrometheusMetric{
+			{
+				L: lbls,
+				T: time.Now().UnixMilli(),
+				V: rand.Float64(),
+			},
+		}, nil)
 		require.NoError(t, sendErr)
 	}
 	require.Eventually(t, func() bool {

@@ -63,13 +63,11 @@ func (a *appender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v flo
 	return ref, nil
 }
 
-// Commit is a no op since we always write.
 func (a *appender) Commit() error {
 	defer putMetrics(a.metrics)
 	return a.s.SendMetrics(a.ctx, a.metrics, a.externalLabels)
 }
 
-// Rollback is a no op since we write all the data.
 func (a *appender) Rollback() error {
 	defer putMetrics(a.metrics)
 	return nil

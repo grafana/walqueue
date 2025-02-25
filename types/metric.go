@@ -1,5 +1,10 @@
 package types
 
+import (
+	"github.com/prometheus/prometheus/model/histogram"
+	"github.com/prometheus/prometheus/model/labels"
+)
+
 type FileFormat string
 
 const AlloyFileVersionV1 = FileFormat("alloy.metrics.queue.v1")
@@ -33,4 +38,12 @@ type MetricDatum interface {
 type MetadataDatum interface {
 	Datum
 	IsMeta() bool
+}
+
+type PrometheusMetric struct {
+	L  labels.Labels
+	T  int64
+	V  float64
+	H  *histogram.Histogram
+	FH *histogram.FloatHistogram
 }

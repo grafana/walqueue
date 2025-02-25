@@ -106,10 +106,10 @@ func (s *manager) Run(ctx context.Context) {
 }
 
 func (s *manager) run(ctx context.Context) {
-	ticker := time.NewTimer(100 * time.Millisecond)
+	timer := time.NewTimer(100 * time.Millisecond)
 	defer func() {
 		s.desiredParallelism.Stop()
-		ticker.Stop()
+		timer.Stop()
 	}()
 	// This is the primary run loop for the manager since it is no longer an actor.
 	for {
@@ -136,7 +136,7 @@ func (s *manager) run(ctx context.Context) {
 		}
 
 		// Finally the main work loop where we pull new data.
-		flow = s.mainWork(ctx, ticker)
+		flow = s.mainWork(ctx, timer)
 		if flow == Exit {
 			return
 		}

@@ -88,11 +88,11 @@ func (w *writeBuffer[T]) Send(ctx context.Context) {
 		// About to kick off a write request so the write is no longer available.
 		w.writeInProgress.Store(true)
 		// This will block until a worker frees up.
-		w.routinePool.Submit(func() {
+		err := w.routinePool.Submit(func() {
 			defer w.writeInProgress.Store(false)
-			s := newSignalsInfo[T](sendingItems)
+			s := newSignalsInfo(sendingItems)
 			var err error
-			w.snappyBuf, w.wrBuf, err = buildWriteRequest[T](sendingItems, w.snappyBuf, w.wrBuf)
+			w.snappyBuf, w.wrBuf, err = buildWriteRequest(sendingItems, w.snappyBuf, w.wrBuf)
 			// If the build write request fails then we should pretend it worked. Since this should only trigger if
 			// we get invalid datums.
 			if err != nil {
@@ -101,6 +101,9 @@ func (w *writeBuffer[T]) Send(ctx context.Context) {
 			}
 			w.send(w.snappyBuf, s, ctx)
 		})
+		if err != nil {
+			w.writeInProgress.Store(false)
+		}
 	}
 }
 
@@ -141,7 +144,7 @@ func buildWriteRequest[T types.Datum](items []T, snappybuf []byte, protobuf []by
 	if protobuf == nil {
 		protobuf = make([]byte, 0)
 	}
-	data, err := generateWriteRequest[T](items, protobuf)
+	data, err := generateWriteRequest(items, protobuf)
 	if err != nil {
 		return protobuf, snappybuf, err
 	}

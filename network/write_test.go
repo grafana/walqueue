@@ -8,8 +8,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"github.com/panjf2000/ants/v2"
-	"github.com/prometheus/common/config"
 	"io"
 	"math/big"
 	"net"
@@ -17,6 +15,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/prometheus/common/config"
 
 	"github.com/golang/snappy"
 	"github.com/prometheus/prometheus/prompb"
@@ -130,7 +130,7 @@ func TestTLSConnection(t *testing.T) {
 
 			// Test connection by sending a request
 			ctx := context.Background()
-			snappyBuf, _, werr := buildWriteRequest[types.MetricDatum](pending, nil, nil)
+			snappyBuf, _, werr := buildWriteRequest(pending, nil, nil)
 			require.NoError(t, werr)
 			result := l.send(snappyBuf, ctx, 0)
 			if !tt.wantErr {
@@ -243,20 +243,4 @@ func generateTestCertificates(t *testing.T) (caCert, caKey, serverCert, serverKe
 	serverKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: serverPrivateBytes})
 
 	return caCertPEM, caKeyPEM, serverCertPEM, serverKeyPEM
-}
-
-func TestAnts(t *testing.T) {
-	pool, _ := ants.NewPool(1)
-	err := pool.Submit(func() {
-		time.Sleep(10 * time.Second)
-		println("done")
-	})
-	println("submitted")
-	require.NoError(t, err)
-	err = pool.Submit(func() {
-		time.Sleep(10 * time.Second)
-		println("done")
-	})
-	pool.Release()
-	require.NoError(t, err)
 }

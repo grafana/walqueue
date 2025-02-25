@@ -19,7 +19,6 @@ type appender struct {
 	ttl            time.Duration
 	s              types.PrometheusSerializer
 	logger         log.Logger
-	incrementTTL   func()
 	externalLabels map[string]string
 }
 

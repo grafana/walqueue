@@ -2,7 +2,6 @@ package network
 
 import (
 	"context"
-	"github.com/prometheus/common/config"
 	"net/http"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
 	"github.com/panjf2000/ants/v2"
+	"github.com/prometheus/common/config"
 	"golang.design/x/chann"
 )
 
@@ -106,8 +106,10 @@ func (s *manager) Run(ctx context.Context) {
 }
 
 func (s *manager) run(ctx context.Context) {
+	ticker := time.NewTimer(100 * time.Millisecond)
 	defer func() {
 		s.desiredParallelism.Stop()
+		ticker.Stop()
 	}()
 	// This is the primary run loop for the manager since it is no longer an actor.
 	for {
@@ -134,7 +136,7 @@ func (s *manager) run(ctx context.Context) {
 		}
 
 		// Finally the main work loop where we pull new data.
-		flow = s.mainWork(ctx)
+		flow = s.mainWork(ctx, ticker)
 		if flow == Exit {
 			return
 		}
@@ -212,7 +214,9 @@ func (s *manager) flushCheck(ctx context.Context) {
 	}
 }
 
-func (s *manager) mainWork(ctx context.Context) flowcontrol {
+func (s *manager) mainWork(ctx context.Context, timer *time.Timer) flowcontrol {
+	// Use a timer so that it does not keep track when not in use.
+	timer.Reset(100 * time.Millisecond)
 	// main work queue.
 	select {
 	case <-ctx.Done():
@@ -253,8 +257,8 @@ func (s *manager) mainWork(ctx context.Context) flowcontrol {
 		}
 		cfg.Notify(successful, err)
 		return ContinueExecution
-		// This is necessary so we dont starve the queue, especially with buffered items.
-	case <-time.After(100 * time.Millisecond):
+	case <-timer.C:
+		// TODO find a way to remove this, without starving the queue.
 		return ContinueExecution
 	}
 }

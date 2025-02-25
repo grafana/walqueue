@@ -257,12 +257,18 @@ func (p *parallelism) calculateDesiredParallelism(desired uint) {
 		if targetValue != p.currentDesired {
 			p.currentDesired = targetValue
 			level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
-			p.out.Send(p.ctx, targetValue)
+			err := p.out.Send(p.ctx, targetValue)
+			if err != nil {
+				level.Error(p.l).Log("msg", "failed to send desired", "desired", p.currentDesired, "err", err)
+			}
 		}
 	} else {
 		// Going up is always allowed. Scaling up should be easy, scaling down should be slow.
 		p.currentDesired = desired
 		level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
-		p.out.Send(p.ctx, desired)
+		err := p.out.Send(p.ctx, desired)
+		if err != nil {
+			level.Error(p.l).Log("msg", "failed to send desired", "desired", p.currentDesired, "err", err)
+		}
 	}
 }

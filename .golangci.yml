@@ -1,0 +1,13 @@
+issues:
+  exclude-rules:
+    # It's fine if tests ignore errors.
+    - path: _test.go
+      linters:
+        - errcheck
+
+  exclude:
+    # Ignoring errors on Close, Log, and removing files is OK in most cases.
+    - "Error return value of `(.*\\.Close|.*\\.Log|os.Remove)` is not checked"
+    # Packages for integrations are named matching their upstream counterpart,
+    # which almost always have underscores.
+    - "var-naming: don't use an underscore in package name"

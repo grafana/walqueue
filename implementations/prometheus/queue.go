@@ -29,7 +29,7 @@ var _ Queue = (*queue)(nil)
 //
 // Appender returns an Appender that writes to the queue.
 type Queue interface {
-	Start(ctx context.Context)
+	Start(ctx context.Context) error
 	Stop()
 	Appender(ctx context.Context) storage.Appender
 }
@@ -109,11 +109,16 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	return q, nil
 }
 
-func (q *queue) Start(ctx context.Context) {
+func (q *queue) Start(ctx context.Context) error {
 	q.network.Start(ctx)
 	q.queue.Start(ctx)
-	q.serializer.Start(ctx)
+	err := q.serializer.Start(ctx)
+	if err != nil {
+		return err
+	}
+
 	go q.run(ctx)
+	return nil
 }
 
 func (q *queue) Stop() {

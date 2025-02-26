@@ -3,6 +3,7 @@ package serialization
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -14,12 +15,18 @@ import (
 	"github.com/prometheus/prometheus/storage"
 )
 
+var metricPool = sync.Pool{
+	New: func() interface{} {
+		return &types.PrometheusMetric{}
+	},
+}
+
 type appender struct {
 	ctx            context.Context
 	ttl            time.Duration
 	s              types.PrometheusSerializer
 	logger         log.Logger
-	incrementTTL   func()
+	metrics        []*types.PrometheusMetric
 	externalLabels map[string]string
 }
 
@@ -32,6 +39,7 @@ func NewAppender(ctx context.Context, ttl time.Duration, s types.PrometheusSeria
 		logger:         logger,
 		ctx:            ctx,
 		externalLabels: externalLabels,
+		metrics:        make([]*types.PrometheusMetric, 0),
 	}
 	return app
 }
@@ -47,18 +55,33 @@ func (a *appender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v flo
 	if t < endTime {
 		return ref, nil
 	}
-	err := a.s.SendMetric(a.ctx, l, t, v, nil, nil, a.externalLabels)
-	return ref, err
+	pm := metricPool.Get().(*types.PrometheusMetric)
+	pm.L = l
+	pm.T = t
+	pm.V = v
+	a.metrics = append(a.metrics, pm)
+	return ref, nil
 }
 
-// Commit is a no op since we always write.
-func (a *appender) Commit() (_ error) {
-	return nil
+func (a *appender) Commit() error {
+	defer putMetrics(a.metrics)
+	return a.s.SendMetrics(a.ctx, a.metrics, a.externalLabels)
 }
 
-// Rollback is a no op since we write all the data.
 func (a *appender) Rollback() error {
+	defer putMetrics(a.metrics)
 	return nil
+}
+
+func putMetrics(metrics []*types.PrometheusMetric) {
+	for _, m := range metrics {
+		m.FH = nil
+		m.H = nil
+		m.L = nil
+		m.T = 0
+		m.V = 0
+		metricPool.Put(m)
+	}
 }
 
 // AppendExemplar appends exemplar to cache. The passed in labels is unused, instead use the labels on the exemplar.
@@ -73,8 +96,13 @@ func (a *appender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int
 	if t < endTime {
 		return ref, nil
 	}
-	err := a.s.SendMetric(a.ctx, l, t, 0, h, fh, a.externalLabels)
-	return ref, err
+	pm := metricPool.Get().(*types.PrometheusMetric)
+	pm.L = l
+	pm.T = t
+	pm.H = h
+	pm.FH = fh
+	a.metrics = append(a.metrics, pm)
+	return ref, nil
 }
 
 // UpdateMetadata updates metadata.

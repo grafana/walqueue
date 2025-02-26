@@ -10,8 +10,6 @@ import (
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	v2 "github.com/grafana/walqueue/types/v2"
-	"github.com/prometheus/prometheus/model/histogram"
-	"github.com/prometheus/prometheus/model/labels"
 	"go.uber.org/atomic"
 )
 
@@ -51,27 +49,30 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 	return s, nil
 }
 
-// SendMetric adds a metric to the serializer. Note that we need to inject external labels here since once they are written to disk the prompb.TimeSeries bytes should be treated
+// SendMetrics adds a slice metric to the serializer. Note that we need to inject external labels here since once they are written to disk the prompb.TimeSeries bytes should be treated
 // as immutable.
-func (s *serializer) SendMetric(ctx context.Context, l labels.Labels, t int64, v float64, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error {
+func (s *serializer) SendMetrics(ctx context.Context, metrics []*types.PrometheusMetric, externalLabels map[string]string) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
-	if t > s.newestTS {
-		s.newestTS = t
-	}
-
-	err := s.ser.AddPrometheusMetric(t, v, l, h, fh, externalLabels)
-	if err != nil {
-		return err
-	}
-	s.seriesCount++
-	// If we would go over the max size then send.
-	if (s.seriesCount + s.metadataCount) > s.maxItemsBeforeFlush {
-		err = s.flushToDisk(ctx)
-		if err != nil {
-			level.Error(s.logger).Log("msg", "unable to append to serializer", "err", err)
+	for _, m := range metrics {
+		if m.T > s.newestTS {
+			s.newestTS = m.T
 		}
+
+		err := s.ser.AddPrometheusMetric(m.T, m.V, m.L, m.H, m.FH, externalLabels)
+		if err != nil {
+			return err
+		}
+		s.seriesCount++
+		// If we would go over the max size then send.
+		if (s.seriesCount + s.metadataCount) > s.maxItemsBeforeFlush {
+			err = s.flushToDisk(ctx)
+			if err != nil {
+				level.Error(s.logger).Log("msg", "unable to append to serializer", "err", err)
+			}
+		}
+
 	}
 	return nil
 

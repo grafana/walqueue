@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/client_golang/prometheus"
@@ -58,11 +59,12 @@ type Stats struct {
 	SentBatchDuration    prometheus.Histogram
 	HighestSentTimestamp prometheus.Gauge
 
-	SentBytesTotal            prometheus.Counter
-	MetadataBytesTotal        prometheus.Counter
-	RemoteStorageInTimestamp  prometheus.Gauge
-	RemoteStorageOutTimestamp prometheus.Gauge
-	RemoteStorageDuration     prometheus.Histogram
+	SentBytesTotal              prometheus.Counter
+	MetadataBytesTotal          prometheus.Counter
+	RemoteStorageSentBytesTotal prometheus.Counter
+	RemoteStorageInTimestamp    prometheus.Gauge
+	RemoteStorageOutTimestamp   prometheus.Gauge
+	RemoteSentBatchDuration     prometheus.Histogram
 }
 
 func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Registerer, sh types.StatsHub) *Stats {
@@ -118,9 +120,6 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			Name:      "timestamp_drift_seconds",
 			Help:      "Drift between newest serializer input timestamp and newest network output timestamp",
 		}),
-		RemoteStorageDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name: "prometheus_remote_storage_queue_duration_seconds",
-		}),
 		NetworkSeriesSent: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
@@ -156,6 +155,9 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "network_errors",
+		}),
+		RemoteStorageSentBytesTotal: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "prometheus_remote_storage_bytes_total",
 		}),
 		RemoteStorageOutTimestamp: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "prometheus_remote_storage_queue_highest_sent_timestamp_seconds",
@@ -208,6 +210,14 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			Name: "prometheus_remote_storage_metadata_bytes_total",
 			Help: "The total number of bytes of metadata sent by the queue after compression.",
 		}),
+		SentBatchDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:                            "prometheus_remote_storage_sent_batch_duration_seconds",
+			Help:                            "Duration of send calls to the remote storage.",
+			Buckets:                         append(prometheus.DefBuckets, 25, 60, 120, 300),
+			NativeHistogramBucketFactor:     1.1,
+			NativeHistogramMaxBucketNumber:  100,
+			NativeHistogramMinResetDuration: 1 * time.Hour,
+		}),
 	}
 	if isMeta {
 		s.networkRelease = s.stats.RegisterMetadataNetwork(s.UpdateNetwork)
@@ -243,7 +253,6 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 
 func (s *Stats) Unregister() {
 	unregistered := []prometheus.Collector{
-		s.RemoteStorageDuration,
 		s.RemoteStorageInTimestamp,
 		s.RemoteStorageOutTimestamp,
 		s.SamplesTotal,
@@ -270,6 +279,8 @@ func (s *Stats) Unregister() {
 		s.SerializerErrors,
 		s.SerializerNewestInTimeStampSeconds,
 		s.TimestampDriftSeconds,
+		s.RemoteSentBatchDuration,
+		s.RemoteStorageSentBytesTotal,
 	}
 	// Meta only has one connection so we dont need these for that.
 	if !s.isMeta {
@@ -286,7 +297,6 @@ func (s *Stats) Unregister() {
 
 func (s *Stats) SeriesBackwardsCompatibility(registry prometheus.Registerer) {
 	registry.MustRegister(
-		s.RemoteStorageDuration,
 		s.RemoteStorageInTimestamp,
 		s.RemoteStorageOutTimestamp,
 		s.SamplesTotal,
@@ -296,6 +306,8 @@ func (s *Stats) SeriesBackwardsCompatibility(registry prometheus.Registerer) {
 		s.RetriedSamplesTotal,
 		s.RetriedHistogramsTotal,
 		s.SentBytesTotal,
+		s.RemoteSentBatchDuration,
+		s.RemoteStorageSentBytesTotal,
 	)
 }
 
@@ -315,7 +327,7 @@ func (s *Stats) UpdateNetwork(stats types.NetworkStats) {
 	s.NetworkRetries429.Add(float64(stats.Total429()))
 	s.NetworkRetries5XX.Add(float64(stats.Total5XX()))
 	s.NetworkSentDuration.Observe(stats.SendDuration.Seconds())
-	s.RemoteStorageDuration.Observe(stats.SendDuration.Seconds())
+	s.SentBatchDuration.Observe(stats.SendDuration.Seconds())
 	// The newest timestamp is not always sent.
 	if stats.NewestTimestampSeconds != 0 {
 		s.networkOut.Store(stats.NewestTimestampSeconds)

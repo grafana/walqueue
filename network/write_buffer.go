@@ -105,8 +105,9 @@ func (w *writeBuffer[T]) Send(ctx context.Context) {
 }
 
 func (w *writeBuffer[T]) send(bb []byte, s signalsInfo, ctx context.Context) {
+	bbLen := len(bb)
 	stats := func(r sendResult) {
-		recordStats(s.seriesCount, s.histogramCount, s.metadataCount, s.newestTS, w.isMeta, w.stats, r, len(bb))
+		recordStats(s.seriesCount, s.histogramCount, s.metadataCount, s.newestTS, w.isMeta, w.stats, r, bbLen)
 	}
 	l, nlErr := newWrite(w.cfg, w.log, stats, w.client)
 	if nlErr != nil {

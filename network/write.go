@@ -17,7 +17,6 @@ import (
 
 // write is a fire and forget client.
 type write struct {
-	isMeta bool
 	client *http.Client
 	cfg    types.ConnectionConfig
 	log    log.Logger

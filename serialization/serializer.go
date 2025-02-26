@@ -62,7 +62,8 @@ func (s *serializer) SendMetrics(ctx context.Context, metrics []*types.Prometheu
 
 		err := s.ser.AddPrometheusMetric(m.T, m.V, m.L, m.H, m.FH, externalLabels)
 		if err != nil {
-			return err
+			level.Error(s.logger).Log("msg", "error adding metric", "err", err)
+			continue
 		}
 		s.seriesCount++
 		// If we would go over the max size then send.

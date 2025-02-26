@@ -306,6 +306,7 @@ func (s *Stats) SeriesBackwardsCompatibility(registry prometheus.Registerer) {
 		s.RetriedHistogramsTotal,
 		s.SentBytesTotal,
 		s.RemoteStorageSentBytesTotal,
+		s.SentBatchDuration,
 	)
 }
 

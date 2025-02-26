@@ -18,7 +18,8 @@ const remoteSamples = "prometheus_remote_storage_samples_total"
 const remoteHistograms = "prometheus_remote_storage_histograms_total"
 const remoteMetadata = "prometheus_remote_storage_metadata_total"
 
-const sentBytes = "prometheus_remote_storage_sent_bytes_total"
+const sentBytes = "prometheus_remote_storage_bytes_total"
+const remoteSent = "prometheus_remote_storage_sent_bytes_total"
 const sentMetadataBytes = "prometheus_remote_storage_metadata_bytes_total"
 
 const outTimestamp = "prometheus_remote_storage_queue_highest_sent_timestamp_seconds"
@@ -32,7 +33,7 @@ const retriedSamples = "prometheus_remote_storage_samples_retried_total"
 const retriedHistogram = "prometheus_remote_storage_histograms_retried_total"
 const retriedMetadata = "prometheus_remote_storage_metadata_retried_total"
 
-const prometheusDuration = "prometheus_remote_storage_queue_duration_seconds"
+const prometheusDuration = "prometheus_remote_storage_sent_batch_duration_seconds"
 
 const serializerIncoming = "alloy_queue_series_serializer_incoming_signals"
 const alloySent = "alloy_queue_series_network_sent"
@@ -59,6 +60,10 @@ const alloyDesired = "alloy_queue_series_parallelism_desired"
 const alloyMetaMin = "alloy_queue_metadata_parallelism_min"
 const alloyMetaMax = "alloy_queue_metadata_parallelism_max"
 const alloyMetaDesired = "alloy_queue_metadata_parallelism_desired"
+
+const remoteShardMax = "prometheus_remote_storage_shards_max"
+const remoteShardMin = "prometheus_remote_storage_shards_min"
+const remoteShardDesired = "prometheus_remote_storage_shards"
 
 // TestMetadata is the large end to end testing for the queue based wal, specifically for metadata.
 func TestMetadata(t *testing.T) {
@@ -99,6 +104,18 @@ func TestMetadata(t *testing.T) {
 					name:  alloyDesired,
 					value: 4,
 				},
+				{
+					name:  remoteShardDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardMax,
+					value: 4,
+				},
+				{
+					name:  remoteShardMin,
+					value: 4,
+				},
 			},
 		},
 		{
@@ -128,6 +145,18 @@ func TestMetadata(t *testing.T) {
 				},
 				{
 					name:  alloyDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardMax,
+					value: 4,
+				},
+				{
+					name:  remoteShardMin,
 					value: 4,
 				},
 			},
@@ -164,6 +193,18 @@ func TestMetadata(t *testing.T) {
 				},
 				{
 					name:  alloyDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardMax,
+					value: 4,
+				},
+				{
+					name:  remoteShardMin,
 					value: 4,
 				},
 			},
@@ -240,6 +281,22 @@ func TestMetrics(t *testing.T) {
 					name:  alloyDesired,
 					value: 4,
 				},
+				{
+					name:      remoteSent,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:  remoteShardDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardMax,
+					value: 4,
+				},
+				{
+					name:  remoteShardMin,
+					value: 4,
+				},
 			},
 		},
 		{
@@ -285,6 +342,18 @@ func TestMetrics(t *testing.T) {
 				},
 				{
 					name:  alloyDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardMax,
+					value: 4,
+				},
+				{
+					name:  remoteShardMin,
 					value: 4,
 				},
 			},
@@ -339,6 +408,18 @@ func TestMetrics(t *testing.T) {
 				},
 				{
 					name:  alloyDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardMax,
+					value: 4,
+				},
+				{
+					name:  remoteShardMin,
 					value: 4,
 				},
 			},
@@ -401,6 +482,22 @@ func TestMetrics(t *testing.T) {
 					name:  alloyDesired,
 					value: 4,
 				},
+				{
+					name:      remoteSent,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:  remoteShardDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardMax,
+					value: 4,
+				},
+				{
+					name:  remoteShardMin,
+					value: 4,
+				},
 			},
 		},
 		{
@@ -446,6 +543,18 @@ func TestMetrics(t *testing.T) {
 				},
 				{
 					name:  alloyDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardMax,
+					value: 4,
+				},
+				{
+					name:  remoteShardMin,
 					value: 4,
 				},
 			},
@@ -500,6 +609,18 @@ func TestMetrics(t *testing.T) {
 				},
 				{
 					name:  alloyDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardDesired,
+					value: 4,
+				},
+				{
+					name:  remoteShardMax,
+					value: 4,
+				},
+				{
+					name:  remoteShardMin,
 					value: 4,
 				},
 			},
@@ -722,14 +843,14 @@ func runE2eStats(t *testing.T, test statsTest) {
 		dtos, gatherErr := reg.Gather()
 		require.NoError(t, gatherErr)
 		// Check if we have some valid metrics.
-		found := 0
+		found := make(map[string]struct{})
 		for _, d := range dtos {
 			if getValue(d) > 0 {
-				found++
+				found[*d.Name] = struct{}{}
 			}
 		}
 		// Make sure we have the right number metrics.
-		return found >= len(test.checks)
+		return len(found) >= len(test.checks)
 	}, 10*time.Second, 1*time.Second)
 
 	metrics := make(map[string]float64)

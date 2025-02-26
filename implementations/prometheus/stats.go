@@ -64,6 +64,10 @@ type Stats struct {
 	RemoteStorageSentBytesTotal prometheus.Counter
 	RemoteStorageInTimestamp    prometheus.Gauge
 	RemoteStorageOutTimestamp   prometheus.Gauge
+
+	RemoteShardsDesired prometheus.Gauge
+	RemoteShardsMin     prometheus.Gauge
+	RemoteShardsMax     prometheus.Gauge
 }
 
 func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Registerer, sh types.StatsHub) *Stats {
@@ -209,6 +213,15 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			Name: "prometheus_remote_storage_metadata_bytes_total",
 			Help: "The total number of bytes of metadata sent by the queue after compression.",
 		}),
+		RemoteShardsDesired: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "prometheus_remote_storage_shards",
+		}),
+		RemoteShardsMin: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "prometheus_remote_storage_shards_min",
+		}),
+		RemoteShardsMax: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "prometheus_remote_storage_shards_max",
+		}),
 		SentBatchDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name:                            "prometheus_remote_storage_sent_batch_duration_seconds",
 			Help:                            "Duration of send calls to the remote storage.",
@@ -280,6 +293,9 @@ func (s *Stats) Unregister() {
 		s.TimestampDriftSeconds,
 		s.RemoteStorageSentBytesTotal,
 		s.SentBatchDuration,
+		s.RemoteShardsDesired,
+		s.RemoteShardsMin,
+		s.RemoteShardsMax,
 	}
 	// Meta only has one connection so we dont need these for that.
 	if !s.isMeta {
@@ -307,6 +323,9 @@ func (s *Stats) SeriesBackwardsCompatibility(registry prometheus.Registerer) {
 		s.SentBytesTotal,
 		s.RemoteStorageSentBytesTotal,
 		s.SentBatchDuration,
+		s.RemoteShardsDesired,
+		s.RemoteShardsMin,
+		s.RemoteShardsMax,
 	)
 }
 
@@ -349,6 +368,7 @@ func (s *Stats) UpdateNetwork(stats types.NetworkStats) {
 
 	s.MetadataBytesTotal.Add(float64(stats.MetadataBytes))
 	s.SentBytesTotal.Add(float64(stats.SeriesBytes))
+	s.RemoteStorageSentBytesTotal.Add(float64(stats.SeriesBytes))
 }
 
 func (s *Stats) UpdateSerializer(stats types.SerializerStats) {
@@ -370,6 +390,11 @@ func (s *Stats) UpdateParralelism(stats types.ParralelismStats) {
 	s.ParallelismMax.Set(float64(stats.MaxConnections))
 	s.ParallelismMin.Set(float64(stats.MinConnections))
 	s.ParallelismDesired.Set(float64(stats.DesiredConnections))
+
+	// Set backwards compatibility stats.
+	s.RemoteShardsDesired.Set(float64(stats.DesiredConnections))
+	s.RemoteShardsMin.Set(float64(stats.MinConnections))
+	s.RemoteShardsMax.Set(float64(stats.MaxConnections))
 }
 
 func (s *Stats) updateDrift() {

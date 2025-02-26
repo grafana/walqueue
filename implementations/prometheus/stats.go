@@ -64,7 +64,6 @@ type Stats struct {
 	RemoteStorageSentBytesTotal prometheus.Counter
 	RemoteStorageInTimestamp    prometheus.Gauge
 	RemoteStorageOutTimestamp   prometheus.Gauge
-	RemoteSentBatchDuration     prometheus.Histogram
 }
 
 func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Registerer, sh types.StatsHub) *Stats {
@@ -279,8 +278,8 @@ func (s *Stats) Unregister() {
 		s.SerializerErrors,
 		s.SerializerNewestInTimeStampSeconds,
 		s.TimestampDriftSeconds,
-		s.RemoteSentBatchDuration,
 		s.RemoteStorageSentBytesTotal,
+		s.SentBatchDuration,
 	}
 	// Meta only has one connection so we dont need these for that.
 	if !s.isMeta {
@@ -306,7 +305,6 @@ func (s *Stats) SeriesBackwardsCompatibility(registry prometheus.Registerer) {
 		s.RetriedSamplesTotal,
 		s.RetriedHistogramsTotal,
 		s.SentBytesTotal,
-		s.RemoteSentBatchDuration,
 		s.RemoteStorageSentBytesTotal,
 	)
 }

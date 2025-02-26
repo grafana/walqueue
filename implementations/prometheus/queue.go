@@ -114,6 +114,8 @@ func (q *queue) Start(ctx context.Context) error {
 	q.queue.Start(ctx)
 	err := q.serializer.Start(ctx)
 	if err != nil {
+		q.network.Stop()
+		q.queue.Stop()
 		return err
 	}
 	go q.run(ctx)

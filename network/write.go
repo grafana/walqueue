@@ -24,7 +24,6 @@ type write struct {
 }
 
 func newWrite(cc types.ConnectionConfig, l log.Logger, statsResult func(r sendResult), client *http.Client) (*write, error) {
-
 	return &write{
 		client: client,
 		cfg:    cc,
@@ -87,10 +86,17 @@ func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult
 		result.networkError = true
 		return result
 	}
+	// Add custom headers from configuration first
+	for key, value := range l.cfg.Headers {
+		httpReq.Header.Set(key, value)
+	}
+
+	// Add/Set required headers, which will override custom headers with the same name
 	httpReq.Header.Add("Content-Encoding", "snappy")
 	httpReq.Header.Set("Content-Type", "application/x-protobuf")
 	httpReq.Header.Set("User-Agent", l.cfg.UserAgent)
 	httpReq.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
+
 	if l.cfg.BasicAuth != nil {
 		httpReq.SetBasicAuth(l.cfg.BasicAuth.Username, l.cfg.BasicAuth.Password)
 	} else if l.cfg.BearerToken != "" {

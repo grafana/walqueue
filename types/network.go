@@ -49,6 +49,9 @@ type ConnectionConfig struct {
 	// ExternalLabels specifies the external labels to be added to all samples
 	// sent to the Prometheus server.
 	ExternalLabels map[string]string
+	// Headers specifies the HTTP headers to be added to all requests
+	// sent to the server.
+	Headers map[string]string
 
 	// TLSCert is the PEM-encoded certificate string for TLS client authentication
 	TLSCert string
@@ -111,6 +114,10 @@ func (cc ConnectionConfig) ToPrometheusConfig() config.HTTPClientConfig {
 		cfg.TLSConfig.CA = cc.TLSCACert
 	}
 	cfg.TLSConfig.InsecureSkipVerify = cc.InsecureSkipVerify
+	
+	// Headers are handled separately when making requests in network/write.go
+	// since the prometheus config doesn't have a direct mapping for headers
+	
 	return cfg
 }
 

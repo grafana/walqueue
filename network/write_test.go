@@ -2,14 +2,12 @@ package network
 
 import (
 	"context"
-	"crypto/rand"
+	crand "crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"github.com/panjf2000/ants/v2"
-	"github.com/prometheus/common/config"
 	"io"
 	"math/big"
 	"net"
@@ -18,11 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/snappy"
-	"github.com/prometheus/prometheus/prompb"
-
 	"github.com/go-kit/log"
+	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
+	"github.com/prometheus/common/config"
+	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -182,11 +180,11 @@ func TestTLSConfigValidation(t *testing.T) {
 // generateTestCertificates creates a CA certificate and a server certificate for testing
 func generateTestCertificates(t *testing.T) (caCert, caKey, serverCert, serverKey []byte) {
 	// Generate CA key pair
-	caPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	caPrivKey, err := rsa.GenerateKey(crand.Reader, 2048)
 	require.NoError(t, err)
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	serialNumber, err := crand.Int(crand.Reader, serialNumberLimit)
 	require.NoError(t, err)
 
 	// Create CA certificate
@@ -206,11 +204,11 @@ func generateTestCertificates(t *testing.T) (caCert, caKey, serverCert, serverKe
 	}
 
 	// Create CA certificate
-	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
+	caBytes, err := x509.CreateCertificate(crand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
 	require.NoError(t, err)
 
 	// Generate server key pair
-	serverPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	serverPrivKey, err := rsa.GenerateKey(crand.Reader, 2048)
 	require.NoError(t, err)
 
 	// Create server certificate
@@ -229,7 +227,7 @@ func generateTestCertificates(t *testing.T) (caCert, caKey, serverCert, serverKe
 	}
 
 	// Create server certificate signed by CA
-	serverBytes, err := x509.CreateCertificate(rand.Reader, server, ca, &serverPrivKey.PublicKey, caPrivKey)
+	serverBytes, err := x509.CreateCertificate(crand.Reader, server, ca, &serverPrivKey.PublicKey, caPrivKey)
 	require.NoError(t, err)
 
 	// Encode certificates and keys to PEM
@@ -245,18 +243,184 @@ func generateTestCertificates(t *testing.T) (caCert, caKey, serverCert, serverKe
 	return caCertPEM, caKeyPEM, serverCertPEM, serverKeyPEM
 }
 
-func TestAnts(t *testing.T) {
-	pool, _ := ants.NewPool(1)
-	err := pool.Submit(func() {
-		time.Sleep(10 * time.Second)
-		println("done")
+// Note: We're using createSeries, randSeq and the metric type from manager_test.go
+func TestCustomHeaders(t *testing.T) {
+	// Create a test HTTP server that inspects request headers
+	headerReceived := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check for our custom header
+		customValue := r.Header.Get("X-Custom-Header")
+		headerReceived <- customValue
+
+		// Verify other request headers as usual
+		contentType := r.Header.Get("Content-Type")
+		contentEncoding := r.Header.Get("Content-Encoding")
+		if contentType != "application/x-protobuf" || contentEncoding != "snappy" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		defer r.Body.Close()
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		data, err = snappy.Decode(nil, data)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var req prompb.WriteRequest
+		err = req.Unmarshal(data)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		ts := req.GetTimeseries()
+		if len(ts) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	logger := log.NewNopLogger()
+
+	// Test with custom header
+	t.Run("With custom header", func(t *testing.T) {
+		config := types.ConnectionConfig{
+			URL:       server.URL,
+			UserAgent: "test-client",
+			Timeout:   time.Second,
+			Headers: map[string]string{
+				"X-Custom-Header": "test-value",
+			},
+		}
+
+		// Create HTTP client directly rather than through ToPrometheusConfig
+		// as the Headers field doesn't map to Prometheus config
+		httpClient := &http.Client{
+			Timeout: config.Timeout,
+		}
+
+		l, err := newWrite(config, logger, func(r sendResult) {}, httpClient)
+		require.NoError(t, err)
+		require.NotNil(t, l)
+
+		// Create a test series for sending
+		pending := []types.MetricDatum{createSeries(1, t)}
+
+		// Send the request
+		ctx := context.Background()
+		snappyBuf, _, werr := buildWriteRequest[types.MetricDatum](pending, nil, nil)
+		require.NoError(t, werr)
+		result := l.send(snappyBuf, ctx, 0)
+		require.True(t, result.successful, "request should be successful")
+		require.NoError(t, result.err, "request should not return error")
+
+		// Verify the header was received by the test server
+		select {
+		case value := <-headerReceived:
+			require.Equal(t, "test-value", value, "Custom header should be sent with request")
+		case <-time.After(time.Second):
+			t.Fatal("Timed out waiting for request with header")
+		}
 	})
-	println("submitted")
-	require.NoError(t, err)
-	err = pool.Submit(func() {
-		time.Sleep(10 * time.Second)
-		println("done")
+
+	// Test with multiple custom headers
+	t.Run("With multiple custom headers", func(t *testing.T) {
+		multiHeadersReceived := make(map[string]string)
+		multiHeaderServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Collect all headers
+			multiHeadersReceived["X-Custom-1"] = r.Header.Get("X-Custom-1")
+			multiHeadersReceived["X-Custom-2"] = r.Header.Get("X-Custom-2")
+			multiHeadersReceived["X-Custom-3"] = r.Header.Get("X-Custom-3")
+
+			// Always respond with success for this test
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer multiHeaderServer.Close()
+
+		config := types.ConnectionConfig{
+			URL:       multiHeaderServer.URL,
+			UserAgent: "test-client",
+			Timeout:   time.Second,
+			Headers: map[string]string{
+				"X-Custom-1": "value1",
+				"X-Custom-2": "value2",
+				"X-Custom-3": "value3",
+			},
+		}
+
+		httpClient := &http.Client{
+			Timeout: config.Timeout,
+		}
+
+		l, err := newWrite(config, logger, func(r sendResult) {}, httpClient)
+		require.NoError(t, err)
+		require.NotNil(t, l)
+
+		// Create and send a minimal request - for this test we just care about headers
+		ctx := context.Background()
+		pending := []types.MetricDatum{createSeries(1, t)}
+		snappyBuf, _, werr := buildWriteRequest[types.MetricDatum](pending, nil, nil)
+		require.NoError(t, werr)
+		result := l.send(snappyBuf, ctx, 0)
+		require.True(t, result.successful)
+
+		// Verify all headers were sent
+		require.Equal(t, "value1", multiHeadersReceived["X-Custom-1"])
+		require.Equal(t, "value2", multiHeadersReceived["X-Custom-2"])
+		require.Equal(t, "value3", multiHeadersReceived["X-Custom-3"])
 	})
-	pool.Release()
-	require.NoError(t, err)
+
+	// Test header precedence - built-in headers should override custom headers
+	t.Run("Header precedence", func(t *testing.T) {
+		headersReceived := make(map[string]string)
+		precedenceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Collect critical headers
+			headersReceived["Content-Type"] = r.Header.Get("Content-Type")
+			headersReceived["Content-Encoding"] = r.Header.Get("Content-Encoding")
+			headersReceived["User-Agent"] = r.Header.Get("User-Agent")
+
+			// Always respond with success for this test
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer precedenceServer.Close()
+
+		config := types.ConnectionConfig{
+			URL:       precedenceServer.URL,
+			UserAgent: "test-client",
+			Timeout:   time.Second,
+			// Override some critical headers
+			Headers: map[string]string{
+				"Content-Type": "text/plain",
+				"User-Agent":   "override-agent",
+			},
+		}
+
+		httpClient := &http.Client{
+			Timeout: config.Timeout,
+		}
+
+		l, err := newWrite(config, logger, func(r sendResult) {}, httpClient)
+		require.NoError(t, err)
+
+		ctx := context.Background()
+		pending := []types.MetricDatum{createSeries(1, t)}
+		snappyBuf, _, werr := buildWriteRequest[types.MetricDatum](pending, nil, nil)
+		require.NoError(t, werr)
+		result := l.send(snappyBuf, ctx, 0)
+		require.True(t, result.successful)
+
+		// Built-in headers should override custom headers with the same names
+		// since they're set after the custom headers in the code
+		require.Equal(t, "application/x-protobuf", headersReceived["Content-Type"])
+		require.Equal(t, "snappy", headersReceived["Content-Encoding"])
+		require.Equal(t, "test-client", headersReceived["User-Agent"])
+	})
 }

@@ -2,6 +2,8 @@ package types
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"reflect"
 	"time"
 
@@ -53,6 +55,16 @@ type ConnectionConfig struct {
 	// sent to the server.
 	Headers map[string]string
 
+	// ProxyURL is the URL of the HTTP proxy to use for requests.
+	// If empty, no proxy is used.
+	ProxyURL string
+	// ProxyFromEnvironment determines whether to read proxy configuration from environment
+	// variables HTTP_PROXY, HTTPS_PROXY and NO_PROXY.
+	// If true, environment proxy settings will be used even if ProxyURL is set.
+	ProxyFromEnvironment bool
+	// ProxyConnectHeaders specify the headers to send to proxies during CONNECT requests.
+	ProxyConnectHeaders map[string]string
+
 	// TLSCert is the PEM-encoded certificate string for TLS client authentication
 	TLSCert string
 	// TLSKey is the PEM-encoded private key string for TLS client authentication
@@ -92,8 +104,8 @@ type ParallelismConfig struct {
 	AllowedNetworkErrorFraction float64
 }
 
-// ToPrometheusConfig converts a ConnectionConfig to a config.HTTPClientConfig
-func (cc ConnectionConfig) ToPrometheusConfig() config.HTTPClientConfig {
+// ToPrometheusConfig converts a ConnectionConfig to a config.HTTPClientConfig and returns any error encountered
+func (cc ConnectionConfig) ToPrometheusConfig() (config.HTTPClientConfig, error) {
 	var cfg config.HTTPClientConfig
 	if cc.BasicAuth != nil {
 		cfg.BasicAuth = &config.BasicAuth{
@@ -114,11 +126,25 @@ func (cc ConnectionConfig) ToPrometheusConfig() config.HTTPClientConfig {
 		cfg.TLSConfig.CA = cc.TLSCACert
 	}
 	cfg.TLSConfig.InsecureSkipVerify = cc.InsecureSkipVerify
-	
-	// Headers are handled separately when making requests in network/write.go
-	// since the prometheus config doesn't have a direct mapping for headers
-	
-	return cfg
+
+	// Configure proxy settings
+	if cc.ProxyURL != "" {
+		proxyURL, err := url.Parse(cc.ProxyURL)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid proxy URL %q: %w", cc.ProxyURL, err)
+		}
+		cfg.ProxyURL = config.URL{URL: proxyURL}
+	}
+	cfg.ProxyFromEnvironment = cc.ProxyFromEnvironment
+
+	// Set proxy connect headers if provided
+	if len(cc.ProxyConnectHeaders) > 0 {
+		cfg.ProxyConnectHeader = make(config.ProxyHeader)
+		for key, value := range cc.ProxyConnectHeaders {
+			cfg.ProxyConnectHeader[key] = []config.Secret{config.Secret(value)}
+		}
+	}
+	return cfg, nil
 }
 
 type BasicAuth struct {

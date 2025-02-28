@@ -2,9 +2,11 @@ package network
 
 import (
 	"context"
-	"github.com/prometheus/common/config"
+	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/prometheus/common/config"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -115,7 +117,6 @@ func (s *manager) run(ctx context.Context) {
 		// and return ContinueExecution
 		flow := s.checkConfig(ctx)
 		if flow == Exit {
-
 			return
 		}
 		// Flush will check to see if we haven't sent data since the last flush.
@@ -197,7 +198,6 @@ func (s *manager) bufferMetaCheck(ctx context.Context) flowcontrol {
 		}
 	}
 	return ContinueExecution
-
 }
 
 func (s *manager) flushCheck(ctx context.Context) {
@@ -326,6 +326,15 @@ func (s *manager) createClient(cc types.ConnectionConfig) (*http.Client, error) 
 		httpOpts = []config.HTTPClientOption{config.WithDialContextFunc(newDialContextWithRoundRobinDNS().dialContextFn())}
 	}
 
-	cfg := cc.ToPrometheusConfig()
-	return config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
+	// Convert ConnectionConfig to PrometheusConfig
+	cfg, err := cc.ToPrometheusConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+	return client, nil
 }

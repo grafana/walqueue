@@ -110,7 +110,8 @@ func TestTLSConnection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := log.NewNopLogger()
 			var httpOpts []config.HTTPClientOption
-			cfg := tt.tlsConfig.ToPrometheusConfig()
+			cfg, err := tt.tlsConfig.ToPrometheusConfig()
+			require.NoError(t, err)
 			httpClient, err := config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
 			require.NoError(t, err)
 			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {}, httpClient)
@@ -162,7 +163,8 @@ func TestTLSConfigValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var httpOpts []config.HTTPClientOption
-			cfg := tt.tlsConfig.ToPrometheusConfig()
+			cfg, err := tt.tlsConfig.ToPrometheusConfig()
+			require.NoError(t, err)
 			httpClient, err := config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
 			require.NoError(t, err)
 			l, newErr := newWrite(tt.tlsConfig, logger, func(r sendResult) {}, httpClient)

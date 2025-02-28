@@ -2,7 +2,7 @@ package network
 
 import (
 	"context"
-	crand "crypto/rand"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
@@ -180,11 +180,11 @@ func TestTLSConfigValidation(t *testing.T) {
 // generateTestCertificates creates a CA certificate and a server certificate for testing
 func generateTestCertificates(t *testing.T) (caCert, caKey, serverCert, serverKey []byte) {
 	// Generate CA key pair
-	caPrivKey, err := rsa.GenerateKey(crand.Reader, 2048)
+	caPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := crand.Int(crand.Reader, serialNumberLimit)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	require.NoError(t, err)
 
 	// Create CA certificate
@@ -204,11 +204,11 @@ func generateTestCertificates(t *testing.T) (caCert, caKey, serverCert, serverKe
 	}
 
 	// Create CA certificate
-	caBytes, err := x509.CreateCertificate(crand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
+	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
 	require.NoError(t, err)
 
 	// Generate server key pair
-	serverPrivKey, err := rsa.GenerateKey(crand.Reader, 2048)
+	serverPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	// Create server certificate
@@ -227,7 +227,7 @@ func generateTestCertificates(t *testing.T) (caCert, caKey, serverCert, serverKe
 	}
 
 	// Create server certificate signed by CA
-	serverBytes, err := x509.CreateCertificate(crand.Reader, server, ca, &serverPrivKey.PublicKey, caPrivKey)
+	serverBytes, err := x509.CreateCertificate(rand.Reader, server, ca, &serverPrivKey.PublicKey, caPrivKey)
 	require.NoError(t, err)
 
 	// Encode certificates and keys to PEM

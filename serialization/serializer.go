@@ -76,7 +76,6 @@ func (s *serializer) SendMetrics(ctx context.Context, metrics []*types.Prometheu
 
 	}
 	return nil
-
 }
 
 func (s *serializer) SendMetadata(_ context.Context, name string, unit string, help string, pType string) error {

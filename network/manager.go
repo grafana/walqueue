@@ -2,7 +2,6 @@ package network
 
 import (
 	"context"
-	"github.com/prometheus/common/config"
 	"net/http"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
 	"github.com/panjf2000/ants/v2"
+	"github.com/prometheus/common/config"
 	"golang.design/x/chann"
 )
 
@@ -115,7 +115,6 @@ func (s *manager) run(ctx context.Context) {
 		// and return ContinueExecution
 		flow := s.checkConfig(ctx)
 		if flow == Exit {
-
 			return
 		}
 		// Flush will check to see if we haven't sent data since the last flush.
@@ -197,7 +196,6 @@ func (s *manager) bufferMetaCheck(ctx context.Context) flowcontrol {
 		}
 	}
 	return ContinueExecution
-
 }
 
 func (s *manager) flushCheck(ctx context.Context) {

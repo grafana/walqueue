@@ -92,7 +92,7 @@ func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult
 	}
 
 	// Add required headers, which will override custom headers with the same name
-	httpReq.Header.Add("Content-Encoding", "snappy")
+	httpReq.Header.Set("Content-Encoding", "snappy")
 	httpReq.Header.Set("Content-Type", "application/x-protobuf")
 	httpReq.Header.Set("User-Agent", l.cfg.UserAgent)
 	httpReq.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")

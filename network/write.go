@@ -91,7 +91,7 @@ func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult
 		httpReq.Header.Set(key, value)
 	}
 
-	// Add required headers, which will override custom headers with the same name
+	// Set required headers, which will override custom headers with the same name
 	httpReq.Header.Set("Content-Encoding", "snappy")
 	httpReq.Header.Set("Content-Type", "application/x-protobuf")
 	httpReq.Header.Set("User-Agent", l.cfg.UserAgent)

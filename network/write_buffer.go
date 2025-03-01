@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -17,28 +18,36 @@ import (
 type writeBuffer[T types.Datum] struct {
 	items []T
 	// writeInProgress keeps track if there is a write request going out.
-	writeInProgress *atomic.Bool
-	wrBuf           []byte
-	snappyBuf       []byte
-	log             log.Logger
-	cfg             types.ConnectionConfig
-	stats           func(stats types.NetworkStats)
-	isMeta          bool
-	routinePool     *ants.Pool
-	client          *http.Client
+	writeInProgress   *atomic.Bool
+	wrBuf             []byte
+	snappyBuf         []byte
+	log               log.Logger
+	cfg               types.ConnectionConfig
+	stats             func(stats types.NetworkStats)
+	isMeta            bool
+	routinePool       *ants.Pool
+	client            *http.Client
+	pullFunc          func(ctx context.Context) (T, bool)
+	lastAttemptedSend time.Time
 }
 
 func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger, pool *ants.Pool, client *http.Client) *writeBuffer[T] {
 	return &writeBuffer[T]{
-		items:           make([]T, 0),
-		writeInProgress: atomic.NewBool(false),
-		cfg:             cfg,
-		stats:           stats,
-		isMeta:          isMeta,
-		log:             l,
-		routinePool:     pool,
-		client:          client,
+		items:             make([]T, 0),
+		writeInProgress:   atomic.NewBool(false),
+		cfg:               cfg,
+		stats:             stats,
+		isMeta:            isMeta,
+		log:               l,
+		routinePool:       pool,
+		client:            client,
+		lastAttemptedSend: time.Time{},
 	}
+}
+
+// RegisterPullFunc registers a function that will be used to pull data
+func (w *writeBuffer[T]) RegisterPullFunc(pullFunc func(ctx context.Context) (T, bool)) {
+	w.pullFunc = pullFunc
 }
 
 // ForceAdd is only used when we need to force items to the queue, this is generally done as part of a config change.
@@ -47,23 +56,41 @@ func (w *writeBuffer[T]) ForceAdd(ctx context.Context, item T) {
 	w.Send(ctx)
 }
 
-// Add will add to the buffer and then send if appropriate.
-func (w *writeBuffer[T]) Add(ctx context.Context, item T) bool {
-	// Check if adding to the buffer would put us over the batch count.
-	// Having a batch count batch*2+1 means we can have more data read to go.
-	if len(w.items)+1 > (w.cfg.BatchCount*2 + 1) {
-		// Try and send to see if we can. If there is already an outgoing request this
-		// does nothing. If not triggers a new one. We wont add the new record but this will attempt to kick
-		// off a request.
-		w.Send(ctx)
-		return false
+// PullAndProcess attempts to pull data from the source and process it
+func (w *writeBuffer[T]) PullAndProcess(ctx context.Context) {
+	// Try to get some items (up to batch size)
+	for len(w.items) < (w.cfg.BatchCount) {
+		// Need to check if ctx is canceled in this tight loop.
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		item, ok := w.pullFunc(ctx)
+		if !ok {
+			// No more items to pull
+			break
+		}
+		w.items = append(w.items, item)
 	}
-	w.items = append(w.items, item)
-	// Buffer has reached a valid size.
+
+	// If we have enough items, send them
 	if len(w.items) >= w.cfg.BatchCount {
 		w.Send(ctx)
 	}
-	return true
+}
+
+// Run starts the buffer processing loop
+func (w *writeBuffer[T]) Run(ctx context.Context) {
+	go func() {
+		for {
+			w.PullAndProcess(ctx)
+			if time.Since(w.lastAttemptedSend) > w.cfg.FlushInterval {
+				w.Send(ctx)
+			}
+		}
+	}()
 }
 
 // Drain returns any remaining items and sets the internal item array to 0 items.
@@ -78,6 +105,10 @@ func (w *writeBuffer[T]) Drain() []T {
 
 // Send is the externally safe to call send method. This method like all others is NOT thread safe.
 func (w *writeBuffer[T]) Send(ctx context.Context) {
+	defer func() {
+		w.lastAttemptedSend = time.Now()
+	}()
+
 	// Nothing to send so noop
 	if len(w.items) == 0 {
 		return
@@ -119,9 +150,10 @@ func (w *writeBuffer[T]) send(bb []byte, s signalsInfo, ctx context.Context) {
 
 // getItems will batch up to BatchCount items and return them, then truncate the internal items array.
 func (w *writeBuffer[T]) getItems() []T {
-	numberToSend := len(w.items)
-	if len(w.items) > w.cfg.BatchCount {
-		numberToSend = w.cfg.BatchCount
+	// Always use the exact batch count from config when possible
+	numberToSend := w.cfg.BatchCount
+	if len(w.items) < w.cfg.BatchCount {
+		numberToSend = len(w.items)
 	}
 	sendingItems := w.items[:numberToSend]
 	w.items = w.items[numberToSend:]

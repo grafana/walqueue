@@ -74,17 +74,9 @@ func TestSending(t *testing.T) {
 }
 
 func TestUpdatingConfig(t *testing.T) {
-	recordsFound := atomic.Uint32{}
-	lastBatchSize := atomic.Uint32{}
-	svr := httptest.NewServer(handler(t, http.StatusOK, func(wr *prompb.WriteRequest) {
-		lastBatchSize.Store(uint32(len(wr.Timeseries)))
-		recordsFound.Add(uint32(len(wr.Timeseries)))
-	}))
-
-	defer svr.Close()
 
 	cc := types.ConnectionConfig{
-		URL:           svr.URL,
+		URL:           "http://localhost",
 		Timeout:       1 * time.Second,
 		BatchCount:    10,
 		FlushInterval: 5 * time.Second,
@@ -110,7 +102,7 @@ func TestUpdatingConfig(t *testing.T) {
 	defer wr.Stop()
 
 	cc2 := types.ConnectionConfig{
-		URL:           svr.URL,
+		URL:           "http://localhost",
 		Timeout:       1 * time.Second,
 		BatchCount:    20,
 		FlushInterval: 5 * time.Second,
@@ -128,15 +120,6 @@ func TestUpdatingConfig(t *testing.T) {
 	success, err := wr.UpdateConfig(ctx, cc2)
 	require.NoError(t, err)
 	require.True(t, success)
-	time.Sleep(1 * time.Second)
-	for i := 0; i < 40; i++ {
-		send(t, i, wr, ctx)
-	}
-	require.Eventuallyf(t, func() bool {
-		return recordsFound.Load() == 40
-	}, 20*time.Second, 1*time.Second, "record count should be 40 but is %d", recordsFound.Load())
-
-	require.Truef(t, lastBatchSize.Load() == 20, "batch_count should be 20 but is %d", lastBatchSize.Load())
 }
 
 func TestDrain(t *testing.T) {

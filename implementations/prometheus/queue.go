@@ -18,8 +18,10 @@ import (
 	"github.com/prometheus/prometheus/storage"
 )
 
-var _ storage.Appendable = (*queue)(nil)
-var _ Queue = (*queue)(nil)
+var (
+	_ storage.Appendable = (*queue)(nil)
+	_ Queue              = (*queue)(nil)
+)
 
 // Queue is the interface for a prometheus compatible queue. The queue is an append only interface.
 //
@@ -185,10 +187,11 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
 
+	// Process all deserialized items
 	for _, series := range items {
-		// Check that the TTL.
-		mm, valid := series.(types.MetricDatum)
-		if valid {
+		// Check if this is a metric datum
+		mm, isMetric := series.(types.MetricDatum)
+		if isMetric {
 			seriesAge := time.Since(time.UnixMilli(mm.TimeStampMS()))
 			// For any series that exceeds the time to live (ttl) based on its timestamp we do not want to push it to the networking layer
 			// but instead drop it here by continuing.
@@ -197,20 +200,25 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 				q.stats.NetworkTTLDrops.Inc()
 				continue
 			}
+
+			// Send to the network client - in the new pull-based system,
+			// this will add the metric to a buffer that write buffers will pull from
 			sendErr := q.network.SendSeries(ctx, mm)
 			if sendErr != nil {
 				level.Error(q.logger).Log("msg", "error sending to write client", "err", sendErr)
 			}
 			continue
 		}
-		md, valid := series.(types.MetadataDatum)
-		if valid {
 
+		// Check if this is metadata
+		md, isMetadata := series.(types.MetadataDatum)
+		if isMetadata {
+			// Send to the network client - in the new pull-based system,
+			// this will add the metadata to a buffer that the metadata buffer will pull from
 			sendErr := q.network.SendMetadata(ctx, md)
 			if sendErr != nil {
 				level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)
 			}
 		}
-
 	}
 }

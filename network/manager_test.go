@@ -47,8 +47,8 @@ func TestSending(t *testing.T) {
 		FlushInterval: 1 * time.Second,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
-			MaxConnections:              4,
-			MinConnections:              4,
+			MaxConnections:              1,
+			MinConnections:              1,
 			ResetInterval:               5 * time.Minute,
 			Lookback:                    5 * time.Minute,
 			CheckInterval:               10 * time.Second,

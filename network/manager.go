@@ -29,8 +29,6 @@ type manager struct {
 	routinePool                                *ants.Pool
 	writeBufferRequestMoreMetrics              chan types.RequestMoreSignals[types.MetricDatum]
 	writeBufferRequestMoreMetadta              chan types.RequestMoreSignals[types.MetadataDatum]
-	metricsHashedBuffer                        map[int][]types.MetricDatum
-	metadata                                   []types.MetadataDatum
 	requestSignalsFromFileQueue                chan types.RequestMoreSignals[types.Datum]
 	responseFromRequestForSignalsFromFileQueue chan []types.Datum
 	pending                                    []types.Datum
@@ -58,8 +56,6 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 		desiredOutbox:                 desiredOutbox,
 		desiredParallelism:            p,
 		routinePool:                   goPool,
-		metadata:                      make([]types.MetadataDatum, 0),
-		metricsHashedBuffer:           make(map[int][]types.MetricDatum),
 		writeBufferRequestMoreMetrics: make(chan types.RequestMoreSignals[types.MetricDatum]),
 		writeBufferRequestMoreMetadta: make(chan types.RequestMoreSignals[types.MetadataDatum]),
 		requestSignalsFromFileQueue:   requestSignalsFromFileQueue,
@@ -112,12 +108,35 @@ func (s *manager) run(ctx context.Context) {
 
 	// We only want one outstanding request for data.
 	needMoreData := true
+	parkedRequests := make([]types.RequestMoreSignals[types.MetricDatum], 0)
+	var parkedMetadata *types.RequestMoreSignals[types.MetadataDatum]
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case items := <-s.responseFromRequestForSignalsFromFileQueue:
 			s.pending = append(s.pending, items...)
+			// Check out parked requests for more data
+			newParked := make([]types.RequestMoreSignals[types.MetricDatum], 0)
+			for _, req := range parkedRequests {
+				toSend := s.pullItemsFromQueueForMetrics(req)
+				// This means we didnt find anything, but we want to park the request until we get more.
+				if len(toSend) == 0 {
+					newParked = append(newParked, req)
+				} else {
+					req.Response <- toSend
+				}
+			}
+			parkedRequests = newParked
+			if parkedMetadata != nil {
+				toSend := s.handleWriteBufferRequestMetadata(*parkedMetadata)
+				// This means we didnt find anything, but we want to park the request until we get more.
+				if len(toSend) != 0 {
+					parkedMetadata.Response <- toSend
+					parkedMetadata = nil
+				}
+
+			}
 			needMoreData = true
 		case cfg, ok := <-s.configInbox.ReceiveC():
 			if !ok {
@@ -140,9 +159,22 @@ func (s *manager) run(ctx context.Context) {
 				level.Debug(s.logger).Log("msg", "update config failure", "err", err)
 			}
 		case req := <-s.writeBufferRequestMoreMetrics:
-			s.handleWriteBufferRequest(req)
+			toSend := s.pullItemsFromQueueForMetrics(req)
+			// This means we didnt find anything, but we want to park the request until we get more.
+			if len(toSend) == 0 {
+				parkedRequests = append(parkedRequests, req)
+			} else {
+				req.Response <- toSend
+			}
+
 		case req := <-s.writeBufferRequestMoreMetadta:
-			s.handleWriteBufferRequestMetadata(req)
+			toSend := s.handleWriteBufferRequestMetadata(req)
+			// This means we didnt find anything, but we want to park the request until we get more.
+			if len(toSend) == 0 {
+				parkedMetadata = &req
+			} else {
+				req.Response <- toSend
+			}
 		}
 		// If pending is empty then request more, ideally this gives us a batch count buffer of pending data.
 		// That way the next file can already be in memory.
@@ -153,55 +185,84 @@ func (s *manager) run(ctx context.Context) {
 	}
 }
 
-func (s *manager) handleWriteBufferRequest(req types.RequestMoreSignals[types.MetricDatum]) {
-	queue, ok := s.metricsHashedBuffer[req.ID]
-	// If we dont have a buffer build one
-	if !ok {
-		s.metricsHashedBuffer[req.ID] = make([]types.MetricDatum, 0, s.cfg.BatchCount)
-		queue = s.metricsHashedBuffer[req.ID]
+// pullItemsFromQueueForMetrics will pull items from queue for metrics
+func (s *manager) pullItemsFromQueueForMetrics(req types.RequestMoreSignals[types.MetricDatum]) []types.MetricDatum {
+	var toSend []types.MetricDatum
+	if req.Buffer != nil {
+		toSend = req.Buffer[:req.MaxCount]
+	} else {
+		toSend = make([]types.MetricDatum, req.MaxCount)
 	}
-	if len(queue) == 0 {
-		tmp := s.pending[:0]
-		// If our queue is empty then pull data from pending.
-		for _, signal := range s.pending {
-			switch m := signal.(type) {
-			case types.MetricDatum:
-				hash := int(m.Hash() % uint64(s.desiredConnections))
-				if hash != req.ID {
-					tmp = append(tmp, signal)
-					continue
-				}
-				queue = append(queue, m)
-				s.metricsHashedBuffer[hash] = queue
-			default:
-				tmp = append(tmp, signal)
+
+	if len(s.pending) == 0 {
+		return toSend[:0]
+	}
+
+	// Single allocation with in-place filtering
+	n := 0
+	trimIndex := 0
+	for i, signal := range s.pending {
+		if req.MaxCount == trimIndex {
+			// Copy the rest without filtering
+			copy(s.pending[n:], s.pending[i:])
+			n += len(s.pending) - i
+			break
+		}
+
+		if m, ok := signal.(types.MetricDatum); ok {
+			hash := int(m.Hash() % uint64(s.desiredConnections))
+			if hash == req.ID {
+				toSend[trimIndex] = m
+				trimIndex++
+				continue
 			}
 		}
-		s.pending = tmp
+		// Keep this item
+		s.pending[n] = signal
+		n++
 	}
-	toSend := queue[:min(len(queue), req.MaxCount)]
-	s.metricsHashedBuffer[req.ID] = queue[len(toSend):]
-	req.Response <- toSend
+
+	// Truncate the slice to the new size
+	s.pending = s.pending[:n]
+	return toSend[:trimIndex]
 }
 
-func (s *manager) handleWriteBufferRequestMetadata(req types.RequestMoreSignals[types.MetadataDatum]) {
-	if len(s.metadata) == 0 {
-		tmp := s.pending[:0]
-		// If our queue is empty then pull data from pending.
-		for _, signal := range s.pending {
-			switch m := signal.(type) {
-			case types.MetadataDatum:
-				s.metadata = append(s.metadata, m)
-			default:
-				tmp = append(tmp, signal)
-			}
-		}
-		s.pending = tmp
+func (s *manager) handleWriteBufferRequestMetadata(req types.RequestMoreSignals[types.MetadataDatum]) []types.MetadataDatum {
+	var toSend []types.MetadataDatum
+	if req.Buffer != nil {
+		toSend = req.Buffer
+	} else {
+		toSend = make([]types.MetadataDatum, req.MaxCount)
 	}
 
-	toSend := s.metadata[:min(len(s.metadata), req.MaxCount)]
-	s.metadata = s.metadata[len(toSend):]
-	req.Response <- toSend
+	if len(s.pending) == 0 {
+		return toSend[:0]
+	}
+
+	// Single allocation with in-place filtering
+	n := 0
+	trimIndex := 0
+	for i, signal := range s.pending {
+		if req.MaxCount == trimIndex {
+			// Copy the rest without filtering
+			copy(s.pending[n:], s.pending[i:])
+			n += len(s.pending) - i
+			break
+		}
+
+		if m, ok := signal.(types.MetadataDatum); ok {
+			toSend[trimIndex] = m
+			trimIndex++
+			continue
+		}
+		// Keep this item
+		s.pending[n] = signal
+		n++
+	}
+
+	// Truncate the slice to the new size
+	s.pending = s.pending[:n]
+	return toSend[:trimIndex]
 }
 
 func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, desiredConnections uint) error {
@@ -233,9 +294,9 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 	}
 
 	drainedMeta := s.metadataBuffer.Drain()
-
-	// Add drained metadata to our buffer
-	s.metadata = append(s.metadata, drainedMeta...)
+	for _, dm := range drainedMeta {
+		s.pending = append(s.pending, dm)
+	}
 
 	// Start the metadata buffer
 	s.metadataBuffer.Run(ctx)

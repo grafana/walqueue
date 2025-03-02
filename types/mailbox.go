@@ -35,4 +35,5 @@ type RequestMoreSignals[T Datum] struct {
 	ID       int
 	MaxCount int
 	Response chan []T
+	Buffer   []T
 }

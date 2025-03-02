@@ -31,6 +31,7 @@ type writeBuffer[T types.Datum] struct {
 	lastAttemptedSend time.Time
 	receive           chan []T
 	moreSignals       chan types.RequestMoreSignals[T]
+	requestBuffer     []T
 }
 
 func newWriteBuffer[T types.Datum](id int, cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger, pool *ants.Pool, client *http.Client, moreSignals chan types.RequestMoreSignals[T]) *writeBuffer[T] {
@@ -46,6 +47,7 @@ func newWriteBuffer[T types.Datum](id int, cfg types.ConnectionConfig, stats fun
 		lastAttemptedSend: time.Time{},
 		receive:           make(chan []T),
 		moreSignals:       moreSignals,
+		requestBuffer:     make([]T, cfg.BatchCount),
 	}
 }
 
@@ -66,12 +68,13 @@ func (w *writeBuffer[T]) Run(ctx context.Context) {
 		ticker := time.NewTicker(1 * time.Second)
 
 		for {
-			if !askingForMore {
+			if !askingForMore && len(w.items) < w.cfg.BatchCount {
 				// Signal that we are ready for more data
 				w.moreSignals <- types.RequestMoreSignals[T]{
 					ID:       w.id,
 					MaxCount: w.cfg.BatchCount - len(w.items),
 					Response: w.receive,
+					Buffer:   w.requestBuffer[:w.cfg.BatchCount-len(w.items)],
 				}
 				askingForMore = true
 			}
@@ -86,6 +89,7 @@ func (w *writeBuffer[T]) Run(ctx context.Context) {
 					w.attemptSend(ctx)
 				}
 				askingForMore = false
+				w.requestBuffer = w.requestBuffer[:0]
 				w.mut.Unlock()
 			case <-ticker.C:
 				if time.Since(w.lastAttemptedSend) > w.cfg.FlushInterval {

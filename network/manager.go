@@ -117,17 +117,8 @@ func (s *manager) run(ctx context.Context) {
 		case items := <-s.responseFromRequestForSignalsFromFileQueue:
 			s.pending = append(s.pending, items...)
 			// Check out parked requests for more data
-			newParked := make([]types.RequestMoreSignals[types.MetricDatum], 0)
-			for _, req := range parkedRequests {
-				toSend := s.pullItemsFromQueueForMetrics(req)
-				// This means we didnt find anything, but we want to park the request until we get more.
-				if len(toSend) == 0 {
-					newParked = append(newParked, req)
-				} else {
-					req.Response <- toSend
-				}
-			}
-			parkedRequests = newParked
+			parkedRequests = s.pullItemsFromQueueForMetrics(parkedRequests)
+
 			if parkedMetadata != nil {
 				toSend := s.handleWriteBufferRequestMetadata(*parkedMetadata)
 				// This means we didnt find anything, but we want to park the request until we get more.
@@ -159,13 +150,8 @@ func (s *manager) run(ctx context.Context) {
 				level.Debug(s.logger).Log("msg", "update config failure", "err", err)
 			}
 		case req := <-s.writeBufferRequestMoreMetrics:
-			toSend := s.pullItemsFromQueueForMetrics(req)
-			// This means we didnt find anything, but we want to park the request until we get more.
-			if len(toSend) == 0 {
-				parkedRequests = append(parkedRequests, req)
-			} else {
-				req.Response <- toSend
-			}
+			parked := s.pullItemsFromQueueForMetrics([]types.RequestMoreSignals[types.MetricDatum]{req})
+			parkedRequests = append(parkedRequests, parked...)
 
 		case req := <-s.writeBufferRequestMoreMetadta:
 			toSend := s.handleWriteBufferRequestMetadata(req)
@@ -186,45 +172,69 @@ func (s *manager) run(ctx context.Context) {
 }
 
 // pullItemsFromQueueForMetrics will pull items from queue for metrics
-func (s *manager) pullItemsFromQueueForMetrics(req types.RequestMoreSignals[types.MetricDatum]) []types.MetricDatum {
-	var toSend []types.MetricDatum
-	if req.Buffer != nil {
-		toSend = req.Buffer[:req.MaxCount]
-	} else {
-		toSend = make([]types.MetricDatum, req.MaxCount)
-	}
-
+func (s *manager) pullItemsFromQueueForMetrics(reqs []types.RequestMoreSignals[types.MetricDatum]) []types.RequestMoreSignals[types.MetricDatum] {
 	if len(s.pending) == 0 {
-		return toSend[:0]
+		return reqs
+	}
+	reqMap := make(map[int]types.RequestMoreSignals[types.MetricDatum])
+	reqIndex := make(map[int]int)
+	for _, req := range reqs {
+		if req.Buffer != nil {
+			req.Buffer = req.Buffer[:req.MaxCount]
+		} else {
+			req.Buffer = make([]types.MetricDatum, req.MaxCount)
+		}
+		reqMap[req.ID] = req
+		reqIndex[req.ID] = 0
 	}
 
 	// Single allocation with in-place filtering
-	n := 0
-	trimIndex := 0
-	for i, signal := range s.pending {
-		if req.MaxCount == trimIndex {
-			// Copy the rest without filtering
-			copy(s.pending[n:], s.pending[i:])
-			n += len(s.pending) - i
-			break
-		}
-
+	pendingIndex := 0
+	for _, signal := range s.pending {
 		if m, ok := signal.(types.MetricDatum); ok {
 			hash := int(m.Hash() % uint64(s.desiredConnections))
-			if hash == req.ID {
-				toSend[trimIndex] = m
-				trimIndex++
+			req, found := reqMap[hash]
+			if !found {
+				// Keep this item
+				s.pending[pendingIndex] = signal
+				pendingIndex++
 				continue
 			}
+			// We only want to feel up to our max count so if we hit that level then add back to pending.
+			if reqIndex[hash] == req.MaxCount {
+				s.pending[pendingIndex] = signal
+				pendingIndex++
+			} else {
+				cnt := reqIndex[hash]
+				req.Buffer[cnt] = m
+				reqIndex[hash]++
+			}
+		} else {
+			// Keep this item
+			s.pending[pendingIndex] = signal
+			pendingIndex++
 		}
-		// Keep this item
-		s.pending[n] = signal
-		n++
+
 	}
 
 	// Truncate the slice to the new size
-	s.pending = s.pending[:n]
-	return toSend[:trimIndex]
+	s.pending = s.pending[:pendingIndex]
+	parked := make([]types.RequestMoreSignals[types.MetricDatum], 0)
+	for id, count := range reqIndex {
+		if count == 0 {
+			parked = append(parked, reqMap[id])
+		} else {
+			buf := reqMap[id].Buffer[:count]
+			for _, m := range buf {
+				if m == nil {
+					println("nil buffer")
+				}
+			}
+			reqMap[id].Response <- buf
+		}
+
+	}
+	return parked
 }
 
 func (s *manager) handleWriteBufferRequestMetadata(req types.RequestMoreSignals[types.MetadataDatum]) []types.MetadataDatum {

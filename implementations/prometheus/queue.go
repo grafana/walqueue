@@ -141,16 +141,34 @@ func (q *queue) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case file, ok := <-q.incoming.ReceiveC():
+		case req, ok := <-q.networkRequestMoreSignals:
 			if !ok {
 				return
 			}
-			meta, buf, err := file.Pop()
-			if err != nil {
-				level.Error(q.logger).Log("msg", "unable to get file contents", "name", file.Name, "err", err)
-				continue
+			consume := true
+			for consume {
+				select {
+				case <-ctx.Done():
+					return
+				case file, fileOk := <-q.incoming.ReceiveC():
+					if !fileOk {
+						return
+					}
+					meta, buf, err := file.Pop()
+					if err != nil {
+						level.Error(q.logger).Log("msg", "unable to get file contents", "name", file.Name, "err", err)
+						continue
+					}
+					items := q.deserializeAndSend(meta, buf)
+					// This is to handle the case where we dont get any items, we want to move on to the next file.
+					// This is generally due to some problem reading the file.
+					if len(items) == 0 {
+						continue
+					}
+					req.Response <- items
+					consume = false
+				}
 			}
-			q.deserializeAndSend(ctx, meta, buf)
 		}
 	}
 }
@@ -160,11 +178,11 @@ func (q *queue) Appender(ctx context.Context) storage.Appender {
 	return serialization.NewAppender(ctx, 0, q.serializer, q.externalLabels, q.logger)
 }
 
-func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, buf []byte) {
+func (q *queue) deserializeAndSend(meta map[string]string, buf []byte) []types.Datum {
 	uncompressedBuf, err := snappy.Decode(nil, buf)
 	if err != nil {
 		level.Debug(q.logger).Log("msg", "error snappy decoding", "err", err)
-		return
+		return nil
 	}
 	// The version of each file is in the metadata. Right now there is only one version
 	// supported but in the future the ability to support more. Along with different
@@ -172,7 +190,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	version, ok := meta["version"]
 	if !ok {
 		level.Error(q.logger).Log("msg", "version not found for deserialization")
-		return
+		return nil
 	}
 	var items []types.Datum
 	var s types.Unmarshaller
@@ -185,8 +203,9 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		items, err = s.Unmarshal(meta, uncompressedBuf)
 	default:
 		level.Error(q.logger).Log("msg", "invalid version found for deserialization", "version", version)
-		return
+		return nil
 	}
+	// explicitly set the uncompressed buf so that it can be reclaimed.
 	if err != nil {
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
@@ -217,11 +236,5 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 			continue
 		}
 	}
-	// Wait to send more data.
-	select {
-	case <-ctx.Done():
-		return
-	case req := <-q.networkRequestMoreSignals:
-		req.Response <- pending
-	}
+	return items
 }

@@ -13,10 +13,6 @@ import (
 type NetworkClient interface {
 	Start(ctx context.Context)
 	Stop()
-	// SendSeries will block if the network caches are full.
-	SendSeries(ctx context.Context, d MetricDatum) error
-	// SendMetadata will block if the network caches are full.
-	SendMetadata(ctx context.Context, d MetadataDatum) error
 	// UpdateConfig is a synchronous call and will only return once the config
 	// is applied or an error occurs.
 	UpdateConfig(ctx context.Context, cfg ConnectionConfig) (bool, error)

@@ -38,15 +38,16 @@ type Queue interface {
 
 // queue is a simple example of using the wal queue.
 type queue struct {
-	network        types.NetworkClient
-	queue          types.FileStorage
-	logger         log.Logger
-	serializer     types.PrometheusSerializer
-	ttl            time.Duration
-	incoming       *types.Mailbox[types.DataHandle]
-	stats          *Stats
-	metaStats      *Stats
-	externalLabels map[string]string
+	network                   types.NetworkClient
+	queue                     types.FileStorage
+	logger                    log.Logger
+	serializer                types.PrometheusSerializer
+	ttl                       time.Duration
+	incoming                  *types.Mailbox[types.DataHandle]
+	stats                     *Stats
+	metaStats                 *Stats
+	externalLabels            map[string]string
+	networkRequestMoreSignals chan types.RequestMoreSignals[types.Datum]
 }
 
 // NewQueue creates and returns a new Queue instance, initializing its components
@@ -76,19 +77,22 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	seriesStats.SeriesBackwardsCompatibility(reg)
 	meta := NewStats("alloy", "queue_metadata", true, reg, statshub)
 	meta.MetaBackwardsCompatibility(reg)
+	// the length 1 allows a buffer of one file, setting to zero will starve and block the queue.
+	networkRequestMoreSignals := make(chan types.RequestMoreSignals[types.Datum], 1)
 
-	networkClient, err := network.New(cc, logger, statshub)
+	networkClient, err := network.New(cc, logger, statshub, networkRequestMoreSignals)
 	if err != nil {
 		return nil, err
 	}
 	q := &queue{
-		incoming:       types.NewMailbox[types.DataHandle](),
-		stats:          seriesStats,
-		metaStats:      meta,
-		network:        networkClient,
-		logger:         logger,
-		ttl:            ttl,
-		externalLabels: cc.ExternalLabels,
+		incoming:                  types.NewMailbox[types.DataHandle](),
+		stats:                     seriesStats,
+		metaStats:                 meta,
+		network:                   networkClient,
+		logger:                    logger,
+		ttl:                       ttl,
+		networkRequestMoreSignals: networkRequestMoreSignals,
+		externalLabels:            cc.ExternalLabels,
 	}
 	fq, err := filequeue.NewQueue(directory, func(ctx context.Context, dh types.DataHandle) {
 		sendErr := q.incoming.Send(ctx, dh)
@@ -187,6 +191,8 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
 
+	pending := make([]types.Datum, 0, len(items))
+
 	// Process all deserialized items
 	for _, series := range items {
 		// Check if this is a metric datum
@@ -200,25 +206,22 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 				q.stats.NetworkTTLDrops.Inc()
 				continue
 			}
-
-			// Send to the network client - in the new pull-based system,
-			// this will add the metric to a buffer that write buffers will pull from
-			sendErr := q.network.SendSeries(ctx, mm)
-			if sendErr != nil {
-				level.Error(q.logger).Log("msg", "error sending to write client", "err", sendErr)
-			}
+			pending = append(pending, mm)
 			continue
 		}
 
 		// Check if this is metadata
 		md, isMetadata := series.(types.MetadataDatum)
 		if isMetadata {
-			// Send to the network client - in the new pull-based system,
-			// this will add the metadata to a buffer that the metadata buffer will pull from
-			sendErr := q.network.SendMetadata(ctx, md)
-			if sendErr != nil {
-				level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)
-			}
+			pending = append(pending, md)
+			continue
 		}
+	}
+	// Wait to send more data.
+	select {
+	case <-ctx.Done():
+		return
+	case req := <-q.networkRequestMoreSignals:
+		req.Response <- pending
 	}
 }

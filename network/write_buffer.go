@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -10,15 +11,15 @@ import (
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	"github.com/panjf2000/ants/v2"
-	"go.uber.org/atomic"
 )
 
 // writeBuffer handles buffering the data, keeping track if there is a write request already running and kicking off the
 // write request as needed. All methods need to be called in a thread safe manner.
 type writeBuffer[T types.Datum] struct {
-	items []T
-	// writeInProgress keeps track if there is a write request going out.
-	writeInProgress   *atomic.Bool
+	// mut I hate this mutex, but the only called should be on when it needs to drain which should not have any contention.
+	mut               sync.RWMutex
+	id                int
+	items             []T
 	wrBuf             []byte
 	snappyBuf         []byte
 	log               log.Logger
@@ -27,14 +28,15 @@ type writeBuffer[T types.Datum] struct {
 	isMeta            bool
 	routinePool       *ants.Pool
 	client            *http.Client
-	pullFunc          func(ctx context.Context) (T, bool)
 	lastAttemptedSend time.Time
+	receive           chan []T
+	moreSignals       chan types.RequestMoreSignals[T]
 }
 
-func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger, pool *ants.Pool, client *http.Client) *writeBuffer[T] {
+func newWriteBuffer[T types.Datum](id int, cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger, pool *ants.Pool, client *http.Client, moreSignals chan types.RequestMoreSignals[T]) *writeBuffer[T] {
 	return &writeBuffer[T]{
+		id:                id,
 		items:             make([]T, 0),
-		writeInProgress:   atomic.NewBool(false),
 		cfg:               cfg,
 		stats:             stats,
 		isMeta:            isMeta,
@@ -42,52 +44,55 @@ func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networ
 		routinePool:       pool,
 		client:            client,
 		lastAttemptedSend: time.Time{},
+		receive:           make(chan []T),
+		moreSignals:       moreSignals,
 	}
-}
-
-// RegisterPullFunc registers a function that will be used to pull data
-func (w *writeBuffer[T]) RegisterPullFunc(pullFunc func(ctx context.Context) (T, bool)) {
-	w.pullFunc = pullFunc
 }
 
 // ForceAdd is only used when we need to force items to the queue, this is generally done as part of a config change.
 func (w *writeBuffer[T]) ForceAdd(ctx context.Context, item T) {
+	w.mut.Lock()
+	defer w.mut.Unlock()
+
 	w.items = append(w.items, item)
-	w.Send(ctx)
 }
 
-// PullAndProcess attempts to pull data from the source and process it
-func (w *writeBuffer[T]) PullAndProcess(ctx context.Context) {
-	// Try to get some items (up to batch size)
-	for len(w.items) < (w.cfg.BatchCount) {
-		// Need to check if ctx is canceled in this tight loop.
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		item, ok := w.pullFunc(ctx)
-		if !ok {
-			// No more items to pull
-			break
-		}
-		w.items = append(w.items, item)
-	}
-
-	// If we have enough items, send them
-	if len(w.items) >= w.cfg.BatchCount {
-		w.Send(ctx)
-	}
-}
-
-// Run starts the buffer processing loop
+// Run starts the buffer processing loop.
 func (w *writeBuffer[T]) Run(ctx context.Context) {
 	go func() {
+		// The ticker makes this slightly awkward, basically if we have an outstanding ask for more signals
+		// we dont want to queue another until we have received the most recent one.
+		askingForMore := false
+		ticker := time.NewTicker(1 * time.Second)
+
 		for {
-			w.PullAndProcess(ctx)
-			if time.Since(w.lastAttemptedSend) > w.cfg.FlushInterval {
-				w.Send(ctx)
+			if !askingForMore {
+				// Signal that we are ready for more data
+				w.moreSignals <- types.RequestMoreSignals[T]{
+					ID:       w.id,
+					MaxCount: w.cfg.BatchCount - len(w.items),
+					Response: w.receive,
+				}
+				askingForMore = true
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case items := <-w.receive:
+				w.mut.Lock()
+				w.items = append(w.items, items...)
+				if len(w.items) >= w.cfg.BatchCount {
+					w.attemptSend(ctx)
+				}
+				askingForMore = false
+				w.mut.Unlock()
+			case <-ticker.C:
+				if time.Since(w.lastAttemptedSend) > w.cfg.FlushInterval {
+					w.mut.Lock()
+					w.attemptSend(ctx)
+					w.mut.Unlock()
+				}
 			}
 		}
 	}()
@@ -95,6 +100,9 @@ func (w *writeBuffer[T]) Run(ctx context.Context) {
 
 // Drain returns any remaining items and sets the internal item array to 0 items.
 func (w *writeBuffer[T]) Drain() []T {
+	w.mut.Lock()
+	defer w.mut.Unlock()
+
 	items := make([]T, len(w.items))
 	copy(items, w.items)
 	// We could likely nil this out since this is only called when its being turned off
@@ -103,36 +111,30 @@ func (w *writeBuffer[T]) Drain() []T {
 	return items
 }
 
-// Send is the externally safe to call send method. This method like all others is NOT thread safe.
-func (w *writeBuffer[T]) Send(ctx context.Context) {
+func (w *writeBuffer[T]) attemptSend(ctx context.Context) {
 	defer func() {
 		w.lastAttemptedSend = time.Now()
 	}()
 
-	// Nothing to send so noop
-	if len(w.items) == 0 {
+	// Write in progress tells us if there is a write client in progress, if false then we can right.
+	sendingItems := w.getItems()
+	if len(sendingItems) == 0 {
 		return
 	}
-	// Write in progress tells us if there is a write client in progress, if false then we can right.
-	if !w.writeInProgress.Load() {
-		sendingItems := w.getItems()
-		// About to kick off a write request so the write is no longer available.
-		w.writeInProgress.Store(true)
-		// This will block until a worker frees up.
-		w.routinePool.Submit(func() {
-			defer w.writeInProgress.Store(false)
-			s := newSignalsInfo[T](sendingItems)
-			var err error
-			w.snappyBuf, w.wrBuf, err = buildWriteRequest[T](sendingItems, w.snappyBuf, w.wrBuf)
-			// If the build write request fails then we should pretend it worked. Since this should only trigger if
-			// we get invalid datums.
-			if err != nil {
-				level.Error(w.log).Log("msg", "error building write request", "err", err)
-				return
-			}
-			w.send(w.snappyBuf, s, ctx)
-		})
-	}
+	// This will block until a worker frees up.
+
+	w.routinePool.Submit(func() {
+		s := newSignalsInfo[T](sendingItems)
+		var err error
+		w.snappyBuf, w.wrBuf, err = buildWriteRequest[T](sendingItems, w.snappyBuf, w.wrBuf)
+		// If the build write request fails then we should pretend it worked. Since this should only trigger if
+		// we get invalid datums.
+		if err != nil {
+			level.Error(w.log).Log("msg", "error building write request", "err", err)
+			return
+		}
+		w.send(w.snappyBuf, s, ctx)
+	})
 }
 
 func (w *writeBuffer[T]) send(bb []byte, s signalsInfo, ctx context.Context) {

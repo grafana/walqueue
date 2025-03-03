@@ -42,6 +42,14 @@ type Stats struct {
 	SerializerNewestInTimeStampSeconds prometheus.Gauge
 	SerializerErrors                   prometheus.Counter
 
+	FileIDWritten            prometheus.Gauge
+	CompressedBytesWritten   prometheus.Gauge
+	UncompressedBytesWritten prometheus.Gauge
+
+	FileIDRead            prometheus.Gauge
+	CompressedBytesRead   prometheus.Gauge
+	UncompressedBytesRead prometheus.Gauge
+
 	// Backwards compatibility metrics
 	SamplesTotal    prometheus.Counter
 	HistogramsTotal prometheus.Counter
@@ -104,6 +112,36 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "serializer_errors",
+		}),
+		FileIDWritten: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "file_id_written",
+		}),
+		UncompressedBytesWritten: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "disk_uncompressed_bytes_written",
+		}),
+		CompressedBytesWritten: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "disk_compressed_bytes_written",
+		}),
+		FileIDRead: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "file_id_read",
+		}),
+		UncompressedBytesRead: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "disk_uncompressed_bytes_read",
+		}),
+		CompressedBytesRead: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "disk_compressed_bytes_read",
 		}),
 		NetworkNewestOutTimeStampSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
@@ -251,6 +289,12 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		s.SerializerInSeries,
 		s.SerializerErrors,
 		s.SerializerNewestInTimeStampSeconds,
+		s.FileIDRead,
+		s.UncompressedBytesRead,
+		s.CompressedBytesRead,
+		s.FileIDWritten,
+		s.UncompressedBytesWritten,
+		s.CompressedBytesWritten,
 		s.TimestampDriftSeconds,
 	)
 	// Metadata doesn't scale, it has one dedicated connection.
@@ -290,6 +334,12 @@ func (s *Stats) Unregister() {
 		s.SerializerInSeries,
 		s.SerializerErrors,
 		s.SerializerNewestInTimeStampSeconds,
+		s.FileIDRead,
+		s.UncompressedBytesRead,
+		s.CompressedBytesRead,
+		s.FileIDWritten,
+		s.UncompressedBytesWritten,
+		s.CompressedBytesWritten,
 		s.TimestampDriftSeconds,
 		s.RemoteStorageSentBytesTotal,
 		s.SentBatchDuration,
@@ -384,6 +434,17 @@ func (s *Stats) UpdateSerializer(stats types.SerializerStats) {
 		s.SerializerNewestInTimeStampSeconds.Set(float64(stats.NewestTimestampSeconds))
 		s.RemoteStorageInTimestamp.Set(float64(stats.NewestTimestampSeconds))
 	}
+	// File ID may not exist so if it doesnt, then -1 is sent
+	if stats.FileIDRead >= 0 {
+		s.FileIDRead.Set(float64(stats.FileIDRead))
+	}
+	if stats.FileIDWritten >= 0 {
+		s.FileIDWritten.Set(float64(stats.FileIDWritten))
+	}
+	s.UncompressedBytesWritten.Add(float64(stats.UncompressedBytesWritten))
+	s.CompressedBytesWritten.Add(float64(stats.CompressedBytesWritten))
+	s.UncompressedBytesRead.Add(float64(stats.UncompressedBytesRead))
+	s.CompressedBytesRead.Add(float64(stats.UncompressedBytesRead))
 }
 
 func (s *Stats) UpdateParralelism(stats types.ParralelismStats) {

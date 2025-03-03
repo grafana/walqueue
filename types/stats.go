@@ -26,11 +26,17 @@ type ParralelismStats struct {
 }
 
 type SerializerStats struct {
-	SeriesStored           int
-	MetadataStored         int
-	Errors                 int
-	NewestTimestampSeconds int64
-	TTLDropped             int
+	SeriesStored             int
+	MetadataStored           int
+	Errors                   int
+	NewestTimestampSeconds   int64
+	TTLDropped               int
+	UncompressedBytesWritten int
+	CompressedBytesWritten   int
+	FileIDWritten            int
+	UncompressedBytesRead    int
+	CompressedBytesRead      int
+	FileIDRead               int
 }
 
 type NetworkStats struct {

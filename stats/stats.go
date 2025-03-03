@@ -17,7 +17,7 @@ type stats struct {
 	seriesNetwork   map[int]func(types.NetworkStats)
 	metadataNetwork map[int]func(types.NetworkStats)
 	serializer      map[int]func(types.SerializerStats)
-	parralelism     map[int]func(types.ParralelismStats)
+	parralelism     map[int]func(types.ParallelismStats)
 	index           int
 }
 
@@ -26,7 +26,7 @@ func NewStats() types.StatsHub {
 		seriesNetwork:   make(map[int]func(types.NetworkStats)),
 		serializer:      make(map[int]func(types.SerializerStats)),
 		metadataNetwork: make(map[int]func(types.NetworkStats)),
-		parralelism:     make(map[int]func(types.ParralelismStats)),
+		parralelism:     make(map[int]func(types.ParallelismStats)),
 	}
 }
 
@@ -78,7 +78,7 @@ func (s *stats) RegisterSerializer(f func(types.SerializerStats)) types.Notifica
 	}
 }
 
-func (s *stats) RegisterParralelism(f func(types.ParralelismStats)) types.NotificationRelease {
+func (s *stats) RegisterParallelism(f func(types.ParallelismStats)) types.NotificationRelease {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -121,7 +121,7 @@ func (s *stats) SendMetadataNetworkStats(st types.NetworkStats) {
 	}
 }
 
-func (s *stats) SendParralelismStats(st types.ParralelismStats) {
+func (s *stats) SendParallelismStats(st types.ParallelismStats) {
 	s.mut.RLock()
 	defer s.mut.RUnlock()
 

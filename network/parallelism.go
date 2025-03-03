@@ -104,7 +104,7 @@ func (p *parallelism) Run(ctx context.Context) {
 func (p *parallelism) run(ctx context.Context) {
 	p.mut.Lock()
 	p.ctx = ctx
-	p.statshub.SendParralelismStats(types.ParralelismStats{
+	p.statshub.SendParallelismStats(types.ParallelismStats{
 		MinConnections:     p.cfg.MinConnections,
 		MaxConnections:     p.cfg.MaxConnections,
 		DesiredConnections: p.currentDesired,
@@ -130,7 +130,7 @@ func (p *parallelism) UpdateConfig(cfg types.ParallelismConfig) {
 	p.mut.Lock()
 	defer p.mut.Unlock()
 	p.cfg = cfg
-	p.statshub.SendParralelismStats(types.ParralelismStats{
+	p.statshub.SendParallelismStats(types.ParallelismStats{
 		MinConnections:     p.cfg.MinConnections,
 		MaxConnections:     p.cfg.MaxConnections,
 		DesiredConnections: p.currentDesired,
@@ -231,7 +231,7 @@ func (p *parallelism) calculateDesiredParallelism(desired uint) {
 			desired:  desired,
 			recorded: time.Now(),
 		})
-		p.statshub.SendParralelismStats(types.ParralelismStats{
+		p.statshub.SendParallelismStats(types.ParallelismStats{
 			MaxConnections:     p.cfg.MaxConnections,
 			MinConnections:     p.cfg.MinConnections,
 			DesiredConnections: desired,

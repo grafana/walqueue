@@ -9,17 +9,17 @@ type StatsHub interface {
 	SendSeriesNetworkStats(NetworkStats)
 	SendSerializerStats(SerializerStats)
 	SendMetadataNetworkStats(NetworkStats)
-	SendParralelismStats(stats ParralelismStats)
+	SendParallelismStats(stats ParallelismStats)
 
 	RegisterSeriesNetwork(func(NetworkStats)) NotificationRelease
 	RegisterMetadataNetwork(func(NetworkStats)) NotificationRelease
 	RegisterSerializer(func(SerializerStats)) NotificationRelease
-	RegisterParralelism(func(ParralelismStats)) NotificationRelease
+	RegisterParallelism(func(ParallelismStats)) NotificationRelease
 }
 
 type NotificationRelease func()
 
-type ParralelismStats struct {
+type ParallelismStats struct {
 	MinConnections     uint
 	MaxConnections     uint
 	DesiredConnections uint
@@ -31,6 +31,9 @@ type SerializerStats struct {
 	Errors                 int
 	NewestTimestampSeconds int64
 	TTLDropped             int
+	UncompressedBytes      int
+	CompressedBytes        int
+	FileID                 int
 }
 
 type NetworkStats struct {

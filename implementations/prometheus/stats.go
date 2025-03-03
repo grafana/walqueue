@@ -237,7 +237,7 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		s.networkRelease = s.stats.RegisterSeriesNetwork(s.UpdateNetwork)
 	}
 	s.serialRelease = s.stats.RegisterSerializer(s.UpdateSerializer)
-	s.parallelismRelease = s.stats.RegisterParralelism(s.UpdateParralelism)
+	s.parallelismRelease = s.stats.RegisterParallelism(s.UpdateParralelism)
 	registry.MustRegister(
 		s.NetworkSentDuration,
 		s.NetworkRetries5XX,
@@ -386,7 +386,7 @@ func (s *Stats) UpdateSerializer(stats types.SerializerStats) {
 	}
 }
 
-func (s *Stats) UpdateParralelism(stats types.ParralelismStats) {
+func (s *Stats) UpdateParralelism(stats types.ParallelismStats) {
 	s.ParallelismMax.Set(float64(stats.MaxConnections))
 	s.ParallelismMin.Set(float64(stats.MinConnections))
 	s.ParallelismDesired.Set(float64(stats.DesiredConnections))

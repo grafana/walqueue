@@ -245,7 +245,7 @@ type testStatsHub struct{}
 func (s *testStatsHub) SendSeriesNetworkStats(stats types.NetworkStats)   {}
 func (s *testStatsHub) SendSerializerStats(stats types.SerializerStats)   {}
 func (s *testStatsHub) SendMetadataNetworkStats(stats types.NetworkStats) {}
-func (s *testStatsHub) SendParralelismStats(stats types.ParralelismStats) {}
+func (s *testStatsHub) SendParallelismStats(stats types.ParallelismStats) {}
 func (s *testStatsHub) RegisterSeriesNetwork(f func(types.NetworkStats)) types.NotificationRelease {
 	return func() {}
 }
@@ -258,6 +258,6 @@ func (s *testStatsHub) RegisterSerializer(f func(types.SerializerStats)) types.N
 	return func() {}
 }
 
-func (s *testStatsHub) RegisterParralelism(f func(types.ParralelismStats)) types.NotificationRelease {
+func (s *testStatsHub) RegisterParallelism(f func(types.ParallelismStats)) types.NotificationRelease {
 	return func() {}
 }

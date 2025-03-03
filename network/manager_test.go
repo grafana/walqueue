@@ -521,11 +521,11 @@ type fakestats struct {
 	nonrecoverable *atomic.Int32
 }
 
-func (fs fakestats) SendParralelismStats(stats types.ParralelismStats) {
+func (fs fakestats) SendParallelismStats(stats types.ParallelismStats) {
 
 }
 
-func (fs fakestats) RegisterParralelism(f func(types.ParralelismStats)) types.NotificationRelease {
+func (fs fakestats) RegisterParallelism(f func(types.ParallelismStats)) types.NotificationRelease {
 	return func() {
 
 	}

@@ -300,11 +300,11 @@ type parStats struct {
 	serial  func(types.SerializerStats)
 }
 
-func (f parStats) SendParralelismStats(stats types.ParralelismStats) {
+func (f parStats) SendParallelismStats(stats types.ParallelismStats) {
 
 }
 
-func (f parStats) RegisterParralelism(f2 func(types.ParralelismStats)) types.NotificationRelease {
+func (f parStats) RegisterParallelism(f2 func(types.ParallelismStats)) types.NotificationRelease {
 	return func() {
 
 	}

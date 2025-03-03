@@ -85,22 +85,27 @@ func (s *serializer) Finished() {
 
 func (s *serializer) flushToDisk(ctx context.Context) error {
 	var err error
+	uncompressed := 0
+	compressed := 0
+
 	defer func() {
-		s.storeStats(err)
+		s.storeStats(err, uncompressed, compressed)
 	}()
 
 	var out []byte
 	err = s.ser.Marshal(func(meta map[string]string, buf []byte) error {
+		uncompressed = len(buf)
 		meta["version"] = string(types.AlloyFileVersionV2)
 		meta["compression"] = "snappy"
 		// TODO: reusing a buffer here likely increases performance.
 		out = snappy.Encode(nil, buf)
+		compressed = len(out)
 		return s.queue.Store(ctx, meta, out)
 	})
 	return err
 }
 
-func (s *serializer) storeStats(err error) {
+func (s *serializer) storeStats(err error, uncompressed int, compressed int) {
 	defer func() {
 		s.seriesCount = 0
 		s.metadataCount = 0
@@ -111,9 +116,11 @@ func (s *serializer) storeStats(err error) {
 	}
 
 	s.stats(types.SerializerStats{
-		SeriesStored:           s.seriesCount,
-		MetadataStored:         s.metadataCount,
-		Errors:                 hasError,
-		NewestTimestampSeconds: time.UnixMilli(s.newestTS).Unix(),
+		SeriesStored:             s.seriesCount,
+		MetadataStored:           s.metadataCount,
+		Errors:                   hasError,
+		NewestTimestampSeconds:   time.UnixMilli(s.newestTS).Unix(),
+		UncompressedBytesWritten: uncompressed,
+		CompressedBytesWritten:   compressed,
 	})
 }

@@ -18,7 +18,7 @@ func BenchmarkWriteFile(b *testing.B) {
 	mbx := types.NewMailbox[types.DataHandle]()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
-	}, log)
+	}, &fakestats{}, log)
 	require.NoError(b, err)
 	ctx, cncl := context.WithCancel(context.Background())
 	defer cncl()

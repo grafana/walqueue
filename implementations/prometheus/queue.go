@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/go-kit/log"
@@ -98,7 +99,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		if sendErr != nil {
 			level.Error(logger).Log("msg", "failed to send to incoming", "err", sendErr)
 		}
-	}, logger)
+	}, statshub, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -152,11 +153,28 @@ func (q *queue) Appender(ctx context.Context) storage.Appender {
 }
 
 func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, buf []byte) {
+	compressedBytes := len(buf)
 	uncompressedBuf, err := snappy.Decode(nil, buf)
 	if err != nil {
 		level.Debug(q.logger).Log("msg", "error snappy decoding", "err", err)
 		return
 	}
+	uncompressedBytes := len(uncompressedBuf)
+	defer func() {
+		fileID := -1
+		strId, found := meta["file_id"]
+		if !found {
+			fileID, err = strconv.Atoi(strId)
+			if err != nil {
+				fileID = -1
+			}
+		}
+		q.stats.UpdateSerializer(types.SerializerStats{
+			FileIDRead:            fileID,
+			UncompressedBytesRead: uncompressedBytes,
+			CompressedBytesRead:   compressedBytes,
+		})
+	}()
 	// The version of each file is in the metadata. Right now there is only one version
 	// supported but in the future the ability to support more. Along with different
 	// compression.
@@ -208,6 +226,5 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 				level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)
 			}
 		}
-
 	}
 }

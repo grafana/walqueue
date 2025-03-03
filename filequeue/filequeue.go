@@ -28,10 +28,11 @@ type queue struct {
 	out func(ctx context.Context, dh types.DataHandle)
 	// files is the list of files found initially.
 	files []string
+	stats types.StatsHub
 }
 
 // NewQueue returns a implementation of FileStorage.
-func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandle), logger log.Logger) (types.FileStorage, error) {
+func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandle), stats types.StatsHub, logger log.Logger) (types.FileStorage, error) {
 	err := os.MkdirAll(directory, 0777)
 	if err != nil {
 		return nil, err
@@ -64,6 +65,7 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 		out:       out,
 		dataQueue: types.NewMailbox[types.Data](),
 		files:     make([]string, 0),
+		stats:     stats,
 	}
 
 	// Save the existing files in `q.existingFiles`, which will have their data pushed to `out` when actor starts.
@@ -150,6 +152,7 @@ func (q *queue) add(meta map[string]string, data []byte) (string, error) {
 	}
 	q.maxID++
 	name := filepath.Join(q.directory, fmt.Sprintf("%d.committed", q.maxID))
+	meta["file_id"] = strconv.Itoa(q.maxID)
 	r := &Record{
 		Meta: meta,
 		Data: data,
@@ -163,6 +166,9 @@ func (q *queue) add(meta map[string]string, data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	q.stats.SendSerializerStats(types.SerializerStats{
+		FileIDWritten: q.maxID,
+	})
 	return name, nil
 }
 

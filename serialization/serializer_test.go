@@ -36,8 +36,6 @@ func TestRoundTripSerialization(t *testing.T) {
 	}, l)
 	require.NoError(t, err)
 
-	s.Start(context.TODO())
-	defer s.Stop()
 	for i := 0; i < 10; i++ {
 		lbls := make(labels.Labels, 10)
 		for j := 0; j < 10; j++ {
@@ -46,41 +44,15 @@ func TestRoundTripSerialization(t *testing.T) {
 				Value: fmt.Sprintf("value_%d_%d", i, j),
 			}
 		}
-		sendErr := s.SendMetrics(context.Background(), []*types.PrometheusMetric{
-			{
-				L: lbls,
-				T: time.Now().UnixMilli(),
-				V: rand.Float64(),
-			},
-		}, nil)
+		sendErr := s.SendMetrics(context.Background(), lbls, time.Now().UnixMilli(), rand.Float64(), nil, nil, nil)
 		require.NoError(t, sendErr)
 	}
+	s.Finished()
 	require.Eventually(t, func() bool {
 		return f.total.Load() == 10
 	}, 10*time.Second, 1*time.Second)
 	// 10 series send from the above for loop
 	require.Truef(t, totalSeries.Load() == 10, "total series load does not equal 10 currently %d", totalSeries.Load())
-}
-
-func TestUpdateConfig(t *testing.T) {
-	f := &fqq{t: t}
-	l := log.NewNopLogger()
-	s, err := NewSerializer(types.SerializerConfig{
-		MaxSignalsInBatch: 10,
-		FlushFrequency:    5 * time.Second,
-	}, f, func(stats types.SerializerStats) {}, l)
-	require.NoError(t, err)
-	s.Start(context.TODO())
-	defer s.Stop()
-	success, err := s.UpdateConfig(context.Background(), types.SerializerConfig{
-		MaxSignalsInBatch: 1,
-		FlushFrequency:    1 * time.Second,
-	})
-	require.NoError(t, err)
-	require.True(t, success)
-	require.Eventually(t, func() bool {
-		return s.(*serializer).maxItemsBeforeFlush == 1 && s.(*serializer).flushFrequency == 1*time.Second
-	}, 5*time.Second, 100*time.Millisecond)
 }
 
 var _ types.FileStorage = (*fqq)(nil)
@@ -92,11 +64,9 @@ type fqq struct {
 }
 
 func (f *fqq) Start(_ context.Context) {
-
 }
 
 func (f *fqq) Stop() {
-
 }
 
 func (f *fqq) Store(_ context.Context, meta map[string]string, value []byte) error {

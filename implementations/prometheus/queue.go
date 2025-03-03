@@ -18,8 +18,10 @@ import (
 	"github.com/prometheus/prometheus/storage"
 )
 
-var _ storage.Appendable = (*queue)(nil)
-var _ Queue = (*queue)(nil)
+var (
+	_ storage.Appendable = (*queue)(nil)
+	_ Queue              = (*queue)(nil)
+)
 
 // Queue is the interface for a prometheus compatible queue. The queue is an append only interface.
 //
@@ -36,15 +38,16 @@ type Queue interface {
 
 // queue is a simple example of using the wal queue.
 type queue struct {
-	network        types.NetworkClient
-	queue          types.FileStorage
-	logger         log.Logger
-	serializer     types.PrometheusSerializer
-	ttl            time.Duration
-	incoming       *types.Mailbox[types.DataHandle]
-	stats          *Stats
-	metaStats      *Stats
-	externalLabels map[string]string
+	network           types.NetworkClient
+	queue             types.FileStorage
+	logger            log.Logger
+	ttl               time.Duration
+	incoming          *types.Mailbox[types.DataHandle]
+	stats             *Stats
+	metaStats         *Stats
+	maxSignalsToBatch uint32
+	externalLabels    map[string]string
+	hub               types.StatsHub
 }
 
 // NewQueue creates and returns a new Queue instance, initializing its components
@@ -80,13 +83,15 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		return nil, err
 	}
 	q := &queue{
-		incoming:       types.NewMailbox[types.DataHandle](),
-		stats:          seriesStats,
-		metaStats:      meta,
-		network:        networkClient,
-		logger:         logger,
-		ttl:            ttl,
-		externalLabels: cc.ExternalLabels,
+		incoming:          types.NewMailbox[types.DataHandle](),
+		stats:             seriesStats,
+		metaStats:         meta,
+		network:           networkClient,
+		logger:            logger,
+		ttl:               ttl,
+		externalLabels:    cc.ExternalLabels,
+		maxSignalsToBatch: maxSignalsToBatch,
+		hub:               statshub,
 	}
 	fq, err := filequeue.NewQueue(directory, func(ctx context.Context, dh types.DataHandle) {
 		sendErr := q.incoming.Send(ctx, dh)
@@ -98,26 +103,12 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		return nil, err
 	}
 	q.queue = fq
-	serial, err := serialization.NewSerializer(types.SerializerConfig{
-		MaxSignalsInBatch: maxSignalsToBatch,
-		FlushFrequency:    flushInterval,
-	}, q.queue, statshub.SendSerializerStats, logger)
-	if err != nil {
-		return nil, err
-	}
-	q.serializer = serial
 	return q, nil
 }
 
 func (q *queue) Start(ctx context.Context) error {
 	q.network.Start(ctx)
 	q.queue.Start(ctx)
-	err := q.serializer.Start(ctx)
-	if err != nil {
-		q.network.Stop()
-		q.queue.Stop()
-		return err
-	}
 	go q.run(ctx)
 	return nil
 }
@@ -125,7 +116,6 @@ func (q *queue) Start(ctx context.Context) error {
 func (q *queue) Stop() {
 	q.network.Stop()
 	q.queue.Stop()
-	q.serializer.Stop()
 	q.stats.Unregister()
 	q.metaStats.Unregister()
 }
@@ -151,7 +141,14 @@ func (q *queue) run(ctx context.Context) {
 
 // Appender returns a new appender for the storage.
 func (q *queue) Appender(ctx context.Context) storage.Appender {
-	return serialization.NewAppender(ctx, 0, q.serializer, q.externalLabels, q.logger)
+	serial, err := serialization.NewSerializer(types.SerializerConfig{
+		MaxSignalsInBatch: q.maxSignalsToBatch,
+	}, q.queue, q.hub.SendSerializerStats, q.logger)
+	if err != nil {
+		return nil
+	}
+
+	return serialization.NewAppender(ctx, 0, serial, q.externalLabels, q.logger)
 }
 
 func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, buf []byte) {

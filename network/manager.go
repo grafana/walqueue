@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/prometheus/common/config"
@@ -32,6 +33,7 @@ type manager struct {
 	desiredParallelism *parallelism
 	desiredConnections uint
 	routinePool        *ants.Pool
+	client             *http.Client
 }
 
 var _ types.NetworkClient = (*manager)(nil)
@@ -46,7 +48,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) 
 	s := &manager{
 		writeBuffers:       make([]*writeBuffer[types.MetricDatum], 0, cc.Parallelism.MinConnections),
 		logger:             logger,
-		inbox:              types.NewMailbox[types.MetricDatum](chann.Cap(1)),
+		inbox:              types.NewMailbox[[]types.MetricDatum](chann.Cap(1)),
 		metaInbox:          types.NewMailbox[types.MetadataDatum](chann.Cap(1)),
 		bufferedMetric:     nil,
 		bufferedMetadata:   nil,
@@ -66,13 +68,14 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub) 
 	if err != nil {
 		return nil, err
 	}
+	s.client = httpClient
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, logger, s.routinePool, httpClient)
+		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, logger, s.routinePool, s.client)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, logger, s.routinePool, httpClient)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, logger, s.routinePool, s.client)
 	s.metadata = metadata
 	return s, nil
 }
@@ -83,7 +86,7 @@ func (s *manager) Start(ctx context.Context) {
 	s.Run(ctx)
 }
 
-func (s *manager) SendSeries(ctx context.Context, data types.MetricDatum) error {
+func (s *manager) SendSeries(ctx context.Context, data []types.MetricDatum) error {
 	return s.inbox.Send(ctx, data)
 }
 
@@ -217,16 +220,18 @@ func (s *manager) mainWork(ctx context.Context) flowcontrol {
 	select {
 	case <-ctx.Done():
 		return Exit
-	case ts, ok := <-s.inbox.ReceiveC():
+	case series, ok := <-s.inbox.ReceiveC():
 		if !ok {
 			level.Debug(s.logger).Log("msg", "series inbox closed")
 			return Exit
 		}
-		added := s.queue(ctx, ts)
-		if !added {
-			s.bufferedMetric = ts
-			time.Sleep(100 * time.Millisecond)
-			return Restart
+		for _, ts := range series {
+			added := s.queue(ctx, ts)
+			if !added {
+				s.bufferedMetric = ts
+				time.Sleep(100 * time.Millisecond)
+				return Restart
+			}
 		}
 		return ContinueExecution
 	case ts, ok := <-s.metaInbox.ReceiveC():
@@ -268,6 +273,15 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 	if cc.Parallelism.MaxConnections != s.cfg.Parallelism.MaxConnections {
 		s.routinePool.Tune(int(cc.Parallelism.MaxConnections))
 	}
+	// Check if we should recreate the client
+	if !reflect.DeepEqual(cc, s.cfg) {
+		httpClient, err := s.createClient(cc)
+		if err != nil {
+			return err
+		}
+		s.client = httpClient
+	}
+
 	s.cfg = cc
 	level.Debug(s.logger).Log("msg", "recreating write buffers due to configuration change.")
 	// Drain then stop the current writeBuffers.
@@ -278,13 +292,9 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 
 	drainedMeta := s.metadata.Drain()
 
-	httpClient, err := s.createClient(cc)
-	if err != nil {
-		return err
-	}
 	s.writeBuffers = make([]*writeBuffer[types.MetricDatum], 0, desiredConnections)
 	for i := uint(0); i < desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, s.logger, s.routinePool, httpClient)
+		l := newWriteBuffer[types.MetricDatum](cc, s.statshub.SendSeriesNetworkStats, false, s.logger, s.routinePool, s.client)
 		s.writeBuffers = append(s.writeBuffers, l)
 	}
 	// Force adding of metrics, note this may cause the system to go above the batch count.
@@ -292,7 +302,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 		s.forceQueue(ctx, d)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, s.logger, s.routinePool, httpClient)
+	metadata := newWriteBuffer[types.MetadataDatum](cc, s.statshub.SendMetadataNetworkStats, true, s.logger, s.routinePool, s.client)
 	for _, d := range drainedMeta {
 		s.metadata.ForceAdd(ctx, d)
 	}
@@ -332,7 +342,7 @@ func (s *manager) createClient(cc types.ConnectionConfig) (*http.Client, error) 
 		return nil, err
 	}
 
-	client, err := config.NewClientFromConfig(cfg, "remote_write", httpOpts...)
+	client, err := config.NewClientFromConfig(cfg, "prometheus.write.queue", httpOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}

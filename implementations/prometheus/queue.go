@@ -163,7 +163,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 	defer func() {
 		fileID := -1
 		strId, found := meta["file_id"]
-		if !found {
+		if found {
 			fileID, err = strconv.Atoi(strId)
 			if err != nil {
 				fileID = -1
@@ -200,6 +200,7 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
 
+	sendBatch := make([]types.MetricDatum, 0, 10)
 	for _, series := range items {
 		// Check that the TTL.
 		mm, valid := series.(types.MetricDatum)
@@ -212,12 +213,16 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 				q.stats.NetworkTTLDrops.Inc()
 				continue
 			}
-			sendErr := q.network.SendSeries(ctx, mm)
+		}
+		sendBatch = append(sendBatch, mm)
+		if len(sendBatch) == 10 {
+			sendErr := q.network.SendSeries(ctx, sendBatch)
 			if sendErr != nil {
 				level.Error(q.logger).Log("msg", "error sending to write client", "err", sendErr)
 			}
-			continue
+			sendBatch = sendBatch[:0]
 		}
+
 		md, valid := series.(types.MetadataDatum)
 		if valid {
 
@@ -225,6 +230,12 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 			if sendErr != nil {
 				level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)
 			}
+		}
+	}
+	if len(sendBatch) > 0 {
+		sendErr := q.network.SendSeries(ctx, sendBatch)
+		if sendErr != nil {
+			level.Error(q.logger).Log("msg", "error sending to write client", "err", sendErr)
 		}
 	}
 }

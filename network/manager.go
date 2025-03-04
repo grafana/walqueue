@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/prometheus/common/config"
@@ -32,6 +33,7 @@ type manager struct {
 	requestSignalsFromFileQueue                chan types.RequestMoreSignals[types.Datum]
 	responseFromRequestForSignalsFromFileQueue chan []types.Datum
 	pending                                    []types.Datum
+	client                                     *http.Client
 }
 
 var _ types.NetworkClient = (*manager)(nil)
@@ -70,15 +72,14 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 	if err != nil {
 		return nil, err
 	}
+	s.client = httpClient
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.desiredConnections; i++ {
-		l := newWriteBuffer(int(i), cc, s.statshub.SendSeriesNetworkStats, false, logger, s.routinePool, httpClient, s.writeBufferRequestMoreMetrics)
+		l := newWriteBuffer(int(i), cc, s.statshub.SendSeriesNetworkStats, false, logger, s.routinePool, s.client, s.writeBufferRequestMoreMetrics)
 		s.metricBuffers = append(s.metricBuffers, l)
 	}
 
-	metadata := newWriteBuffer[types.MetadataDatum](0, cc, s.statshub.SendMetadataNetworkStats, true, logger, s.routinePool, httpClient, s.writeBufferRequestMoreMetadta)
-
-	s.metadataBuffer = metadata
+	s.metadataBuffer = newWriteBuffer[types.MetadataDatum](0, cc, s.statshub.SendMetadataNetworkStats, true, logger, s.routinePool, s.client, s.writeBufferRequestMoreMetadta)
 	return s, nil
 }
 
@@ -285,12 +286,14 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 	if cc.Parallelism.MaxConnections != s.cfg.Parallelism.MaxConnections {
 		s.routinePool.Tune(int(cc.Parallelism.MaxConnections))
 	}
-	s.cfg = cc
-
-	httpClient, err := s.createClient(cc)
-	if err != nil {
-		return err
+	if !reflect.DeepEqual(cc, s.cfg) {
+		httpClient, err := s.createClient(cc)
+		if err != nil {
+			return err
+		}
+		s.client = httpClient
 	}
+	s.cfg = cc
 
 	level.Debug(s.logger).Log("msg", "recreating write buffers due to configuration change.")
 
@@ -298,6 +301,7 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 	drainedMetrics := make([]types.MetricDatum, 0, len(s.metricBuffers)*cc.BatchCount)
 	for _, l := range s.metricBuffers {
 		drainedMetrics = append(drainedMetrics, l.Drain()...)
+		l.Stop()
 	}
 	for _, dm := range drainedMetrics {
 		s.pending = append(s.pending, dm)
@@ -307,12 +311,14 @@ func (s *manager) updateConfig(ctx context.Context, cc types.ConnectionConfig, d
 	for _, dm := range drainedMeta {
 		s.pending = append(s.pending, dm)
 	}
+	s.metadataBuffer.Stop()
 
+	s.metadataBuffer = newWriteBuffer[types.MetadataDatum](0, cc, s.statshub.SendMetadataNetworkStats, true, s.logger, s.routinePool, s.client, s.writeBufferRequestMoreMetadta)
 	// Start the metadata buffer
 	s.metadataBuffer.Run(ctx)
 	s.metricBuffers = make([]*writeBuffer[types.MetricDatum], 0, desiredConnections)
 	for i := uint(0); i < desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](int(i), cc, s.statshub.SendSeriesNetworkStats, false, s.logger, s.routinePool, httpClient, s.writeBufferRequestMoreMetrics)
+		l := newWriteBuffer[types.MetricDatum](int(i), cc, s.statshub.SendSeriesNetworkStats, false, s.logger, s.routinePool, s.client, s.writeBufferRequestMoreMetrics)
 
 		// Start the buffer
 		l.Run(ctx)

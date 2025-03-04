@@ -32,6 +32,7 @@ type writeBuffer[T types.Datum] struct {
 	receive           chan []T
 	moreSignals       chan types.RequestMoreSignals[T]
 	requestBuffer     []T
+	stop              chan struct{}
 }
 
 func newWriteBuffer[T types.Datum](id int, cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger, pool *ants.Pool, client *http.Client, moreSignals chan types.RequestMoreSignals[T]) *writeBuffer[T] {
@@ -48,6 +49,7 @@ func newWriteBuffer[T types.Datum](id int, cfg types.ConnectionConfig, stats fun
 		receive:           make(chan []T),
 		moreSignals:       moreSignals,
 		requestBuffer:     make([]T, cfg.BatchCount),
+		stop:              make(chan struct{}),
 	}
 }
 
@@ -97,6 +99,9 @@ func (w *writeBuffer[T]) Run(ctx context.Context) {
 					w.attemptSend(ctx)
 					w.mut.Unlock()
 				}
+
+			case <-w.stop:
+				return
 			}
 		}
 	}()
@@ -113,6 +118,10 @@ func (w *writeBuffer[T]) Drain() []T {
 	// This is safer though.
 	w.items = make([]T, 0)
 	return items
+}
+
+func (w *writeBuffer[T]) Stop() {
+	w.stop <- struct{}{}
 }
 
 func (w *writeBuffer[T]) attemptSend(ctx context.Context) {

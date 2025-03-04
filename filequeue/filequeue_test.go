@@ -19,7 +19,7 @@ func TestFileQueue(t *testing.T) {
 	mbx := types.NewMailbox[types.DataHandle]()
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
-	}, log)
+	}, &fakestats{}, log)
 	require.NoError(t, err)
 	ctx, cncl := context.WithCancel(context.Background())
 	defer cncl()
@@ -32,7 +32,8 @@ func TestFileQueue(t *testing.T) {
 	meta, buf, err := getHandle(t, mbx)
 	require.NoError(t, err)
 	require.True(t, string(buf) == "test")
-	require.Len(t, meta, 0)
+	require.Len(t, meta, 1)
+	require.True(t, meta["file_id"] == "1")
 
 	// Ensure nothing new comes through.
 	timer := time.NewTicker(100 * time.Millisecond)
@@ -51,7 +52,7 @@ func TestMetaFileQueue(t *testing.T) {
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
-	}, log)
+	}, &fakestats{}, log)
 	ctx, cncl := context.WithCancel(context.Background())
 	defer cncl()
 	q.Start(ctx)
@@ -63,7 +64,7 @@ func TestMetaFileQueue(t *testing.T) {
 	meta, buf, err := getHandle(t, mbx)
 	require.NoError(t, err)
 	require.True(t, string(buf) == "test")
-	require.Len(t, meta, 1)
+	require.Len(t, meta, 2)
 	require.True(t, meta["name"] == "bob")
 }
 
@@ -74,7 +75,7 @@ func TestCorruption(t *testing.T) {
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
-	}, log)
+	}, &fakestats{}, log)
 	ctx, cncl := context.WithCancel(context.Background())
 	defer cncl()
 	q.Start(ctx)
@@ -106,7 +107,7 @@ func TestCorruption(t *testing.T) {
 	meta, buf, err := getHandle(t, mbx)
 	require.NoError(t, err)
 	require.True(t, string(buf) == "second")
-	require.Len(t, meta, 1)
+	require.Len(t, meta, 2)
 }
 
 func TestFileDeleted(t *testing.T) {
@@ -116,7 +117,7 @@ func TestFileDeleted(t *testing.T) {
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
-	}, log)
+	}, &fakestats{}, log)
 	ctx, cncl := context.WithCancel(context.Background())
 	defer cncl()
 	q.Start(ctx)
@@ -161,7 +162,7 @@ func TestOtherFiles(t *testing.T) {
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
-	}, log)
+	}, &fakestats{}, log)
 	ctx, cncl := context.WithCancel(context.Background())
 	defer cncl()
 	q.Start(ctx)
@@ -183,7 +184,7 @@ func TestResuming(t *testing.T) {
 
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
-	}, log)
+	}, &fakestats{}, log)
 	ctx, cncl := context.WithCancel(context.Background())
 	defer cncl()
 	q.Start(ctx)
@@ -203,7 +204,7 @@ func TestResuming(t *testing.T) {
 
 	q2, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx2.Send(ctx, dh)
-	}, log)
+	}, &fakestats{}, log)
 	require.NoError(t, err)
 
 	q2.Start(ctx)
@@ -235,4 +236,39 @@ func getHandle(t *testing.T, mbx *types.Mailbox[types.DataHandle]) (map[string]s
 		require.True(t, ok)
 		return item.Pop()
 	}
+}
+
+var _ types.StatsHub = (*fakestats)(nil)
+
+type fakestats struct {
+}
+
+func (fs fakestats) SendParralelismStats(stats types.ParralelismStats) {
+
+}
+
+func (fs fakestats) RegisterParralelism(f func(types.ParralelismStats)) types.NotificationRelease {
+	return func() {
+
+	}
+}
+
+func (fakestats) Start(_ context.Context) {
+}
+func (fakestats) Stop() {
+}
+func (fs *fakestats) SendSeriesNetworkStats(ns types.NetworkStats) {
+}
+func (fakestats) SendSerializerStats(_ types.SerializerStats) {
+}
+func (fakestats) SendMetadataNetworkStats(_ types.NetworkStats) {
+}
+func (fakestats) RegisterSeriesNetwork(_ func(types.NetworkStats)) (_ types.NotificationRelease) {
+	return func() {}
+}
+func (fakestats) RegisterMetadataNetwork(_ func(types.NetworkStats)) (_ types.NotificationRelease) {
+	return func() {}
+}
+func (fakestats) RegisterSerializer(_ func(types.SerializerStats)) (_ types.NotificationRelease) {
+	return func() {}
 }

@@ -65,6 +65,12 @@ const remoteShardMax = "prometheus_remote_storage_shards_max"
 const remoteShardMin = "prometheus_remote_storage_shards_min"
 const remoteShardDesired = "prometheus_remote_storage_shards"
 
+const compressedRead = "alloy_queue_series_disk_compressed_bytes_read"
+const uncompressedRead = "alloy_queue_series_disk_uncompressed_bytes_read"
+
+const compressedWritten = "alloy_queue_series_disk_compressed_bytes_written"
+const uncompressedWritten = "alloy_queue_series_disk_uncompressed_bytes_written"
+
 // TestMetadata is the large end to end testing for the queue based wal, specifically for metadata.
 func TestMetadata(t *testing.T) {
 	// Check assumes you are checking for any value that is not 0.
@@ -116,6 +122,22 @@ func TestMetadata(t *testing.T) {
 					name:  remoteShardMin,
 					value: 4,
 				},
+				{
+					name:      uncompressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      uncompressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedWritten,
+					valueFunc: greaterThenZero,
+				},
 			},
 		},
 		{
@@ -158,6 +180,22 @@ func TestMetadata(t *testing.T) {
 				{
 					name:  remoteShardMin,
 					value: 4,
+				},
+				{
+					name:      uncompressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      uncompressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedWritten,
+					valueFunc: greaterThenZero,
 				},
 			},
 		},
@@ -206,6 +244,22 @@ func TestMetadata(t *testing.T) {
 				{
 					name:  remoteShardMin,
 					value: 4,
+				},
+				{
+					name:      uncompressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      uncompressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedWritten,
+					valueFunc: greaterThenZero,
 				},
 			},
 		},
@@ -297,6 +351,22 @@ func TestMetrics(t *testing.T) {
 					name:  remoteShardMin,
 					value: 4,
 				},
+				{
+					name:      uncompressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      uncompressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedWritten,
+					valueFunc: greaterThenZero,
+				},
 			},
 		},
 		{
@@ -355,6 +425,22 @@ func TestMetrics(t *testing.T) {
 				{
 					name:  remoteShardMin,
 					value: 4,
+				},
+				{
+					name:      uncompressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      uncompressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedWritten,
+					valueFunc: greaterThenZero,
 				},
 			},
 		},
@@ -421,6 +507,22 @@ func TestMetrics(t *testing.T) {
 				{
 					name:  remoteShardMin,
 					value: 4,
+				},
+				{
+					name:      uncompressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      uncompressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedWritten,
+					valueFunc: greaterThenZero,
 				},
 			},
 		},
@@ -498,6 +600,22 @@ func TestMetrics(t *testing.T) {
 					name:  remoteShardMin,
 					value: 4,
 				},
+				{
+					name:      uncompressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      uncompressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedWritten,
+					valueFunc: greaterThenZero,
+				},
 			},
 		},
 		{
@@ -556,6 +674,22 @@ func TestMetrics(t *testing.T) {
 				{
 					name:  remoteShardMin,
 					value: 4,
+				},
+				{
+					name:      uncompressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      uncompressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedWritten,
+					valueFunc: greaterThenZero,
 				},
 			},
 		},
@@ -622,6 +756,22 @@ func TestMetrics(t *testing.T) {
 				{
 					name:  remoteShardMin,
 					value: 4,
+				},
+				{
+					name:      uncompressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedRead,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      uncompressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      compressedWritten,
+					valueFunc: greaterThenZero,
 				},
 			},
 		},

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"reflect"
 	"time"
 
 	"github.com/prometheus/common/config"
@@ -146,8 +145,4 @@ func (cc ConnectionConfig) ToPrometheusConfig() (config.HTTPClientConfig, error)
 type BasicAuth struct {
 	Username string
 	Password string
-}
-
-func (cc ConnectionConfig) Equals(bb ConnectionConfig) bool {
-	return reflect.DeepEqual(cc, bb)
 }

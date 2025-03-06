@@ -169,15 +169,15 @@ func (s *manager) queueCheck() {
 func (s *manager) addNewDatumsAndDistribute(items []types.Datum) {
 	s.pendingData.AddItems(items)
 
-	for _, wr := range s.metricBuffers {
+	for _, mb := range s.metricBuffers {
 		// If we are sending or there is no capacity then dont add.
-		if wr.IsSending() {
+		if mb.IsSending() {
 			continue
-		} else if wr.RemainingCapacity() == 0 {
+		} else if mb.RemainingCapacity() <= 0 {
 			continue
 		} else {
-			t := s.pendingData.PullMetricItems(wr.id, wr.RemainingCapacity())
-			wr.Add(t)
+			t := s.pendingData.PullMetricItems(mb.id, mb.RemainingCapacity())
+			mb.Add(t)
 		}
 	}
 
@@ -238,7 +238,7 @@ func (s *manager) checkAndSend() {
 
 func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uint) error {
 	// No need to do anything if the configuration is the same or if we dont need to update connections.
-	if s.cfg.Equals(cc) && s.desiredConnections == desiredConnections {
+	if reflect.DeepEqual(cc, s.cfg) && s.desiredConnections == desiredConnections {
 		return nil
 	}
 
@@ -273,7 +273,6 @@ func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uin
 	}
 
 	s.metadataBuffer = newWriteBuffer[types.MetadataDatum](0, cc, s.statshub.SendMetadataNetworkStats, s.logger)
-	// Start the metadata buffer
 	s.metricBuffers = make([]*writeBuffer[types.MetricDatum], 0, desiredConnections)
 	for i := uint(0); i < desiredConnections; i++ {
 		l := newWriteBuffer[types.MetricDatum](int(i), cc, s.statshub.SendSeriesNetworkStats, s.logger)

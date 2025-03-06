@@ -137,8 +137,6 @@ func (q *queue) Stop() {
 	q.metaStats.Unregister()
 }
 
-var qSent = 0
-
 func (q *queue) run(ctx context.Context) {
 	for {
 		select {
@@ -148,8 +146,8 @@ func (q *queue) run(ctx context.Context) {
 			if !ok {
 				return
 			}
-			consume := true
-			for consume {
+			responseSent := false
+			for !responseSent {
 				select {
 				case <-ctx.Done():
 					return
@@ -168,9 +166,8 @@ func (q *queue) run(ctx context.Context) {
 					if len(items) == 0 {
 						continue
 					}
-					qSent = qSent + len(items)
 					req.Response <- items
-					consume = false
+					responseSent = true
 				}
 			}
 		}
@@ -226,7 +223,6 @@ func (q *queue) deserializeAndSend(meta map[string]string, buf []byte) []types.D
 		level.Error(q.logger).Log("msg", "invalid version found for deserialization", "version", version)
 		return nil
 	}
-	// explicitly set the uncompressed buf so that it can be reclaimed.
 	if err != nil {
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}

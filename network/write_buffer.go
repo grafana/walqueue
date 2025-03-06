@@ -96,8 +96,8 @@ func (w *writeBuffer[T]) Send(ctx context.Context, client *http.Client, finish f
 	s := newSignalsInfo(w.items)
 	var err error
 	w.snappyBuf, w.wrBuf, err = buildWriteRequest(w.items, w.snappyBuf, w.wrBuf)
-	// If the build write request fails then we should pretend it worked. Since this should only trigger if
-	// we get invalid datums.
+	// If the build write request fails then we should still clear out the items. Since this should only trigger if
+	// we get invalid item, and there is no resolution to that.
 
 	w.items = w.items[:0]
 	if err != nil {

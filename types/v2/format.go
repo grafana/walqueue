@@ -184,7 +184,8 @@ func (s *Format) Unmarshal(meta map[string]string, buf []byte) (items []types.Da
 		if recordType == PrometheusMetric {
 			// These are pooled for performance. Whenever they are no longer needed they are returned to the pool via the Free method.
 			m := metricPool.Get().(*Metric)
-			size, err := m.Unmarshal(buf[index:])
+			// The []uint16 allows some backwards compatibility but we dont care about that.
+			size, err := m.NestedUnmarshal(0, buf[index:], []uint16{}, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -193,7 +194,7 @@ func (s *Format) Unmarshal(meta map[string]string, buf []byte) (items []types.Da
 			datums[i] = m
 		} else if recordType == PrometheusMetadata {
 			md := &Metadata{}
-			size, err := md.Unmarshal(buf[index:])
+			size, err := md.NestedUnmarshal(0, buf[index:], []uint16{}, 0)
 			if err != nil {
 				return nil, err
 			}

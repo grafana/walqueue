@@ -71,6 +71,9 @@ const uncompressedRead = "alloy_queue_series_disk_uncompressed_bytes_read"
 const compressedWritten = "alloy_queue_series_disk_compressed_bytes_written"
 const uncompressedWritten = "alloy_queue_series_disk_uncompressed_bytes_written"
 
+const fileIdWritten = "alloy_queue_series_file_id_written"
+const fileIdRead = "alloy_queue_series_file_id_read"
+
 // TestMetadata is the large end to end testing for the queue based wal, specifically for metadata.
 func TestMetadata(t *testing.T) {
 	// Check assumes you are checking for any value that is not 0.
@@ -138,6 +141,14 @@ func TestMetadata(t *testing.T) {
 					name:      compressedWritten,
 					valueFunc: greaterThenZero,
 				},
+				{
+					name:      fileIdWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdRead,
+					valueFunc: greaterThenZero,
+				},
 			},
 		},
 		{
@@ -195,6 +206,14 @@ func TestMetadata(t *testing.T) {
 				},
 				{
 					name:      compressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdRead,
 					valueFunc: greaterThenZero,
 				},
 			},
@@ -259,6 +278,14 @@ func TestMetadata(t *testing.T) {
 				},
 				{
 					name:      compressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdRead,
 					valueFunc: greaterThenZero,
 				},
 			},
@@ -367,6 +394,14 @@ func TestMetrics(t *testing.T) {
 					name:      compressedWritten,
 					valueFunc: greaterThenZero,
 				},
+				{
+					name:      fileIdWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdRead,
+					valueFunc: greaterThenZero,
+				},
 			},
 		},
 		{
@@ -440,6 +475,14 @@ func TestMetrics(t *testing.T) {
 				},
 				{
 					name:      compressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdRead,
 					valueFunc: greaterThenZero,
 				},
 			},
@@ -522,6 +565,14 @@ func TestMetrics(t *testing.T) {
 				},
 				{
 					name:      compressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdRead,
 					valueFunc: greaterThenZero,
 				},
 			},
@@ -616,6 +667,14 @@ func TestMetrics(t *testing.T) {
 					name:      compressedWritten,
 					valueFunc: greaterThenZero,
 				},
+				{
+					name:      fileIdWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdRead,
+					valueFunc: greaterThenZero,
+				},
 			},
 		},
 		{
@@ -689,6 +748,14 @@ func TestMetrics(t *testing.T) {
 				},
 				{
 					name:      compressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdRead,
 					valueFunc: greaterThenZero,
 				},
 			},
@@ -771,6 +838,14 @@ func TestMetrics(t *testing.T) {
 				},
 				{
 					name:      compressedWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdWritten,
+					valueFunc: greaterThenZero,
+				},
+				{
+					name:      fileIdRead,
 					valueFunc: greaterThenZero,
 				},
 			},

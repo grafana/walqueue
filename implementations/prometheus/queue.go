@@ -137,6 +137,8 @@ func (q *queue) Stop() {
 	q.metaStats.Unregister()
 }
 
+var qSent = 0
+
 func (q *queue) run(ctx context.Context) {
 	for {
 		select {
@@ -166,6 +168,7 @@ func (q *queue) run(ctx context.Context) {
 					if len(items) == 0 {
 						continue
 					}
+					qSent = qSent + len(items)
 					req.Response <- items
 					consume = false
 				}
@@ -190,7 +193,7 @@ func (q *queue) deserializeAndSend(meta map[string]string, buf []byte) []types.D
 	defer func() {
 		fileID := -1
 		strId, found := meta["file_id"]
-		if !found {
+		if found {
 			fileID, err = strconv.Atoi(strId)
 			if err != nil {
 				fileID = -1
@@ -254,5 +257,5 @@ func (q *queue) deserializeAndSend(meta map[string]string, buf []byte) []types.D
 			continue
 		}
 	}
-	return items
+	return pending
 }

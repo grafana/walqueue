@@ -32,8 +32,5 @@ func (m *Mailbox[T]) Send(ctx context.Context, v T) error {
 }
 
 type RequestMoreSignals[T Datum] struct {
-	ID       int
-	MaxCount int
 	Response chan []T
-	Buffer   []T
 }

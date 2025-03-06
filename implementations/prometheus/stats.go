@@ -434,11 +434,10 @@ func (s *Stats) UpdateSerializer(stats types.SerializerStats) {
 		s.SerializerNewestInTimeStampSeconds.Set(float64(stats.NewestTimestampSeconds))
 		s.RemoteStorageInTimestamp.Set(float64(stats.NewestTimestampSeconds))
 	}
-	// File ID may not exist so if it doesnt, then -1 is sent
-	if stats.FileIDRead >= 0 {
+	if stats.FileIDRead > 0 {
 		s.FileIDRead.Set(float64(stats.FileIDRead))
 	}
-	if stats.FileIDWritten >= 0 {
+	if stats.FileIDWritten > 0 {
 		s.FileIDWritten.Set(float64(stats.FileIDWritten))
 	}
 	s.UncompressedBytesWritten.Add(float64(stats.UncompressedBytesWritten))

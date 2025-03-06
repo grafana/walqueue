@@ -1,15 +1,18 @@
-// to generate run `bencgen --in types.benc --lang go`
-// https://github.com/deneonet/benc/blob/main/cmd/bencgen/README.md
+define v2;
 
-header v2;
+var go_package = "github.com/v2";
+
 
 ctr metric {
     int64 timestampmsvalue = 1;
     uint64 hashvalue = 2;
     bool isHistogramvalue = 3;
-    bytes buf = 4;
+    rcopy bytes buf = 4;
 }
 
 ctr metadata {
-    bytes buf = 1;
+    rcopy bytes buf = 1;
 }
+
+# DO NOT EDIT.
+# [meta_s] eyJtc2dzIjp7Im1ldGFkYXRhIjp7InJJZHMiOm51bGwsImZpZWxkcyI6eyIxIjp7ImlkIjoxLCJOYW1lIjoiYnVmIiwiVHlwZSI6eyJUb2tlblR5cGUiOjE5LCJNYXBLZXlUeXBlIjpudWxsLCJDaGlsZFR5cGUiOm51bGwsImN0ck5hbWUiOiIiLCJJc1Vuc2FmZSI6ZmFsc2UsIklzUmV0dXJuQ29weSI6dHJ1ZSwiSXNBcnJheSI6ZmFsc2UsIklzTWFwIjpmYWxzZX19fX0sIm1ldHJpYyI6eyJySWRzIjpudWxsLCJmaWVsZHMiOnsiMSI6eyJpZCI6MSwiTmFtZSI6InRpbWVzdGFtcG1zdmFsdWUiLCJUeXBlIjp7IlRva2VuVHlwZSI6MTEsIk1hcEtleVR5cGUiOm51bGwsIkNoaWxkVHlwZSI6bnVsbCwiY3RyTmFtZSI6IiIsIklzVW5zYWZlIjpmYWxzZSwiSXNSZXR1cm5Db3B5IjpmYWxzZSwiSXNBcnJheSI6ZmFsc2UsIklzTWFwIjpmYWxzZX19LCIyIjp7ImlkIjoyLCJOYW1lIjoiaGFzaHZhbHVlIiwiVHlwZSI6eyJUb2tlblR5cGUiOjE1LCJNYXBLZXlUeXBlIjpudWxsLCJDaGlsZFR5cGUiOm51bGwsImN0ck5hbWUiOiIiLCJJc1Vuc2FmZSI6ZmFsc2UsIklzUmV0dXJuQ29weSI6ZmFsc2UsIklzQXJyYXkiOmZhbHNlLCJJc01hcCI6ZmFsc2V9fSwiMyI6eyJpZCI6MywiTmFtZSI6ImlzSGlzdG9ncmFtdmFsdWUiLCJUeXBlIjp7IlRva2VuVHlwZSI6MjMsIk1hcEtleVR5cGUiOm51bGwsIkNoaWxkVHlwZSI6bnVsbCwiY3RyTmFtZSI6IiIsIklzVW5zYWZlIjpmYWxzZSwiSXNSZXR1cm5Db3B5IjpmYWxzZSwiSXNBcnJheSI6ZmFsc2UsIklzTWFwIjpmYWxzZX19LCI0Ijp7ImlkIjo0LCJOYW1lIjoiYnVmIiwiVHlwZSI6eyJUb2tlblR5cGUiOjE5LCJNYXBLZXlUeXBlIjpudWxsLCJDaGlsZFR5cGUiOm51bGwsImN0ck5hbWUiOiIiLCJJc1Vuc2FmZSI6ZmFsc2UsIklzUmV0dXJuQ29weSI6dHJ1ZSwiSXNBcnJheSI6ZmFsc2UsIklzTWFwIjpmYWxzZX19fX19fQ== [meta_e]

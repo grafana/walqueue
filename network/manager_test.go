@@ -179,6 +179,8 @@ func TestDrain(t *testing.T) {
 	}, moreData)
 	require.NoError(t, err)
 	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 	wr.Start(ctx)
 	defer wr.Stop()
 	// Kick these off in the background.

@@ -2,6 +2,7 @@ package types
 
 import (
 	gocontext "context"
+
 	"golang.design/x/chann"
 )
 
@@ -14,9 +15,6 @@ func NewSyncMailbox[T, R any](opt ...chann.Opt) *SyncMailbox[T, R] {
 	return &SyncMailbox[T, R]{
 		mbx: NewMailbox[*Callback[T, R]](opt...),
 	}
-}
-
-func (sm *SyncMailbox[T, R]) Start() {
 }
 
 func (sm *SyncMailbox[T, R]) ReceiveC() <-chan *Callback[T, R] {

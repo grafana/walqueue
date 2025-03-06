@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/go-kit/log"
@@ -18,8 +19,10 @@ import (
 	"github.com/prometheus/prometheus/storage"
 )
 
-var _ storage.Appendable = (*queue)(nil)
-var _ Queue = (*queue)(nil)
+var (
+	_ storage.Appendable = (*queue)(nil)
+	_ Queue              = (*queue)(nil)
+)
 
 // Queue is the interface for a prometheus compatible queue. The queue is an append only interface.
 //
@@ -36,15 +39,16 @@ type Queue interface {
 
 // queue is a simple example of using the wal queue.
 type queue struct {
-	network        types.NetworkClient
-	queue          types.FileStorage
-	logger         log.Logger
-	serializer     types.PrometheusSerializer
-	ttl            time.Duration
-	incoming       *types.Mailbox[types.DataHandle]
-	stats          *Stats
-	metaStats      *Stats
-	externalLabels map[string]string
+	network                   types.NetworkClient
+	queue                     types.FileStorage
+	logger                    log.Logger
+	serializer                types.PrometheusSerializer
+	ttl                       time.Duration
+	incoming                  *types.Mailbox[types.DataHandle]
+	stats                     *Stats
+	metaStats                 *Stats
+	externalLabels            map[string]string
+	networkRequestMoreSignals chan types.RequestMoreSignals[types.Datum]
 }
 
 // NewQueue creates and returns a new Queue instance, initializing its components
@@ -74,26 +78,29 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	seriesStats.SeriesBackwardsCompatibility(reg)
 	meta := NewStats("alloy", "queue_metadata", true, reg, statshub)
 	meta.MetaBackwardsCompatibility(reg)
+	// the length 1 allows a buffer of one file, setting to zero will starve and block the queue.
+	networkRequestMoreSignals := make(chan types.RequestMoreSignals[types.Datum], 1)
 
-	networkClient, err := network.New(cc, logger, statshub)
+	networkClient, err := network.New(cc, logger, statshub, networkRequestMoreSignals)
 	if err != nil {
 		return nil, err
 	}
 	q := &queue{
-		incoming:       types.NewMailbox[types.DataHandle](),
-		stats:          seriesStats,
-		metaStats:      meta,
-		network:        networkClient,
-		logger:         logger,
-		ttl:            ttl,
-		externalLabels: cc.ExternalLabels,
+		incoming:                  types.NewMailbox[types.DataHandle](),
+		stats:                     seriesStats,
+		metaStats:                 meta,
+		network:                   networkClient,
+		logger:                    logger,
+		ttl:                       ttl,
+		networkRequestMoreSignals: networkRequestMoreSignals,
+		externalLabels:            cc.ExternalLabels,
 	}
 	fq, err := filequeue.NewQueue(directory, func(ctx context.Context, dh types.DataHandle) {
 		sendErr := q.incoming.Send(ctx, dh)
 		if sendErr != nil {
 			level.Error(logger).Log("msg", "failed to send to incoming", "err", sendErr)
 		}
-	}, logger)
+	}, statshub, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -135,16 +142,34 @@ func (q *queue) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case file, ok := <-q.incoming.ReceiveC():
+		case req, ok := <-q.networkRequestMoreSignals:
 			if !ok {
 				return
 			}
-			meta, buf, err := file.Pop()
-			if err != nil {
-				level.Error(q.logger).Log("msg", "unable to get file contents", "name", file.Name, "err", err)
-				continue
+			responseSent := false
+			for !responseSent {
+				select {
+				case <-ctx.Done():
+					return
+				case file, fileOk := <-q.incoming.ReceiveC():
+					if !fileOk {
+						return
+					}
+					meta, buf, err := file.Pop()
+					if err != nil {
+						level.Error(q.logger).Log("msg", "unable to get file contents", "name", file.Name, "err", err)
+						continue
+					}
+					items := q.deserializeAndSend(meta, buf)
+					// This is to handle the case where we dont get any items, we want to move on to the next file.
+					// This is generally due to some problem reading the file.
+					if len(items) == 0 {
+						continue
+					}
+					req.Response <- items
+					responseSent = true
+				}
 			}
-			q.deserializeAndSend(ctx, meta, buf)
 		}
 	}
 }
@@ -154,19 +179,36 @@ func (q *queue) Appender(ctx context.Context) storage.Appender {
 	return serialization.NewAppender(ctx, 0, q.serializer, q.externalLabels, q.logger)
 }
 
-func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, buf []byte) {
+func (q *queue) deserializeAndSend(meta map[string]string, buf []byte) []types.Datum {
+	compressedBytes := len(buf)
 	uncompressedBuf, err := snappy.Decode(nil, buf)
 	if err != nil {
 		level.Debug(q.logger).Log("msg", "error snappy decoding", "err", err)
-		return
+		return nil
 	}
+	uncompressedBytes := len(uncompressedBuf)
+	defer func() {
+		fileID := -1
+		strId, found := meta["file_id"]
+		if found {
+			fileID, err = strconv.Atoi(strId)
+			if err != nil {
+				fileID = -1
+			}
+		}
+		q.stats.UpdateSerializer(types.SerializerStats{
+			FileIDRead:            fileID,
+			UncompressedBytesRead: uncompressedBytes,
+			CompressedBytesRead:   compressedBytes,
+		})
+	}()
 	// The version of each file is in the metadata. Right now there is only one version
 	// supported but in the future the ability to support more. Along with different
 	// compression.
 	version, ok := meta["version"]
 	if !ok {
 		level.Error(q.logger).Log("msg", "version not found for deserialization")
-		return
+		return nil
 	}
 	var items []types.Datum
 	var s types.Unmarshaller
@@ -179,16 +221,19 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 		items, err = s.Unmarshal(meta, uncompressedBuf)
 	default:
 		level.Error(q.logger).Log("msg", "invalid version found for deserialization", "version", version)
-		return
+		return nil
 	}
 	if err != nil {
 		level.Error(q.logger).Log("msg", "error deserializing", "err", err, "format", version)
 	}
 
+	pending := make([]types.Datum, 0, len(items))
+
+	// Process all deserialized items
 	for _, series := range items {
-		// Check that the TTL.
-		mm, valid := series.(types.MetricDatum)
-		if valid {
+		// Check if this is a metric datum
+		mm, isMetric := series.(types.MetricDatum)
+		if isMetric {
 			seriesAge := time.Since(time.UnixMilli(mm.TimeStampMS()))
 			// For any series that exceeds the time to live (ttl) based on its timestamp we do not want to push it to the networking layer
 			// but instead drop it here by continuing.
@@ -197,20 +242,16 @@ func (q *queue) deserializeAndSend(ctx context.Context, meta map[string]string, 
 				q.stats.NetworkTTLDrops.Inc()
 				continue
 			}
-			sendErr := q.network.SendSeries(ctx, mm)
-			if sendErr != nil {
-				level.Error(q.logger).Log("msg", "error sending to write client", "err", sendErr)
-			}
+			pending = append(pending, mm)
 			continue
 		}
-		md, valid := series.(types.MetadataDatum)
-		if valid {
 
-			sendErr := q.network.SendMetadata(ctx, md)
-			if sendErr != nil {
-				level.Error(q.logger).Log("msg", "error sending metadata to write client", "err", sendErr)
-			}
+		// Check if this is metadata
+		md, isMetadata := series.(types.MetadataDatum)
+		if isMetadata {
+			pending = append(pending, md)
+			continue
 		}
-
 	}
+	return pending
 }

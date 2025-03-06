@@ -5,7 +5,7 @@ go 1.23
 toolchain go1.23.1
 
 require (
-	github.com/deneonet/benc v1.1.2
+	github.com/deneonet/benc v1.1.7
 	github.com/go-kit/log v0.2.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v0.0.4
@@ -17,7 +17,6 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/tinylib/msgp v1.2.4
 	go.uber.org/atomic v1.11.0
-	go.uber.org/goleak v1.3.0
 	golang.design/x/chann v0.1.2
 )
 

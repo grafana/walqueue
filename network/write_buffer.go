@@ -3,129 +3,137 @@ package network
 import (
 	"context"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
-	"github.com/panjf2000/ants/v2"
-	"go.uber.org/atomic"
 )
 
 // writeBuffer handles buffering the data, keeping track if there is a write request already running and kicking off the
 // write request as needed. All methods need to be called in a thread safe manner.
 type writeBuffer[T types.Datum] struct {
-	items []T
-	// writeInProgress keeps track if there is a write request going out.
-	writeInProgress *atomic.Bool
-	wrBuf           []byte
-	snappyBuf       []byte
-	log             log.Logger
-	cfg             types.ConnectionConfig
-	stats           func(stats types.NetworkStats)
-	isMeta          bool
-	routinePool     *ants.Pool
-	client          *http.Client
+	mut               sync.RWMutex
+	id                int
+	items             []T
+	wrBuf             []byte
+	snappyBuf         []byte
+	log               log.Logger
+	cfg               types.ConnectionConfig
+	stats             func(stats types.NetworkStats)
+	lastAttemptedSend time.Time
+	requestBuffer     []T
+	currentlySending  bool
 }
 
-func newWriteBuffer[T types.Datum](cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), isMeta bool, l log.Logger, pool *ants.Pool, client *http.Client) *writeBuffer[T] {
+func newWriteBuffer[T types.Datum](id int, cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), l log.Logger) *writeBuffer[T] {
 	return &writeBuffer[T]{
-		items:           make([]T, 0),
-		writeInProgress: atomic.NewBool(false),
-		cfg:             cfg,
-		stats:           stats,
-		isMeta:          isMeta,
-		log:             l,
-		routinePool:     pool,
-		client:          client,
+		id:    id,
+		items: make([]T, 0, cfg.BatchCount),
+		cfg:   cfg,
+		stats: stats,
+		log:   l,
 	}
 }
 
-// ForceAdd is only used when we need to force items to the queue, this is generally done as part of a config change.
-func (w *writeBuffer[T]) ForceAdd(ctx context.Context, item T) {
-	w.items = append(w.items, item)
-	w.Send(ctx)
+func (w *writeBuffer[T]) Add(items []T) {
+	w.mut.Lock()
+	defer w.mut.Unlock()
+
+	w.items = append(w.items, items...)
 }
 
-// Add will add to the buffer and then send if appropriate.
-func (w *writeBuffer[T]) Add(ctx context.Context, item T) bool {
-	// Check if adding to the buffer would put us over the batch count.
-	// Having a batch count batch*2+1 means we can have more data read to go.
-	if len(w.items)+1 > (w.cfg.BatchCount*2 + 1) {
-		// Try and send to see if we can. If there is already an outgoing request this
-		// does nothing. If not triggers a new one. We wont add the new record but this will attempt to kick
-		// off a request.
-		w.Send(ctx)
-		return false
-	}
-	w.items = append(w.items, item)
-	// Buffer has reached a valid size.
-	if len(w.items) >= w.cfg.BatchCount {
-		w.Send(ctx)
-	}
-	return true
+func (w *writeBuffer[T]) RemainingCapacity() int {
+	w.mut.RLock()
+	defer w.mut.RUnlock()
+
+	return w.cfg.BatchCount - len(w.items)
+}
+
+func (w *writeBuffer[T]) Len() int {
+	w.mut.RLock()
+	defer w.mut.RUnlock()
+
+	return len(w.items)
+}
+
+func (w *writeBuffer[T]) IsSending() bool {
+	w.mut.RLock()
+	defer w.mut.RUnlock()
+
+	return w.currentlySending
+}
+
+func (w *writeBuffer[T]) LastAttemptedSend() time.Time {
+	w.mut.RLock()
+	defer w.mut.RUnlock()
+
+	return w.lastAttemptedSend
 }
 
 // Drain returns any remaining items and sets the internal item array to 0 items.
 func (w *writeBuffer[T]) Drain() []T {
-	items := make([]T, len(w.items))
-	copy(items, w.items)
-	// We could likely nil this out since this is only called when its being turned off
-	// This is safer though.
-	w.items = make([]T, 0)
-	return items
+	w.mut.Lock()
+	defer w.mut.Unlock()
+
+	defer func() {
+		w.items = w.items[:0]
+	}()
+
+	return w.items
 }
 
-// Send is the externally safe to call send method. This method like all others is NOT thread safe.
-func (w *writeBuffer[T]) Send(ctx context.Context) {
-	// Nothing to send so noop
-	if len(w.items) == 0 {
+func (w *writeBuffer[T]) Send(ctx context.Context, client *http.Client, finish func()) {
+	w.mut.Lock()
+	defer w.mut.Unlock()
+
+	defer func() {
+		w.lastAttemptedSend = time.Now()
+	}()
+
+	s := newSignalsInfo(w.items)
+	var err error
+	w.snappyBuf, w.wrBuf, err = buildWriteRequest(w.items, w.snappyBuf, w.wrBuf)
+	// If the build write request fails then we should still clear out the items. Since this should only trigger if
+	// we get invalid item, and there is no resolution to that.
+
+	w.items = w.items[:0]
+	if err != nil {
+		level.Error(w.log).Log("msg", "error building write request", "err", err)
 		return
 	}
-	// Write in progress tells us if there is a write client in progress, if false then we can right.
-	if !w.writeInProgress.Load() {
-		sendingItems := w.getItems()
-		// About to kick off a write request so the write is no longer available.
-		w.writeInProgress.Store(true)
-		// This will block until a worker frees up.
-		w.routinePool.Submit(func() {
-			defer w.writeInProgress.Store(false)
-			s := newSignalsInfo[T](sendingItems)
-			var err error
-			w.snappyBuf, w.wrBuf, err = buildWriteRequest[T](sendingItems, w.snappyBuf, w.wrBuf)
-			// If the build write request fails then we should pretend it worked. Since this should only trigger if
-			// we get invalid datums.
-			if err != nil {
-				level.Error(w.log).Log("msg", "error building write request", "err", err)
-				return
-			}
-			w.send(w.snappyBuf, s, ctx)
-		})
-	}
+
+	w.currentlySending = true
+	go func() {
+		// Regardless of what happens we need to clear out the items.
+		// This will allow new items to be added that will then allow more sending.
+		defer func() {
+			w.mut.Lock()
+			w.currentlySending = false
+			w.mut.Unlock()
+			finish()
+		}()
+		isMeta := false
+		if _, ok := any(w.items).([]types.MetadataDatum); ok {
+			isMeta = true
+		}
+		send(isMeta, w.cfg, w.log, w.snappyBuf, s, ctx, client, w.stats)
+	}()
 }
 
-func (w *writeBuffer[T]) send(bb []byte, s signalsInfo, ctx context.Context) {
+func send(isMeta bool, cfg types.ConnectionConfig, l log.Logger, bb []byte, s signalsInfo, ctx context.Context, client *http.Client, parentstats func(stats types.NetworkStats)) {
 	bbLen := len(bb)
 	stats := func(r sendResult) {
-		recordStats(s.seriesCount, s.histogramCount, s.metadataCount, s.newestTS, w.isMeta, w.stats, r, bbLen)
+		recordStats(s.seriesCount, s.histogramCount, s.metadataCount, s.newestTS, isMeta, parentstats, r, bbLen)
 	}
-	l, nlErr := newWrite(w.cfg, w.log, stats, w.client)
+	nw, nlErr := newWrite(cfg, l, stats, client)
 	if nlErr != nil {
-		level.Error(w.log).Log("msg", "error creating write", "err", nlErr)
+		level.Error(l).Log("msg", "error creating write", "err", nlErr)
 		return
 	}
-	l.trySend(bb, ctx)
-}
-
-// getItems will batch up to BatchCount items and return them, then truncate the internal items array.
-func (w *writeBuffer[T]) getItems() []T {
-	numberToSend := len(w.items)
-	if len(w.items) > w.cfg.BatchCount {
-		numberToSend = w.cfg.BatchCount
-	}
-	sendingItems := w.items[:numberToSend]
-	w.items = w.items[numberToSend:]
-	return sendingItems
+	nw.trySend(bb, ctx)
 }
 
 // buildWriteRequest takes returns the snappy encoded final buffer followed by the protobuf. Note even in error it returns the buffers
@@ -142,7 +150,7 @@ func buildWriteRequest[T types.Datum](items []T, snappybuf []byte, protobuf []by
 	if protobuf == nil {
 		protobuf = make([]byte, 0)
 	}
-	data, err := generateWriteRequest[T](items, protobuf)
+	data, err := generateWriteRequest(items, protobuf)
 	if err != nil {
 		return protobuf, snappybuf, err
 	}
@@ -165,7 +173,7 @@ func newSignalsInfo[T types.Datum](signals []T) signalsInfo {
 	s.histogramCount = getHistogramCount(signals)
 	s.metadataCount = getMetaDataCount(signals)
 	for _, ts := range signals {
-		mm, valid := interface{}(ts).(types.MetricDatum)
+		mm, valid := any(ts).(types.MetricDatum)
 		if !valid {
 			continue
 		}

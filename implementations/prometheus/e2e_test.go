@@ -152,7 +152,8 @@ func runTest(t *testing.T, add func(index int, appendable storage.Appender) (flo
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
-	c.Start(ctx)
+	err = c.Start(ctx)
+	require.NoError(t, err)
 	defer c.Stop()
 
 	index := atomic.NewInt64(0)
@@ -174,11 +175,12 @@ func runTest(t *testing.T, add func(index int, appendable storage.Appender) (flo
 
 	// This is a weird use case to handle eventually.
 	// With race turned on this can take a long time.
-	tm := time.NewTimer(30 * time.Second)
+	tm := time.NewTimer(20 * time.Second)
 	select {
 	case <-done:
 	case <-tm.C:
-		require.Truef(t, false, "failed to collect signals in the appropriate time")
+		c.Stop()
+		require.Truef(t, false, "failed to collect signals in the appropriate time, series found %d", series.Load())
 	}
 
 	cancel()
@@ -338,7 +340,7 @@ func histFloatSame(t *testing.T, h *histogram.FloatHistogram, pb prompb.Histogra
 func newComponent(t *testing.T, l log.Logger, url string, reg prometheus.Registerer) (Queue, error) {
 	return NewQueue("test", types.ConnectionConfig{
 		URL:              url,
-		Timeout:          20 * time.Second,
+		Timeout:          30 * time.Second,
 		RetryBackoff:     1 * time.Second,
 		MaxRetryAttempts: 1,
 		BatchCount:       5,

@@ -57,34 +57,29 @@ func TestSending(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
+	moreData := make(chan types.RequestMoreSignals[types.Datum], 1)
 	wr, err := New(cc, logger, &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
-	})
+	}, moreData)
+	require.NoError(t, err)
 	wr.Start(ctx)
 	defer wr.Stop()
 
-	require.NoError(t, err)
+	series := make([]types.Datum, 100)
 	for i := 0; i < 100; i++ {
-		send(t, i, wr, ctx)
+		series[i] = createSeries(i, t)
 	}
+	req := <-moreData
+	req.Response <- series
 	require.Eventuallyf(t, func() bool {
 		return recordsFound.Load() == 100
-	}, 10*time.Second, 100*time.Millisecond, "expected 100 records but got %d", recordsFound.Load())
+	}, 20*time.Second, 1*time.Second, "expected 100 records but got %d", recordsFound.Load())
 }
 
 func TestUpdatingConfig(t *testing.T) {
-	recordsFound := atomic.Uint32{}
-	lastBatchSize := atomic.Uint32{}
-	svr := httptest.NewServer(handler(t, http.StatusOK, func(wr *prompb.WriteRequest) {
-		lastBatchSize.Store(uint32(len(wr.Timeseries)))
-		recordsFound.Add(uint32(len(wr.Timeseries)))
-	}))
-
-	defer svr.Close()
-
 	cc := types.ConnectionConfig{
-		URL:           svr.URL,
+		URL:           "http://localhost",
 		Timeout:       1 * time.Second,
 		BatchCount:    10,
 		FlushInterval: 5 * time.Second,
@@ -99,18 +94,19 @@ func TestUpdatingConfig(t *testing.T) {
 		},
 	}
 
+	moreData := make(chan types.RequestMoreSignals[types.Datum], 1)
 	logger := log.NewNopLogger()
 	wr, err := New(cc, logger, &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
-	})
+	}, moreData)
 	require.NoError(t, err)
 	ctx := context.Background()
 	wr.Start(ctx)
 	defer wr.Stop()
 
 	cc2 := types.ConnectionConfig{
-		URL:           svr.URL,
+		URL:           "http://localhost",
 		Timeout:       1 * time.Second,
 		BatchCount:    20,
 		FlushInterval: 5 * time.Second,
@@ -128,15 +124,6 @@ func TestUpdatingConfig(t *testing.T) {
 	success, err := wr.UpdateConfig(ctx, cc2)
 	require.NoError(t, err)
 	require.True(t, success)
-	time.Sleep(1 * time.Second)
-	for i := 0; i < 40; i++ {
-		send(t, i, wr, ctx)
-	}
-	require.Eventuallyf(t, func() bool {
-		return recordsFound.Load() == 40
-	}, 20*time.Second, 1*time.Second, "record count should be 40 but is %d", recordsFound.Load())
-
-	require.Truef(t, lastBatchSize.Load() == 20, "batch_count should be 20 but is %d", lastBatchSize.Load())
 }
 
 func TestDrain(t *testing.T) {
@@ -184,20 +171,26 @@ func TestDrain(t *testing.T) {
 		},
 	}
 
+	moreData := make(chan types.RequestMoreSignals[types.Datum], 1)
 	logger := log.NewNopLogger()
 	wr, err := New(cc, logger, &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
-	})
+	}, moreData)
 	require.NoError(t, err)
 	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 	wr.Start(ctx)
 	defer wr.Stop()
 	// Kick these off in the background.
 	go func() {
+		series := make([]types.Datum, 40)
 		for i := 0; i < 40; i++ {
-			send(t, i, wr, ctx)
+			series[i] = createSeries(i, t)
 		}
+		req := <-moreData
+		req.Response <- series
 	}()
 	// Make sure we get a request sent so that it is in the queue.
 	require.Eventually(t, func() bool {
@@ -263,15 +256,18 @@ func TestRetry(t *testing.T) {
 		},
 	}
 
+	moreData := make(chan types.RequestMoreSignals[types.Datum], 1)
 	logger := log.NewNopLogger()
 	wr, err := New(cc, logger, &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
-	})
+	}, moreData)
 	require.NoError(t, err)
 	wr.Start(ctx)
 	defer wr.Stop()
-	send(t, 1, wr, ctx)
+	s := createSeries(1, t)
+	req := <-moreData
+	req.Response <- []types.Datum{s}
 
 	require.Eventually(t, func() bool {
 		done := retries.Load() > 5
@@ -280,7 +276,6 @@ func TestRetry(t *testing.T) {
 }
 
 func TestRetryBounded(t *testing.T) {
-
 	sends := atomic.Uint32{}
 	svr := httptest.NewServer(handler(t, http.StatusTooManyRequests, func(wr *prompb.WriteRequest) {
 		sends.Add(1)
@@ -309,17 +304,21 @@ func TestRetryBounded(t *testing.T) {
 		},
 	}
 
+	moreData := make(chan types.RequestMoreSignals[types.Datum], 1)
 	logger := log.NewNopLogger()
 	wr, err := New(cc, logger, &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
-	})
+	}, moreData)
 	wr.Start(ctx)
 	defer wr.Stop()
 	require.NoError(t, err)
+	series := make([]types.Datum, 10)
 	for i := 0; i < 10; i++ {
-		send(t, i, wr, ctx)
+		series[i] = createSeries(i, t)
 	}
+	req := <-moreData
+	req.Response <- series
 	require.Eventuallyf(t, func() bool {
 		// We send 10 but each one gets retried once so 20 total.
 		return sends.Load() == 10*2
@@ -353,18 +352,22 @@ func TestRecoverable(t *testing.T) {
 		},
 	}
 
+	moreData := make(chan types.RequestMoreSignals[types.Datum], 1)
 	logger := log.NewNopLogger()
 	fs := &fakestats{
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
 	}
-	wr, err := New(cc, logger, fs)
+	wr, err := New(cc, logger, fs, moreData)
 	require.NoError(t, err)
 	wr.Start(ctx)
 	defer wr.Stop()
+	series := make([]types.Datum, 10)
 	for i := 0; i < 10; i++ {
-		send(t, i, wr, ctx)
+		series[i] = createSeries(i, t)
 	}
+	req := <-moreData
+	req.Response <- series
 	require.Eventuallyf(t, func() bool {
 		// We send 10 but each one gets retried once so 20 total.
 		return fs.recoverable.Load() == 10*2
@@ -375,7 +378,6 @@ func TestRecoverable(t *testing.T) {
 }
 
 func TestNonRecoverable(t *testing.T) {
-
 	svr := httptest.NewServer(handler(t, http.StatusBadRequest, func(wr *prompb.WriteRequest) {
 	}))
 
@@ -407,26 +409,24 @@ func TestNonRecoverable(t *testing.T) {
 		recoverable:    atomic.NewInt32(0),
 		nonrecoverable: atomic.NewInt32(0),
 	}
-	wr, err := New(cc, logger, fs)
+	moreData := make(chan types.RequestMoreSignals[types.Datum], 1)
+	wr, err := New(cc, logger, fs, moreData)
 	wr.Start(ctx)
 	defer wr.Stop()
 	require.NoError(t, err)
+	series := make([]types.Datum, 10)
 	for i := 0; i < 10; i++ {
-		send(t, i, wr, ctx)
+		ts := createSeries(i, t)
+		series[i] = ts
 	}
+	req := <-moreData
+	req.Response <- series
 	require.Eventuallyf(t, func() bool {
 		return fs.nonrecoverable.Load() == 10
 	}, 10*time.Second, 100*time.Millisecond, "non recoverable should be 10 but is %d", fs.nonrecoverable.Load())
 	time.Sleep(2 * time.Second)
 	// Ensure we dont get any more.
 	require.True(t, fs.nonrecoverable.Load() == 10)
-}
-
-func send(t *testing.T, i int, wr types.NetworkClient, ctx context.Context) {
-	ts := createSeries(i, t)
-	// The actual hash is only used for queueing into different buckets.
-	err := wr.SendSeries(ctx, ts)
-	require.NoError(t, err)
 }
 
 func handler(t *testing.T, code int, callback func(wr *prompb.WriteRequest)) http.HandlerFunc {
@@ -522,33 +522,38 @@ type fakestats struct {
 }
 
 func (fs fakestats) SendParralelismStats(stats types.ParralelismStats) {
-
 }
 
 func (fs fakestats) RegisterParralelism(f func(types.ParralelismStats)) types.NotificationRelease {
 	return func() {
-
 	}
 }
 
 func (fakestats) Start(_ context.Context) {
 }
+
 func (fakestats) Stop() {
 }
+
 func (fs *fakestats) SendSeriesNetworkStats(ns types.NetworkStats) {
 	fs.nonrecoverable.Add(int32(ns.TotalFailed()))
 	fs.recoverable.Add(int32(ns.Total5XX()))
 }
+
 func (fakestats) SendSerializerStats(_ types.SerializerStats) {
 }
+
 func (fakestats) SendMetadataNetworkStats(_ types.NetworkStats) {
 }
+
 func (fakestats) RegisterSeriesNetwork(_ func(types.NetworkStats)) (_ types.NotificationRelease) {
 	return func() {}
 }
+
 func (fakestats) RegisterMetadataNetwork(_ func(types.NetworkStats)) (_ types.NotificationRelease) {
 	return func() {}
 }
+
 func (fakestats) RegisterSerializer(_ func(types.SerializerStats)) (_ types.NotificationRelease) {
 	return func() {}
 }

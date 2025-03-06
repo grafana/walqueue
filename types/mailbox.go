@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+
 	"golang.design/x/chann"
 )
 
@@ -28,4 +29,8 @@ func (m *Mailbox[T]) Send(ctx context.Context, v T) error {
 	case m.ch.In() <- v:
 		return nil
 	}
+}
+
+type RequestMoreSignals[T Datum] struct {
+	Response chan []T
 }

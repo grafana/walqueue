@@ -98,9 +98,10 @@ func TestInvalidProxyURL(t *testing.T) {
 			// Try to create a client - should fail with an error
 			// Create a simple stats hub for testing
 			statshub := &testStatsHub{}
+			noopChan := make(chan types.RequestMoreSignals[types.Datum], 1)
 
 			// Use the New function which internally creates an HTTP client
-			_, err := New(config, logger, statshub)
+			_, err := New(config, logger, statshub, noopChan)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.errorPrefix,
 				"Expected error to contain '%s' but got: %v", tc.errorPrefix, err)

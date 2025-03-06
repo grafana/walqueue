@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"reflect"
 	"time"
 
 	"github.com/prometheus/common/config"
@@ -13,10 +12,6 @@ import (
 type NetworkClient interface {
 	Start(ctx context.Context)
 	Stop()
-	// SendSeries will block if the network caches are full.
-	SendSeries(ctx context.Context, d MetricDatum) error
-	// SendMetadata will block if the network caches are full.
-	SendMetadata(ctx context.Context, d MetadataDatum) error
 	// UpdateConfig is a synchronous call and will only return once the config
 	// is applied or an error occurs.
 	UpdateConfig(ctx context.Context, cfg ConnectionConfig) (bool, error)
@@ -150,8 +145,4 @@ func (cc ConnectionConfig) ToPrometheusConfig() (config.HTTPClientConfig, error)
 type BasicAuth struct {
 	Username string
 	Password string
-}
-
-func (cc ConnectionConfig) Equals(bb ConnectionConfig) bool {
-	return reflect.DeepEqual(cc, bb)
 }

@@ -14,8 +14,6 @@ func Test_SyncMailbox_Basic(t *testing.T) {
 	m := NewSyncMailbox[string, bool]()
 	assert.NotNil(t, m)
 
-	m.Start()
-
 	// Set up receiver
 	var received []string
 	var wg sync.WaitGroup
@@ -47,8 +45,6 @@ func Test_SyncMailbox_Concurrent(t *testing.T) {
 	m := NewSyncMailbox[int, int]()
 	assert.NotNil(t, m)
 
-	m.Start()
-
 	// Set up receiver
 	var received []int
 	var mu sync.Mutex
@@ -58,7 +54,6 @@ func Test_SyncMailbox_Concurrent(t *testing.T) {
 	wg.Add(numSenders * messagesPerSender)
 
 	go func() {
-
 		for cb := range m.ReceiveC() {
 			mu.Lock()
 			received = append(received, cb.Value)

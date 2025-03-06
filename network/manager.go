@@ -121,8 +121,8 @@ func (s *manager) run() {
 			return
 		case items := <-s.responseFromRequestForSignalsFromFileQueue:
 			s.requestForMoreDataPending.Store(false)
-			s.AddNewDatumsAndDistribute(items)
-			s.CheckAndSend()
+			s.addNewDatumsAndDistribute(items)
+			s.checkAndSend()
 		case cfg, ok := <-s.configInbox.ReceiveC():
 			if !ok {
 				level.Debug(s.logger).Log("msg", "config inbox closed")
@@ -130,43 +130,43 @@ func (s *manager) run() {
 			}
 			var err error
 			successful := false
-			if err = s.InternalUpdateConfig(cfg.Value, s.desiredConnections); err == nil {
+			if err = s.updateConfig(cfg.Value, s.desiredConnections); err == nil {
 				successful = true
 			}
 			cfg.Notify(successful, err)
-			s.QueueCheck()
+			s.queueCheck()
 		case desired, ok := <-s.desiredOutbox.ReceiveC():
 			if !ok {
 				level.Debug(s.logger).Log("msg", "desired outbox closed")
 				return
 			}
-			err := s.InternalUpdateConfig(s.cfg, desired)
+			err := s.updateConfig(s.cfg, desired)
 			if err != nil {
 				level.Debug(s.logger).Log("msg", "update config failure", "err", err)
 			}
-			s.QueueCheck()
+			s.queueCheck()
 		case <-s.stop:
 			return
 		case <-ticker.C:
-			s.QueueCheck()
+			s.queueCheck()
 		case <-s.queuePendingData:
-			s.AddNewDatumsAndDistribute([]types.Datum{})
-			s.CheckAndSend()
+			s.addNewDatumsAndDistribute([]types.Datum{})
+			s.checkAndSend()
 		}
 	}
 }
 
-// QueueCheck will queue a check for redistributing data if one is on already out.
+// queueCheck will queue a check for redistributing data if one is on already out.
 // This should be called whenever a request completes.
-func (s *manager) QueueCheck() {
+func (s *manager) queueCheck() {
 	select {
 	case s.queuePendingData <- struct{}{}:
 	default:
 	}
 }
 
-// AddNewDatumsAndDistribute will distribute the pending items to pending data and then the writeBuffers.
-func (s *manager) AddNewDatumsAndDistribute(items []types.Datum) {
+// addNewDatumsAndDistribute will distribute the pending items to pending data and then the writeBuffers.
+func (s *manager) addNewDatumsAndDistribute(items []types.Datum) {
 	s.pendingData.AddItems(items)
 
 	for _, wr := range s.metricBuffers {
@@ -194,19 +194,19 @@ func (s *manager) AddNewDatumsAndDistribute(items []types.Datum) {
 	}
 }
 
-func (s *manager) FinishWrite() {
+func (s *manager) finishWrite() {
 	s.currentOutgoingConnections.Dec()
-	s.QueueCheck()
+	s.queueCheck()
 }
 
-// CheckAndSend will check each write buffer to see if it can send data.
-func (s *manager) CheckAndSend() {
+// checkAndSend will check each write buffer to see if it can send data.
+func (s *manager) checkAndSend() {
 	sendToWR := func(wr *writeBuffer[types.MetricDatum]) {
 		if s.currentOutgoingConnections.Load() >= int32(s.desiredConnections) {
 			return
 		}
 		s.currentOutgoingConnections.Inc()
-		wr.Send(s.ctx, s.client, s.FinishWrite)
+		wr.Send(s.ctx, s.client, s.finishWrite)
 	}
 
 	for _, wr := range s.metricBuffers {
@@ -224,7 +224,7 @@ func (s *manager) CheckAndSend() {
 			return
 		}
 		s.currentOutgoingConnections.Inc()
-		wr.Send(s.ctx, s.client, s.FinishWrite)
+		wr.Send(s.ctx, s.client, s.finishWrite)
 	}
 	// Check to see if we need to send metadata
 	if !s.metadataBuffer.IsSending() {
@@ -236,7 +236,7 @@ func (s *manager) CheckAndSend() {
 	}
 }
 
-func (s *manager) InternalUpdateConfig(cc types.ConnectionConfig, desiredConnections uint) error {
+func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uint) error {
 	// No need to do anything if the configuration is the same or if we dont need to update connections.
 	if s.cfg.Equals(cc) && s.desiredConnections == desiredConnections {
 		return nil

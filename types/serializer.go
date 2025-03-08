@@ -10,6 +10,8 @@ type SerializerConfig struct {
 	MaxSignalsInBatch uint32
 	// FlushFrequency controls how often to write to disk regardless of MaxSignalsInBatch.
 	FlushFrequency time.Duration
+	// Compression specifies the compression algorithm to use: "none", "snappy", or "zstd"
+	Compression string
 }
 
 // Serializer handles converting a set of signals into a binary representation to be written to storage.

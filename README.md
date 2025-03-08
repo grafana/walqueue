@@ -58,9 +58,38 @@ The `serialization` system provides a `prometheus.Appender` interface that is th
 
 ### filequeue
 
-The `filequeue` handles writing and reading data from the `wal` directory. There exists one `filequeue` for each `endpoint` defined. Each file is represented by an atomicly increasing integer that is used to create a file named `<ID>.committed`. The committed name is simply to differentiate it from other files that may get created in the same directory. 
+The `filequeue` handles writing and reading data from storage. There exists one `filequeue` for each `endpoint` defined. Each file is represented by an atomically increasing integer that is used to create a file named `<ID>.committed`. The committed name is simply to differentiate it from other files that may get created in the same storage location.
 
-The `filequeue` accepts data `[]byte` and metadata `map[string]string`. These are also written using `msgp` for convenience. The `filequeue` keeps an internal array of files in order by id and fill feed them one by one to the `endpoint`, On startup the `filequeue` will load any existing files into the internal array and start feeding them to `endpoint`. When passing a handle to `endpoint` it passes a callback that actually returns the data and metadata. Once the callback is called then the file is deleted. It should be noted that this is done without touching any state within `filequeue`, keeping the zero mutex promise. It is assumed when the callback is called the data is being processed.
+The `filequeue` supports two storage types:
+- **Disk storage** (default): Stores data on the physical filesystem
+- **Memory storage**: Stores data in memory only (data is lost on restart)
+
+The `filequeue` accepts data `[]byte` and metadata `map[string]string`. These are written using `msgp` for convenience. The `filequeue` keeps an internal array of files in order by id and feeds them one by one to the `endpoint`. On startup the `filequeue` will load any existing files into the internal array and start feeding them to `endpoint`. When passing a handle to `endpoint` it passes a callback that actually returns the data and metadata. Once the callback is called then the file is deleted. It should be noted that this is done without touching any state within `filequeue`, keeping the zero mutex promise. It is assumed when the callback is called the data is being processed.
+
+#### In-Memory Storage
+
+In-memory storage can be enabled with the `WithStorageType(StorageMemory)` option:
+
+```go
+q, err := filequeue.NewQueue(
+    "/path/to/directory",  // Directory is still required but doesn't need to exist
+    outFunc,
+    stats,
+    logger,
+    filequeue.WithStorageType(filequeue.StorageMemory)
+)
+```
+
+Benefits of in-memory storage:
+- Higher performance than disk storage
+- No disk I/O overhead 
+- Works without requiring a valid directory path on disk
+- Useful for testing and ephemeral data scenarios
+
+Limitations of in-memory storage:
+- Data is lost on process restart
+- Not suitable for persistence between restarts
+- Memory usage scales with data volume
 
 This does mean that the system is not ACID compliant. If a restart happens before memory is written or while it is in the sending queue it will be lost. This is done for performance and simplicity reasons.
 

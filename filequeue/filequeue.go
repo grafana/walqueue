@@ -3,7 +3,6 @@ package filequeue
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -16,8 +15,19 @@ import (
 
 var _ types.FileStorage = (*queue)(nil)
 
-// queue represents an on-disk queue. This is a list implemented as files ordered by id with a name pattern: <id>.committed
-// Each file contains a byte buffer and an optional metatdata map.
+// StorageType defines the type of storage to use for the queue
+type StorageType string
+
+const (
+	// StorageDisk uses the actual filesystem for storage
+	StorageDisk StorageType = "disk"
+	// StorageMemory uses an in-memory filesystem for storage (data is lost on restart)
+	StorageMemory StorageType = "memory"
+)
+
+// queue represents a file-based queue. This is a list implemented as files ordered by id with a name pattern: <id>.committed
+// Each file contains a byte buffer and an optional metadata map.
+// The queue can use either the actual filesystem or an in-memory filesystem.
 type queue struct {
 	directory string
 	maxID     int
@@ -29,18 +39,58 @@ type queue struct {
 	// files is the list of files found initially.
 	files []string
 	stats types.StatsHub
+	// fs is the filesystem implementation to use (disk or memory)
+	fs FileSystem
 }
 
-// NewQueue returns a implementation of FileStorage.
-func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandle), stats types.StatsHub, logger log.Logger) (types.FileStorage, error) {
-	err := os.MkdirAll(directory, 0777)
+// QueueOption is a function that can modify a queue.
+type QueueOption func(*queue)
+
+// WithStorageType sets the storage type for the queue. Default is StorageDisk.
+func WithStorageType(storageType StorageType) QueueOption {
+	return func(q *queue) {
+		switch storageType {
+		case StorageMemory:
+			q.fs = NewMemoryFS()
+		default:
+			q.fs = NewDiskFS()
+		}
+	}
+}
+
+// WithCustomFS sets a custom filesystem implementation for the queue.
+func WithCustomFS(fs FileSystem) QueueOption {
+	return func(q *queue) {
+		q.fs = fs
+	}
+}
+
+// NewQueue returns an implementation of FileStorage.
+func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandle), stats types.StatsHub, logger log.Logger, opts ...QueueOption) (types.FileStorage, error) {
+	q := &queue{
+		directory: directory,
+		logger:    logger,
+		out:       out,
+		dataQueue: types.NewMailbox[types.Data](),
+		files:     make([]string, 0),
+		stats:     stats,
+		fs:        NewDiskFS(), // Default to disk storage
+	}
+	
+	// Apply options
+	for _, opt := range opts {
+		opt(q)
+	}
+
+	// Create directory if it doesn't exist
+	err := q.fs.MkdirAll(directory, 0777)
 	if err != nil {
 		return nil, err
 	}
 
 	// We dont actually support uncommitted but I think its good to at least have some naming to avoid parsing random files
 	// that get installed into the system.
-	matches, _ := filepath.Glob(filepath.Join(directory, "*.committed"))
+	matches, _ := q.fs.Glob(filepath.Join(directory, "*.committed"))
 	ids := make([]int, len(matches))
 
 	// Try and grab the id from each file.
@@ -58,15 +108,7 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 	if len(ids) > 0 {
 		currentMaxID = ids[len(ids)-1]
 	}
-	q := &queue{
-		directory: directory,
-		maxID:     currentMaxID,
-		logger:    logger,
-		out:       out,
-		dataQueue: types.NewMailbox[types.Data](),
-		files:     make([]string, 0),
-		stats:     stats,
-	}
+	q.maxID = currentMaxID
 
 	// Save the existing files in `q.existingFiles`, which will have their data pushed to `out` when actor starts.
 	for _, id := range ids {
@@ -79,10 +121,12 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 func (q *queue) Start(ctx context.Context) {
 	// Queue up our existing items.
 	for _, name := range q.files {
+		// Need to make a copy of name for the closure
+		fileName := name
 		q.out(ctx, types.DataHandle{
-			Name: name,
+			Name: fileName,
 			Pop: func() (map[string]string, []byte, error) {
-				return get(q.logger, name)
+				return q.get(fileName)
 			},
 		})
 	}
@@ -104,9 +148,9 @@ func (q *queue) Store(ctx context.Context, meta map[string]string, data []byte) 
 }
 
 // get returns the data of the file or an error if something wrong went on.
-func get(logger log.Logger, name string) (map[string]string, []byte, error) {
-	defer deleteFile(logger, name)
-	buf, err := readFile(name)
+func (q *queue) get(name string) (map[string]string, []byte, error) {
+	defer q.deleteFile(name)
+	buf, err := q.readFile(name)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -120,7 +164,6 @@ func get(logger log.Logger, name string) (map[string]string, []byte, error) {
 
 // run allows most of the queue to be single threaded with work only coming in and going out via mailboxes(channels).
 func (q *queue) run(ctx context.Context) {
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -135,10 +178,12 @@ func (q *queue) run(ctx context.Context) {
 				continue
 			}
 			// The idea is that this callee will block/process until the callee is ready for another file.
+			// Need to make a copy of name for the closure
+			fileName := name
 			q.out(ctx, types.DataHandle{
-				Name: name,
+				Name: fileName,
 				Pop: func() (map[string]string, []byte, error) {
-					return get(q.logger, name)
+					return q.get(fileName)
 				},
 			})
 		}
@@ -173,17 +218,18 @@ func (q *queue) add(meta map[string]string, data []byte) (string, error) {
 }
 
 func (q *queue) writeFile(name string, data []byte) error {
-	return os.WriteFile(name, data, 0644)
+	return q.fs.WriteFile(name, data, 0644)
 }
 
-func deleteFile(logger log.Logger, name string) {
-	err := os.Remove(name)
+func (q *queue) deleteFile(name string) {
+	err := q.fs.Remove(name)
 	if err != nil {
-		level.Error(logger).Log("msg", "unable to delete file", "err", err, "file", name)
+		level.Error(q.logger).Log("msg", "unable to delete file", "err", err, "file", name)
 	}
 }
-func readFile(name string) ([]byte, error) {
-	bb, err := os.ReadFile(name)
+
+func (q *queue) readFile(name string) ([]byte, error) {
+	bb, err := q.fs.ReadFile(name)
 	if err != nil {
 		return nil, err
 	}

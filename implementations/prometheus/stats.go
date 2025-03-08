@@ -45,6 +45,7 @@ type Stats struct {
 	FileIDWritten            prometheus.Gauge
 	CompressedBytesWritten   prometheus.Gauge
 	UncompressedBytesWritten prometheus.Gauge
+	TotalBytesOnDisk         prometheus.Gauge
 
 	FileIDRead            prometheus.Gauge
 	CompressedBytesRead   prometheus.Gauge
@@ -142,6 +143,12 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "disk_compressed_bytes_read",
+		}),
+		TotalBytesOnDisk: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "total_bytes_on_disk",
+			Help:      "Total number of bytes currently stored on disk/filesystem",
 		}),
 		NetworkNewestOutTimeStampSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
@@ -295,6 +302,7 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		s.FileIDWritten,
 		s.UncompressedBytesWritten,
 		s.CompressedBytesWritten,
+		s.TotalBytesOnDisk,
 		s.TimestampDriftSeconds,
 	)
 	// Metadata doesn't scale, it has one dedicated connection.
@@ -333,6 +341,7 @@ func (s *Stats) Unregister() {
 		s.NetworkTTLDrops,
 		s.SerializerInSeries,
 		s.SerializerErrors,
+		s.TotalBytesOnDisk,
 		s.SerializerNewestInTimeStampSeconds,
 		s.FileIDRead,
 		s.UncompressedBytesRead,
@@ -444,6 +453,11 @@ func (s *Stats) UpdateSerializer(stats types.SerializerStats) {
 	s.CompressedBytesWritten.Add(float64(stats.CompressedBytesWritten))
 	s.UncompressedBytesRead.Add(float64(stats.UncompressedBytesRead))
 	s.CompressedBytesRead.Add(float64(stats.UncompressedBytesRead))
+
+	// Update total bytes on disk if reported
+	if stats.TotalBytesOnDisk > 0 {
+		s.TotalBytesOnDisk.Set(float64(stats.TotalBytesOnDisk))
+	}
 }
 
 func (s *Stats) UpdateParralelism(stats types.ParralelismStats) {

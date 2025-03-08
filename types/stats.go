@@ -37,6 +37,7 @@ type SerializerStats struct {
 	UncompressedBytesRead    int
 	CompressedBytesRead      int
 	FileIDRead               int
+	TotalBytesOnDisk         int64
 }
 
 type NetworkStats struct {

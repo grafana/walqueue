@@ -73,6 +73,7 @@ const uncompressedWritten = "alloy_queue_series_disk_uncompressed_bytes_written"
 
 const fileIdWritten = "alloy_queue_series_file_id_written"
 const fileIdRead = "alloy_queue_series_file_id_read"
+const totalBytesOnDisk = "alloy_queue_series_total_bytes_on_disk"
 
 // TestMetadata is the large end to end testing for the queue based wal, specifically for metadata.
 func TestMetadata(t *testing.T) {

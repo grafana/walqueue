@@ -41,6 +41,8 @@ type queue struct {
 	stats types.StatsHub
 	// fs is the filesystem implementation to use (disk or memory)
 	fs FileSystem
+	// totalBytesOnDisk tracks the total bytes stored in the filesystem
+	totalBytesOnDisk int64
 }
 
 // QueueOption is a function that can modify a queue.
@@ -76,7 +78,7 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 		stats:     stats,
 		fs:        NewDiskFS(), // Default to disk storage
 	}
-	
+
 	// Apply options
 	for _, opt := range opts {
 		opt(q)
@@ -114,7 +116,16 @@ func NewQueue(directory string, out func(ctx context.Context, dh types.DataHandl
 	for _, id := range ids {
 		name := filepath.Join(directory, fmt.Sprintf("%d.committed", id))
 		q.files = append(q.files, name)
+
+		// Get file size to track total bytes on disk
+		if data, err := q.fs.ReadFile(name); err == nil {
+			q.totalBytesOnDisk += int64(len(data))
+		}
 	}
+
+	// Report initial metric
+	q.reportDiskStats()
+
 	return q, nil
 }
 
@@ -218,13 +229,26 @@ func (q *queue) add(meta map[string]string, data []byte) (string, error) {
 }
 
 func (q *queue) writeFile(name string, data []byte) error {
-	return q.fs.WriteFile(name, data, 0644)
+	err := q.fs.WriteFile(name, data, 0644)
+	if err == nil {
+		// Update totalBytesOnDisk when successfully writing a file
+		q.totalBytesOnDisk += int64(len(data))
+		q.reportDiskStats()
+	}
+	return err
 }
 
 func (q *queue) deleteFile(name string) {
+	// Get file size before deleting to subtract from totalBytesOnDisk
+	if data, err := q.fs.ReadFile(name); err == nil {
+		q.totalBytesOnDisk -= int64(len(data))
+	}
+
 	err := q.fs.Remove(name)
 	if err != nil {
 		level.Error(q.logger).Log("msg", "unable to delete file", "err", err, "file", name)
+	} else {
+		q.reportDiskStats()
 	}
 }
 
@@ -234,4 +258,11 @@ func (q *queue) readFile(name string) ([]byte, error) {
 		return nil, err
 	}
 	return bb, err
+}
+
+// reportDiskStats sends the current total bytes on disk as a metric
+func (q *queue) reportDiskStats() {
+	q.stats.SendSerializerStats(types.SerializerStats{
+		TotalBytesOnDisk: q.totalBytesOnDisk,
+	})
 }

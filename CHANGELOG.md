@@ -1,5 +1,6 @@
 # walqueue changelog
 
+- [FEATURE] Add memory limit option for in-memory filesystem, pruning oldest files when the limit is reached.
 - [FEATURE] Add in-memory filesystem option for filequeue, allowing for zero disk I/O and higher performance. (@mattdurham)
 - [FEATURE] Add support for 'zstd' compression option in filequeue, in addition to the default 'snappy' compression. (@mattdurham)
 - [ENHANCEMENT] Instead of file queue pushing data, the network writers request it. (@mattdurham)

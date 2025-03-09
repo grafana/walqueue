@@ -46,6 +46,8 @@ type Stats struct {
 	CompressedBytesWritten   prometheus.Gauge
 	UncompressedBytesWritten prometheus.Gauge
 	TotalBytesOnDisk         prometheus.Gauge
+	MemoryUsedBytes          prometheus.Gauge
+	MemoryMaxBytes           prometheus.Gauge
 
 	FileIDRead            prometheus.Gauge
 	CompressedBytesRead   prometheus.Gauge
@@ -149,6 +151,18 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			Subsystem: subsystem,
 			Name:      "total_bytes_on_disk",
 			Help:      "Total number of bytes currently stored on disk/filesystem",
+		}),
+		MemoryUsedBytes: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "memory_used_bytes",
+			Help:      "Current memory usage in bytes for in-memory storage",
+		}),
+		MemoryMaxBytes: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "memory_max_bytes",
+			Help:      "Maximum memory limit in bytes for in-memory storage (0 means unlimited)",
 		}),
 		NetworkNewestOutTimeStampSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
@@ -302,6 +316,8 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		s.FileIDWritten,
 		s.UncompressedBytesWritten,
 		s.CompressedBytesWritten,
+		s.MemoryUsedBytes,
+		s.MemoryMaxBytes,
 		s.TotalBytesOnDisk,
 		s.TimestampDriftSeconds,
 	)
@@ -341,6 +357,8 @@ func (s *Stats) Unregister() {
 		s.NetworkTTLDrops,
 		s.SerializerInSeries,
 		s.SerializerErrors,
+		s.MemoryUsedBytes,
+		s.MemoryMaxBytes,
 		s.TotalBytesOnDisk,
 		s.SerializerNewestInTimeStampSeconds,
 		s.FileIDRead,
@@ -458,6 +476,10 @@ func (s *Stats) UpdateSerializer(stats types.SerializerStats) {
 	if stats.TotalBytesOnDisk > 0 {
 		s.TotalBytesOnDisk.Set(float64(stats.TotalBytesOnDisk))
 	}
+
+	// Update memory metrics
+	s.MemoryUsedBytes.Set(float64(stats.MemoryUsedBytes))
+	s.MemoryMaxBytes.Set(float64(stats.MemoryMaxBytes))
 }
 
 func (s *Stats) UpdateParralelism(stats types.ParralelismStats) {

@@ -60,6 +60,23 @@ func WithStorageType(storageType StorageType) QueueOption {
 	}
 }
 
+// WithMemoryLimit sets a memory limit for in-memory storage.
+// This option only applies if the storage type is StorageMemory.
+// If maxBytes is 0, no limit is applied.
+// If memory usage exceeds this limit, oldest files will be pruned.
+func WithMemoryLimit(maxBytes int64) QueueOption {
+	return func(q *queue) {
+		// Only apply if using memory storage
+		if memFS, ok := q.fs.(*MemoryFS); ok {
+			memFS.maxBytes = maxBytes
+		} else {
+			// If WithMemoryLimit is called before WithStorageType,
+			// we need to create a memory filesystem with the limit
+			q.fs = NewMemoryFSWithLimit(maxBytes)
+		}
+	}
+}
+
 // WithCustomFS sets a custom filesystem implementation for the queue.
 func WithCustomFS(fs FileSystem) QueueOption {
 	return func(q *queue) {
@@ -262,7 +279,15 @@ func (q *queue) readFile(name string) ([]byte, error) {
 
 // reportDiskStats sends the current total bytes on disk as a metric
 func (q *queue) reportDiskStats() {
-	q.stats.SendSerializerStats(types.SerializerStats{
+	stats := types.SerializerStats{
 		TotalBytesOnDisk: q.totalBytesOnDisk,
-	})
+	}
+
+	// Add memory usage metrics if using memory storage
+	if memFS, ok := q.fs.(*MemoryFS); ok {
+		stats.MemoryUsedBytes = memFS.GetUsedBytes()
+		stats.MemoryMaxBytes = memFS.GetMaxBytes()
+	}
+
+	q.stats.SendSerializerStats(stats)
 }

@@ -80,16 +80,33 @@ q, err := filequeue.NewQueue(
 )
 ```
 
+You can also set a memory limit to prevent unbounded memory growth:
+
+```go
+q, err := filequeue.NewQueue(
+    "/path/to/directory",
+    outFunc,
+    stats,
+    logger,
+    filequeue.WithStorageType(filequeue.StorageMemory),
+    filequeue.WithMemoryLimit(100*1024*1024) // 100MB limit
+)
+```
+
+When the memory limit is reached, the oldest files in the queue will be automatically pruned to stay under the limit. This helps prevent out-of-memory situations while still providing the benefits of in-memory storage for the most recent data.
+
 Benefits of in-memory storage:
 - Higher performance than disk storage
 - No disk I/O overhead 
 - Works without requiring a valid directory path on disk
 - Useful for testing and ephemeral data scenarios
+- Optional memory limit to prevent unbounded growth
 
 Limitations of in-memory storage:
 - Data is lost on process restart
 - Not suitable for persistence between restarts
-- Memory usage scales with data volume
+- Memory usage scales with data volume (unless limited)
+- When memory limit is reached, oldest data is dropped
 
 This does mean that the system is not ACID compliant. If a restart happens before memory is written or while it is in the sending queue it will be lost. This is done for performance and simplicity reasons.
 

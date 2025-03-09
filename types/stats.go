@@ -38,6 +38,9 @@ type SerializerStats struct {
 	CompressedBytesRead      int
 	FileIDRead               int
 	TotalBytesOnDisk         int64
+	// In-memory storage metrics
+	MemoryUsedBytes int64 // Current in-memory storage usage in bytes
+	MemoryMaxBytes  int64 // Maximum memory limit (0 means unlimited)
 }
 
 type NetworkStats struct {

@@ -225,6 +225,55 @@ func TestResuming(t *testing.T) {
 	require.True(t, string(buf) == "third")
 }
 
+func TestCompressionTypes(t *testing.T) {
+	dir := t.TempDir()
+	log := log.NewNopLogger()
+	mbx := types.NewMailbox[types.DataHandle]()
+
+	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
+		_ = mbx.Send(ctx, dh)
+	}, &fakestats{}, log)
+	ctx, cncl := context.WithCancel(context.Background())
+	defer cncl()
+	q.Start(ctx)
+	require.NoError(t, err)
+
+	// Test with no compression metadata
+	err = q.Store(context.Background(), nil, []byte("test-default"))
+	require.NoError(t, err)
+
+	// Test with snappy compression
+	err = q.Store(context.Background(), map[string]string{"compression": "snappy"}, []byte("test-snappy"))
+	require.NoError(t, err)
+
+	// Test with zstd compression
+	err = q.Store(context.Background(), map[string]string{"compression": "zstd"}, []byte("test-zstd"))
+	require.NoError(t, err)
+
+	// Verify default compression
+	meta, buf, err := getHandle(t, mbx)
+	require.NoError(t, err)
+	require.Equal(t, "test-default", string(buf))
+	_, hasCompression := meta["compression"]
+	require.False(t, hasCompression)
+
+	// Verify snappy compression
+	meta, buf, err = getHandle(t, mbx)
+	require.NoError(t, err)
+	require.Equal(t, "test-snappy", string(buf))
+	compression, hasCompression := meta["compression"]
+	require.True(t, hasCompression)
+	require.Equal(t, "snappy", compression)
+
+	// Verify zstd compression
+	meta, buf, err = getHandle(t, mbx)
+	require.NoError(t, err)
+	require.Equal(t, "test-zstd", string(buf))
+	compression, hasCompression = meta["compression"]
+	require.True(t, hasCompression)
+	require.Equal(t, "zstd", compression)
+}
+
 func getHandle(t *testing.T, mbx *types.Mailbox[types.DataHandle]) (map[string]string, []byte, error) {
 	timer := time.NewTicker(5 * time.Second)
 	select {
@@ -240,35 +289,39 @@ func getHandle(t *testing.T, mbx *types.Mailbox[types.DataHandle]) (map[string]s
 
 var _ types.StatsHub = (*fakestats)(nil)
 
-type fakestats struct {
-}
+type fakestats struct{}
 
 func (fs fakestats) SendParralelismStats(stats types.ParralelismStats) {
-
 }
 
 func (fs fakestats) RegisterParralelism(f func(types.ParralelismStats)) types.NotificationRelease {
 	return func() {
-
 	}
 }
 
 func (fakestats) Start(_ context.Context) {
 }
+
 func (fakestats) Stop() {
 }
+
 func (fs *fakestats) SendSeriesNetworkStats(ns types.NetworkStats) {
 }
+
 func (fakestats) SendSerializerStats(_ types.SerializerStats) {
 }
+
 func (fakestats) SendMetadataNetworkStats(_ types.NetworkStats) {
 }
+
 func (fakestats) RegisterSeriesNetwork(_ func(types.NetworkStats)) (_ types.NotificationRelease) {
 	return func() {}
 }
+
 func (fakestats) RegisterMetadataNetwork(_ func(types.NetworkStats)) (_ types.NotificationRelease) {
 	return func() {}
 }
+
 func (fakestats) RegisterSerializer(_ func(types.SerializerStats)) (_ types.NotificationRelease) {
 	return func() {}
 }

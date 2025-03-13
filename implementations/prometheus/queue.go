@@ -15,6 +15,7 @@ import (
 	"github.com/grafana/walqueue/types"
 	v1 "github.com/grafana/walqueue/types/v1"
 	v2 "github.com/grafana/walqueue/types/v2"
+	"github.com/klauspost/compress/zstd"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/storage"
 )
@@ -49,6 +50,7 @@ type queue struct {
 	metaStats                 *Stats
 	externalLabels            map[string]string
 	networkRequestMoreSignals chan types.RequestMoreSignals[types.Datum]
+	zstdDecoder               *zstd.Decoder
 }
 
 // NewQueue creates and returns a new Queue instance, initializing its components
@@ -85,6 +87,11 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	if err != nil {
 		return nil, err
 	}
+	zstdDecoder, err := zstd.NewReader(nil)
+	if err != nil {
+		return nil, err
+	}
+	
 	q := &queue{
 		incoming:                  types.NewMailbox[types.DataHandle](),
 		stats:                     seriesStats,
@@ -94,6 +101,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		ttl:                       ttl,
 		networkRequestMoreSignals: networkRequestMoreSignals,
 		externalLabels:            cc.ExternalLabels,
+		zstdDecoder:               zstdDecoder,
 	}
 	fq, err := filequeue.NewQueue(directory, func(ctx context.Context, dh types.DataHandle) {
 		sendErr := q.incoming.Send(ctx, dh)
@@ -108,6 +116,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	serial, err := serialization.NewSerializer(types.SerializerConfig{
 		MaxSignalsInBatch: maxSignalsToBatch,
 		FlushFrequency:    flushInterval,
+		Compression:       "snappy", // Default to snappy for backward compatibility
 	}, q.queue, statshub.SendSerializerStats, logger)
 	if err != nil {
 		return nil, err
@@ -135,6 +144,11 @@ func (q *queue) Stop() {
 	q.serializer.Stop()
 	q.stats.Unregister()
 	q.metaStats.Unregister()
+	
+	// Close the zstd decoder if it exists
+	if q.zstdDecoder != nil {
+		q.zstdDecoder.Close()
+	}
 }
 
 func (q *queue) run(ctx context.Context) {
@@ -181,11 +195,38 @@ func (q *queue) Appender(ctx context.Context) storage.Appender {
 
 func (q *queue) deserializeAndSend(meta map[string]string, buf []byte) []types.Datum {
 	compressedBytes := len(buf)
-	uncompressedBuf, err := snappy.Decode(nil, buf)
-	if err != nil {
-		level.Debug(q.logger).Log("msg", "error snappy decoding", "err", err)
+	
+	var uncompressedBuf []byte
+	var err error
+	
+	// Check compression type from metadata
+	compressionType, ok := meta["compression"]
+	if !ok {
+		// Default to snappy if not specified for backward compatibility
+		compressionType = "snappy"
+	}
+	
+	switch compressionType {
+	case "snappy":
+		// Snappy compression
+		uncompressedBuf, err = snappy.Decode(nil, buf)
+		if err != nil {
+			level.Debug(q.logger).Log("msg", "error snappy decoding", "err", err)
+			return nil
+		}
+	case "zstd":
+		// Zstd compression
+		uncompressedBuf, err = q.zstdDecoder.DecodeAll(buf, nil)
+		if err != nil {
+			level.Debug(q.logger).Log("msg", "error zstd decoding", "err", err)
+			return nil
+		}
+	default:
+		// Unknown compression type
+		level.Error(q.logger).Log("msg", "unknown compression type", "compression", compressionType)
 		return nil
 	}
+	
 	uncompressedBytes := len(uncompressedBuf)
 	defer func() {
 		fileID := -1

@@ -147,8 +147,8 @@ func generateMarkdownTable(summaries []BenchmarkSummary, tests []string) {
 	if len(summaries) > 0 {
 		latestDate := summaries[0].Date
 		if !summaries[0].Timestamp.IsZero() {
-			latestDate = fmt.Sprintf("%s %s UTC", 
-				summaries[0].Date, 
+			latestDate = fmt.Sprintf("%s %s UTC",
+				summaries[0].Date,
 				summaries[0].Timestamp.UTC().Format("15:04"))
 		}
 		writeLine("Latest benchmark run: %s\n", latestDate)
@@ -235,15 +235,15 @@ func generateMarkdownTable(summaries []BenchmarkSummary, tests []string) {
 
 				changeStr = fmt.Sprintf("%s%s", indicator, changeStr)
 				prevValue = result.SignalsPerSec
-				
+
 				// Format date with UTC time (without seconds)
 				dateDisplay := summary.Date
 				if !summary.Timestamp.IsZero() {
-					dateDisplay = fmt.Sprintf("%s %s", 
-						summary.Date, 
+					dateDisplay = fmt.Sprintf("%s %s",
+						summary.Date,
 						summary.Timestamp.UTC().Format("15:04"))
 				}
-				
+
 				writeLine("| %s | %.2f | %.2f | %s | %s |",
 					dateDisplay,
 					result.SignalsPerSec,

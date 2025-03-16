@@ -1,5 +1,5 @@
 //go:generate go run benchmark_report.go
-package main
+package prometheus_benchmark
 
 import (
 	"encoding/json"

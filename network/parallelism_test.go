@@ -44,30 +44,29 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			stages: []stage{
 				{
 					// Stage 1: Initial state with drift
-					desired:           3,
+					desired:           11,
 					increaseTimeStamp: 100,
 				},
 				{
-					// Stage 2: With continued drift, should be increasing (+2)
-					desired:           5,
+					// Stage 2: With continued drift, should be increasing (+1)
+					desired:           12,
 					increaseTimeStamp: 100,
 				},
 				{
-					// Stage 3: With continued drift, should be increasing (+4 = +2 from before * 2)
-					desired:           9,
+					// Stage 3: With continued drift, should be increasing (+2 = +1 from before * 2)
+					desired:           14,
 					increaseTimeStamp: 100,
 				},
 				{
-					// Stage 4: With continued drift, should continue increasing (+8 = +4 from before * 2)
-					desired:           17,
+					// Add 4, ie we increased by 2 previously so should be double
+					desired:           18,
 					increaseTimeStamp: 100,
 				},
 				{
 					// Hit our cap
 					desired:           20,
 					increaseTimeStamp: 100,
-				},
-				{
+				}, {
 					waitFor: 6 * time.Second,
 				},
 				{

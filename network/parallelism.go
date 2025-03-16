@@ -1,7 +1,9 @@
 package network
 
 import (
+	"cmp"
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -185,11 +187,26 @@ func (p *parallelism) desiredLoop() {
 	}
 	// If we are drifting too much then ramp up the number of loops.
 	if float64(p.timestampDriftSeconds) > p.cfg.AllowedDrift.Seconds() {
-		// Need to keep the value between min and max.
-		if p.currentDesired+1 <= p.cfg.MaxConnections {
-			level.Debug(p.l).Log("msg", "increasing desired due to timestamp drift", "desired", p.currentDesired+1, "drift", p.timestampDriftSeconds)
-			p.calculateDesiredParallelism(p.currentDesired + 1)
+		// Check if drift has been increasing by looking at previous desired values
+		var increaseFactor uint = 1
+
+		if len(p.previous) >= 2 {
+			// Look at previous values in chronological order to see if we should be more aggressive
+			maxPrevious := slices.MaxFunc(p.previous, func(a, b previousDesired) int {
+				return cmp.Compare(a.desired, b.desired)
+			})
+			// If the most recent previous value was the maximum, that means drift is consistently increasing
+			if maxPrevious == p.previous[len(p.previous)-1] {
+				before := p.previous[len(p.previous)-2]
+				diff := maxPrevious.desired - before.desired
+				increaseFactor = diff * 2
+				level.Debug(p.l).Log("msg", "doubling connections due to continued drift", "from", p.currentDesired, "to", p.currentDesired+increaseFactor)
+			}
 		}
+
+		// Need to keep the value at or below max.
+		newDesired := min(p.currentDesired+increaseFactor, p.cfg.MaxConnections)
+		p.calculateDesiredParallelism(newDesired)
 		return
 	}
 

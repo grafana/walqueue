@@ -35,6 +35,48 @@ func TestParallelismWithNoChanges(t *testing.T) {
 
 	tests := []test{
 		{
+			name: "doubling parallelism with continued drift",
+			cfg: types.ParallelismConfig{
+				MaxConnections: 20,
+				AllowedDrift:   10 * time.Second,
+				Lookback:       5 * time.Second,
+			},
+			stages: []stage{
+				{
+					// Stage 1: Initial state with drift
+					desired:           11,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Stage 2: With continued drift, should be increasing (+1)
+					desired:           12,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Stage 3: With continued drift, should be increasing (+2 = +1 from before * 2)
+					desired:           14,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Add 4, ie we increased by 2 previously so should be double
+					desired:           18,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Hit our cap
+					desired:           20,
+					increaseTimeStamp: 100,
+				}, {
+					waitFor: 6 * time.Second,
+				},
+				{
+					// Since the lookback is gone should scale down.
+					desired:           19,
+					increaseTimeStamp: 1,
+				},
+			},
+		},
+		{
 			name: "no changes",
 			stages: []stage{
 				{
@@ -210,6 +252,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			},
 		},
 	}
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			out := types.NewMailbox[uint]()
@@ -281,7 +324,8 @@ func TestParallelismWithNoChanges(t *testing.T) {
 				// Check for the desired state.
 				select {
 				case desired := <-out.ReceiveC():
-					require.True(t, desired == st.desired)
+					t.Logf("Stage %d: expected %d, got %d", i, st.desired, desired)
+					require.Equal(t, st.desired, desired, "Stage %d expected %d, got %d", i, st.desired, desired)
 					continue
 				case <-time.After(1 * time.Second):
 					require.Failf(t, "should have gotten desired ", "%d", st.desired)
@@ -301,12 +345,10 @@ type parStats struct {
 }
 
 func (f parStats) SendParralelismStats(stats types.ParralelismStats) {
-
 }
 
 func (f parStats) RegisterParralelism(f2 func(types.ParralelismStats)) types.NotificationRelease {
 	return func() {
-
 	}
 }
 

@@ -3,7 +3,6 @@ package network
 import (
 	"context"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -277,18 +276,6 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			ts := 1
 			p.Run(ctx)
 
-			// For testing aggressive scaling and doubling, set initial values
-			if strings.Contains(tc.name, "doubling") {
-				p.currentDesired = 2
-				// Add a synthetic previous desired entry to trigger doubling behavior
-				p.previous = append(p.previous, previousDesired{
-					desired:  2,
-					recorded: time.Now(),
-				})
-			} else if strings.Contains(tc.name, "aggressive") {
-				p.currentDesired = 2
-			}
-
 			for i, st := range tc.stages {
 				println("stage ", i)
 				nextTS := ts + st.increaseTimeStamp
@@ -359,12 +346,10 @@ type parStats struct {
 }
 
 func (f parStats) SendParralelismStats(stats types.ParralelismStats) {
-
 }
 
 func (f parStats) RegisterParralelism(f2 func(types.ParralelismStats)) types.NotificationRelease {
 	return func() {
-
 	}
 }
 

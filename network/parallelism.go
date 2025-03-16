@@ -204,7 +204,7 @@ func (p *parallelism) desiredLoop() {
 			}
 		}
 
-		// Need to keep the value between min and max.
+		// Need to keep the value at or below max.
 		newDesired := min(p.currentDesired+increaseFactor, p.cfg.MaxConnections)
 		p.calculateDesiredParallelism(newDesired)
 		return

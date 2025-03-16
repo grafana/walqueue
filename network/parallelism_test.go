@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,49 @@ func TestParallelismWithNoChanges(t *testing.T) {
 	}
 
 	tests := []test{
+		{
+			name: "doubling parallelism with continued drift",
+			cfg: types.ParallelismConfig{
+				MaxConnections: 20,
+				AllowedDrift:   10 * time.Second,
+				Lookback:       5 * time.Second,
+			},
+			stages: []stage{
+				{
+					// Stage 1: Initial state with drift
+					desired:           3,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Stage 2: With continued drift, should be increasing (+2)
+					desired:           5,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Stage 3: With continued drift, should be increasing (+4 = +2 from before * 2)
+					desired:           9,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Stage 4: With continued drift, should continue increasing (+8 = +4 from before * 2)
+					desired:           17,
+					increaseTimeStamp: 100,
+				},
+				{
+					// Hit our cap
+					desired:           20,
+					increaseTimeStamp: 100,
+				},
+				{
+					waitFor: 6 * time.Second,
+				},
+				{
+					// Since the lookback is gone should scale down.
+					desired:           19,
+					increaseTimeStamp: 1,
+				},
+			},
+		},
 		{
 			name: "no changes",
 			stages: []stage{
@@ -210,6 +254,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			},
 		},
 	}
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			out := types.NewMailbox[uint]()
@@ -231,6 +276,18 @@ func TestParallelismWithNoChanges(t *testing.T) {
 			p := newParallelism(cfg, out, fs, l)
 			ts := 1
 			p.Run(ctx)
+
+			// For testing aggressive scaling and doubling, set initial values
+			if strings.Contains(tc.name, "doubling") {
+				p.currentDesired = 2
+				// Add a synthetic previous desired entry to trigger doubling behavior
+				p.previous = append(p.previous, previousDesired{
+					desired:  2,
+					recorded: time.Now(),
+				})
+			} else if strings.Contains(tc.name, "aggressive") {
+				p.currentDesired = 2
+			}
 
 			for i, st := range tc.stages {
 				println("stage ", i)
@@ -281,7 +338,8 @@ func TestParallelismWithNoChanges(t *testing.T) {
 				// Check for the desired state.
 				select {
 				case desired := <-out.ReceiveC():
-					require.True(t, desired == st.desired)
+					t.Logf("Stage %d: expected %d, got %d", i, st.desired, desired)
+					require.Equal(t, st.desired, desired, "Stage %d expected %d, got %d", i, st.desired, desired)
 					continue
 				case <-time.After(1 * time.Second):
 					require.Failf(t, "should have gotten desired ", "%d", st.desired)

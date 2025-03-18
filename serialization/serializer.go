@@ -10,11 +10,22 @@ import (
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	v2 "github.com/grafana/walqueue/types/v2"
+	"github.com/klauspost/compress/zstd"
 	"go.uber.org/atomic"
 )
 
 // serializer collects data from multiple appenders in-memory and will periodically flush the data to file.Storage.
 // serializer will flush based on configured time duration OR if it hits a certain number of items.
+// CompressionType defines the compression algorithm to use
+type CompressionType string
+
+const (
+	// CompressionSnappy uses Snappy compression
+	CompressionSnappy CompressionType = "snappy"
+	// CompressionZstd uses Zstd compression
+	CompressionZstd CompressionType = "zstd"
+)
+
 type serializer struct {
 	mut                 sync.Mutex
 	ser                 types.PrometheusMarshaller
@@ -31,9 +42,23 @@ type serializer struct {
 	newestTS       int64
 	seriesCount    int
 	metadataCount  int
+	compression    CompressionType
+	zstdEncoder    *zstd.Encoder
 }
 
 func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(stats types.SerializerStats), l log.Logger) (types.PrometheusSerializer, error) {
+	compression := CompressionSnappy
+	if cfg.Compression != "" {
+		switch CompressionType(cfg.Compression) {
+		case CompressionSnappy:
+			compression = CompressionSnappy
+		case CompressionZstd:
+			compression = CompressionZstd
+		default:
+			level.Warn(l).Log("msg", "unknown compression type, using snappy", "compression", cfg.Compression)
+		}
+	}
+
 	s := &serializer{
 		maxItemsBeforeFlush: int(cfg.MaxSignalsInBatch),
 		flushFrequency:      cfg.FlushFrequency,
@@ -44,6 +69,16 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 		stats:               stats,
 		fileFormat:          types.AlloyFileVersionV2,
 		ser:                 v2.NewFormat(),
+		compression:         compression,
+	}
+
+	// Initialize zstd encoder if needed
+	if compression == CompressionZstd {
+		var err error
+		s.zstdEncoder, err = zstd.NewWriter(nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return s, nil
@@ -123,6 +158,11 @@ func (s *serializer) Start(ctx context.Context) error {
 
 func (s *serializer) Stop() {
 	s.needsStop.Store(true)
+	
+	// Close the zstd encoder if it exists
+	if s.compression == CompressionZstd && s.zstdEncoder != nil {
+		s.zstdEncoder.Close()
+	}
 }
 
 func (s *serializer) UpdateConfig(_ context.Context, cfg types.SerializerConfig) (bool, error) {
@@ -131,6 +171,32 @@ func (s *serializer) UpdateConfig(_ context.Context, cfg types.SerializerConfig)
 
 	s.maxItemsBeforeFlush = int(cfg.MaxSignalsInBatch)
 	s.flushFrequency = cfg.FlushFrequency
+	
+	// Update compression type if specified
+	if cfg.Compression != "" {
+		newCompression := CompressionType(cfg.Compression)
+		
+		// Only update if different from current compression
+		if s.compression != newCompression {
+			// Close existing zstd encoder if needed
+			if s.compression == CompressionZstd && s.zstdEncoder != nil {
+				s.zstdEncoder.Close()
+				s.zstdEncoder = nil
+			}
+			
+			// Initialize new encoder if needed
+			if newCompression == CompressionZstd {
+				var err error
+				s.zstdEncoder, err = zstd.NewWriter(nil)
+				if err != nil {
+					return false, err
+				}
+			}
+			
+			s.compression = newCompression
+		}
+	}
+	
 	return true, nil
 }
 
@@ -148,9 +214,17 @@ func (s *serializer) flushToDisk(ctx context.Context) error {
 	err = s.ser.Marshal(func(meta map[string]string, buf []byte) error {
 		uncompressed = len(buf)
 		meta["version"] = string(types.AlloyFileVersionV2)
-		meta["compression"] = "snappy"
-		// TODO: reusing a buffer here likely increases performance.
-		out = snappy.Encode(nil, buf)
+		
+		if s.compression == CompressionZstd {
+			meta["compression"] = string(CompressionZstd)
+			out = s.zstdEncoder.EncodeAll(buf, nil)
+		} else {
+			// Default to snappy
+			meta["compression"] = string(CompressionSnappy)
+			// TODO: reusing a buffer here likely increases performance.
+			out = snappy.Encode(nil, buf)
+		}
+		
 		compressed = len(out)
 		return s.queue.Store(ctx, meta, out)
 	})

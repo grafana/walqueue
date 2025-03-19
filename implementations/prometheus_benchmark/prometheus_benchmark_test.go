@@ -1,4 +1,4 @@
-package prometheus_benchmark
+package main
 
 import (
 	"context"

@@ -93,6 +93,10 @@ func (w *writeBuffer[T]) Send(ctx context.Context, client *http.Client, finish f
 		w.lastAttemptedSend = time.Now()
 	}()
 
+	if len(w.items) == 0 {
+		return
+	}
+
 	s := newSignalsInfo(w.items)
 	var err error
 	w.snappyBuf, w.wrBuf, err = buildWriteRequest(w.items, w.snappyBuf, w.wrBuf)

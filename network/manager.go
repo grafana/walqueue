@@ -7,8 +7,6 @@ import (
 	"reflect"
 	"time"
 
-	"go.uber.org/atomic"
-
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
@@ -31,7 +29,6 @@ type manager struct {
 	responseFromRequestForSignalsFromFileQueue chan []types.Datum
 	pendingData                                *pending
 	client                                     *http.Client
-	currentOutgoingConnections                 *atomic.Int32
 	ctx                                        context.Context
 	stop                                       chan struct{}
 	queuePendingData                           chan struct{}
@@ -53,9 +50,8 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 		desiredParallelism:          p,
 		requestSignalsFromFileQueue: requestSignalsFromFileQueue,
 		responseFromRequestForSignalsFromFileQueue: make(chan []types.Datum),
-		stop:                       make(chan struct{}, 1),
-		queuePendingData:           make(chan struct{}, 1),
-		currentOutgoingConnections: atomic.NewInt32(0),
+		stop:             make(chan struct{}, 1),
+		queuePendingData: make(chan struct{}, 1),
 	}
 
 	// Set the initial default as the middle point between min and max.
@@ -190,17 +186,12 @@ func (s *manager) addNewDatumsAndDistribute(items []types.Datum) {
 }
 
 func (s *manager) finishWrite() {
-	s.currentOutgoingConnections.Dec()
 	s.queueCheck()
 }
 
 // checkAndSend will check each write buffer to see if it can send data.
 func (s *manager) checkAndSend() {
 	sendToWR := func(wr *writeBuffer[types.MetricDatum]) {
-		if s.currentOutgoingConnections.Load() >= int32(s.desiredConnections) {
-			return
-		}
-		s.currentOutgoingConnections.Inc()
 		wr.Send(s.ctx, s.client, s.finishWrite)
 	}
 
@@ -215,10 +206,6 @@ func (s *manager) checkAndSend() {
 	}
 
 	sendMeta := func(wr *writeBuffer[types.MetadataDatum]) {
-		if s.currentOutgoingConnections.Load() >= int32(s.desiredConnections) {
-			return
-		}
-		s.currentOutgoingConnections.Inc()
 		wr.Send(s.ctx, s.client, s.finishWrite)
 	}
 	// Check to see if we need to send metadata

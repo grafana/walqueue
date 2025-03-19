@@ -1,0 +1,73 @@
+{
+  "results": [
+    {
+      "test_name": "500_conn_3000_batch",
+      "batch_size": 3000,
+      "max_connections": 500,
+      "min_jitter_ms": 500,
+      "max_jitter_ms": 2500,
+      "signal_count": 33570076,
+      "num_writers": 100,
+      "duration_sec": 35.76172399,
+      "signals_per_sec": 938715.2590682472,
+      "request_count": 11797,
+      "signals_per_request": 2845.645164024752,
+      "appender_writes_per_sec": 2139717.8732601698,
+      "total_appender_writes": 76520000,
+      "num_cpu": 20,
+      "gomaxprocs": 20,
+      "cpu_model": "13th Gen Intel(R) Core(TM) i5-13500",
+      "timestamp": "2025-03-19T15:45:24-04:00"
+    },
+    {
+      "test_name": "500_conn_6000_batch",
+      "batch_size": 6000,
+      "max_connections": 500,
+      "min_jitter_ms": 500,
+      "max_jitter_ms": 2500,
+      "signal_count": 51225812,
+      "num_writers": 100,
+      "duration_sec": 35.844667606,
+      "signals_per_sec": 1429105.5105620609,
+      "request_count": 11124,
+      "signals_per_request": 4604.98130169004,
+      "appender_writes_per_sec": 1919392.885888657,
+      "total_appender_writes": 68800000,
+      "num_cpu": 20,
+      "gomaxprocs": 20,
+      "cpu_model": "13th Gen Intel(R) Core(TM) i5-13500",
+      "timestamp": "2025-03-19T15:46:02-04:00"
+    },
+    {
+      "test_name": "1000_conn_3000_batch",
+      "batch_size": 3000,
+      "max_connections": 1000,
+      "min_jitter_ms": 500,
+      "max_jitter_ms": 2500,
+      "signal_count": 51346621,
+      "num_writers": 100,
+      "duration_sec": 35.919700797,
+      "signals_per_sec": 1429483.5385791536,
+      "request_count": 22322,
+      "signals_per_request": 2300.2697338948124,
+      "appender_writes_per_sec": 1904247.4876548178,
+      "total_appender_writes": 68400000,
+      "num_cpu": 20,
+      "gomaxprocs": 20,
+      "cpu_model": "13th Gen Intel(R) Core(TM) i5-13500",
+      "timestamp": "2025-03-19T15:46:41-04:00"
+    }
+  ],
+  "metadata": {
+    "git_commit": "68f4850",
+    "timestamp": "2025-03-19T15:46:43.551236409-04:00",
+    "optimizations": "",
+    "go_version": "go1.23.2",
+    "num_cpu": 20,
+    "gomaxprocs": 20,
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13500",
+    "total_signals": 136142509,
+    "test_duration_sec": 107.526092393,
+    "total_appender_writes": 213720000
+  }
+}

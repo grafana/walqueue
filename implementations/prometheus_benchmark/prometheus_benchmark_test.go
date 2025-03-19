@@ -302,7 +302,7 @@ func BenchmarkPrometheusQueueWithJitter(b *testing.B) {
 							for k := 0; k < batchSize; k++ {
 								// Create labels for the metric
 								lbls := labels.Labels{
-									{Name: "__name__", Value: fmt.Sprintf("test_metric_%d", (writerID*1000+j+k)%10)},
+									{Name: "__name__", Value: fmt.Sprintf("test_metric_%d", rand.Uint32())},
 									{Name: "instance", Value: fmt.Sprintf("instance_%d", writerID)},
 									{Name: "job", Value: "benchmark"},
 								}

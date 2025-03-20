@@ -82,8 +82,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	seriesStats.SeriesBackwardsCompatibility(reg)
 	meta := NewStats("alloy", "queue_metadata", true, reg, statshub)
 	meta.MetaBackwardsCompatibility(reg)
-	// the length 3 allows a buffer of three files, setting to zero will starve and block the queue.
-	networkRequestMoreSignals := make(chan types.RequestMoreSignals[types.Datum], 4)
+	networkRequestMoreSignals := make(chan types.RequestMoreSignals[types.Datum], 1)
 
 	networkClient, err := network.New(cc, logger, statshub, networkRequestMoreSignals)
 	if err != nil {

@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
@@ -29,14 +31,19 @@ type manager struct {
 	responseFromRequestForSignalsFromFileQueue chan []types.Datum
 	pendingData                                *pending
 	client                                     *http.Client
+	currentOutgoingConnections                 *atomic.Int32
 	ctx                                        context.Context
 	stop                                       chan struct{}
+	requestForMoreDataPending                  *atomic.Bool
 	queuePendingData                           chan struct{}
 }
 
 var _ types.NetworkClient = (*manager)(nil)
 
 func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, requestSignalsFromFileQueue chan types.RequestMoreSignals[types.Datum]) (types.NetworkClient, error) {
+	if requestSignalsFromFileQueue == nil || cap(requestSignalsFromFileQueue) != 1 {
+		return nil, fmt.Errorf("requestSignalsFromFileQueue must be 1")
+	}
 	desiredOutbox := types.NewMailbox[uint]()
 	p := newParallelism(cc.Parallelism, desiredOutbox, statshub, logger)
 	s := &manager{
@@ -50,8 +57,10 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 		desiredParallelism:          p,
 		requestSignalsFromFileQueue: requestSignalsFromFileQueue,
 		responseFromRequestForSignalsFromFileQueue: make(chan []types.Datum),
-		stop:             make(chan struct{}, 1),
-		queuePendingData: make(chan struct{}, 1),
+		stop:                       make(chan struct{}, 1),
+		requestForMoreDataPending:  &atomic.Bool{},
+		queuePendingData:           make(chan struct{}, 1),
+		currentOutgoingConnections: atomic.NewInt32(0),
 	}
 
 	// Set the initial default as the middle point between min and max.
@@ -99,6 +108,7 @@ func (s *manager) run() {
 	s.requestSignalsFromFileQueue <- types.RequestMoreSignals[types.Datum]{
 		Response: s.responseFromRequestForSignalsFromFileQueue,
 	}
+	s.requestForMoreDataPending.Store(true)
 
 	// How often to check for the flush interval.
 	// Functionally means the flush interval has no effect below 1s.
@@ -110,6 +120,7 @@ func (s *manager) run() {
 		case <-s.ctx.Done():
 			return
 		case items := <-s.responseFromRequestForSignalsFromFileQueue:
+			s.requestForMoreDataPending.Store(false)
 			s.addNewDatumsAndDistribute(items)
 			s.checkAndSend()
 		case cfg, ok := <-s.configInbox.ReceiveC():
@@ -174,24 +185,27 @@ func (s *manager) addNewDatumsAndDistribute(items []types.Datum) {
 		s.metadataBuffer.Add(s.pendingData.PullMetadataItems(s.metadataBuffer.RemainingCapacity()))
 	}
 
-	// Have we queued enough to drop below having two full batches? If so request more, the plus one represents metadata.
-	if s.pendingData.TotalLen() <= (s.cfg.BatchCount * int(s.desiredConnections+1) * 2) {
-		select {
-		case s.requestSignalsFromFileQueue <- types.RequestMoreSignals[types.Datum]{
+	// Have we queued enough to drop below having a full batch? If so request more, the plus one represents metadata.
+	if s.pendingData.TotalLen() <= (s.cfg.BatchCount*int(s.desiredConnections+1)) && !s.requestForMoreDataPending.Load() {
+		s.requestSignalsFromFileQueue <- types.RequestMoreSignals[types.Datum]{
 			Response: s.responseFromRequestForSignalsFromFileQueue,
-		}:
-		default:
 		}
+		s.requestForMoreDataPending.Store(true)
 	}
 }
 
 func (s *manager) finishWrite() {
+	s.currentOutgoingConnections.Dec()
 	s.queueCheck()
 }
 
 // checkAndSend will check each write buffer to see if it can send data.
 func (s *manager) checkAndSend() {
 	sendToWR := func(wr *writeBuffer[types.MetricDatum]) {
+		if s.currentOutgoingConnections.Load() >= int32(s.desiredConnections) {
+			return
+		}
+		s.currentOutgoingConnections.Inc()
 		wr.Send(s.ctx, s.client, s.finishWrite)
 	}
 
@@ -206,6 +220,10 @@ func (s *manager) checkAndSend() {
 	}
 
 	sendMeta := func(wr *writeBuffer[types.MetadataDatum]) {
+		if s.currentOutgoingConnections.Load() >= int32(s.desiredConnections) {
+			return
+		}
+		s.currentOutgoingConnections.Inc()
 		wr.Send(s.ctx, s.client, s.finishWrite)
 	}
 	// Check to see if we need to send metadata

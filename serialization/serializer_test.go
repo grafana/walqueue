@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	v2 "github.com/grafana/walqueue/types/v2"
+	"github.com/klauspost/compress/zstd"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
@@ -100,7 +100,8 @@ func (f *fqq) Stop() {
 }
 
 func (f *fqq) Store(_ context.Context, meta map[string]string, value []byte) error {
-	f.buf, _ = snappy.Decode(nil, value)
+	zstdDecoder, _ := zstd.NewReader(nil)
+	f.buf, _ = zstdDecoder.DecodeAll(value, f.buf)
 	sg := v2.NewFormat()
 	items, err := sg.Unmarshal(meta, f.buf)
 	require.NoError(f.t, err)

@@ -7,10 +7,15 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	v2 "github.com/grafana/walqueue/types/v2"
+	"github.com/klauspost/compress/zstd"
 	"go.uber.org/atomic"
+)
+
+var (
+	// zstdEncoder is a reusable encoder for zstd compression
+	zstdEncoder, _ = zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedFastest))
 )
 
 // serializer collects data from multiple appenders in-memory and will periodically flush the data to file.Storage.
@@ -148,9 +153,9 @@ func (s *serializer) flushToDisk(ctx context.Context) error {
 	err = s.ser.Marshal(func(meta map[string]string, buf []byte) error {
 		uncompressed = len(buf)
 		meta["version"] = string(types.AlloyFileVersionV2)
-		meta["compression"] = "snappy"
-		// TODO: reusing a buffer here likely increases performance.
-		out = snappy.Encode(nil, buf)
+		meta["compression"] = "zstd"
+		// Use zstd for compression
+		out = zstdEncoder.EncodeAll(buf, nil)
 		compressed = len(out)
 		return s.queue.Store(ctx, meta, out)
 	})

@@ -15,6 +15,7 @@ import (
 	"github.com/grafana/walqueue/types"
 	v1 "github.com/grafana/walqueue/types/v1"
 	v2 "github.com/grafana/walqueue/types/v2"
+	"github.com/klauspost/compress/zstd"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/storage"
 )
@@ -22,6 +23,9 @@ import (
 var (
 	_ storage.Appendable = (*queue)(nil)
 	_ Queue              = (*queue)(nil)
+
+	// zstdDecoder is a reusable decoder for zstd decompression
+	zstdDecoder, _ = zstd.NewReader(nil)
 )
 
 // Queue is the interface for a prometheus compatible queue. The queue is an append only interface.
@@ -78,7 +82,6 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	seriesStats.SeriesBackwardsCompatibility(reg)
 	meta := NewStats("alloy", "queue_metadata", true, reg, statshub)
 	meta.MetaBackwardsCompatibility(reg)
-	// the length 1 allows a buffer of one file, setting to zero will starve and block the queue.
 	networkRequestMoreSignals := make(chan types.RequestMoreSignals[types.Datum], 1)
 
 	networkClient, err := network.New(cc, logger, statshub, networkRequestMoreSignals)
@@ -181,11 +184,35 @@ func (q *queue) Appender(ctx context.Context) storage.Appender {
 
 func (q *queue) deserializeAndSend(meta map[string]string, buf []byte) []types.Datum {
 	compressedBytes := len(buf)
-	uncompressedBuf, err := snappy.Decode(nil, buf)
-	if err != nil {
-		level.Debug(q.logger).Log("msg", "error snappy decoding", "err", err)
+	var uncompressedBuf []byte
+	var err error
+
+	// Check compression type from metadata
+	compressionType, ok := meta["compression"]
+	if !ok {
+		// Default to snappy for backward compatibility
+		compressionType = "snappy"
+	}
+
+	// Decompress based on compression type
+	switch compressionType {
+	case "zstd":
+		uncompressedBuf, err = zstdDecoder.DecodeAll(buf, nil)
+		if err != nil {
+			level.Debug(q.logger).Log("msg", "error zstd decoding", "err", err)
+			return nil
+		}
+	case "snappy":
+		uncompressedBuf, err = snappy.Decode(nil, buf)
+		if err != nil {
+			level.Debug(q.logger).Log("msg", "error snappy decoding", "err", err)
+			return nil
+		}
+	default:
+		level.Error(q.logger).Log("msg", "unknown compression type", "type", compressionType)
 		return nil
 	}
+
 	uncompressedBytes := len(uncompressedBuf)
 	defer func() {
 		fileID := -1

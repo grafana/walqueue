@@ -1,0 +1,15 @@
+{
+  "results": null,
+  "metadata": {
+    "git_commit": "729560c",
+    "timestamp": "2025-03-20T09:41:18.49302049-04:00",
+    "optimizations": "",
+    "go_version": "go1.24.0",
+    "num_cpu": 20,
+    "gomaxprocs": 20,
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13500",
+    "total_signals": 0,
+    "test_duration_sec": 0,
+    "total_appender_writes": 0
+  }
+}

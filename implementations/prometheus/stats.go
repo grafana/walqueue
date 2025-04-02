@@ -43,12 +43,12 @@ type Stats struct {
 	SerializerErrors                   prometheus.Counter
 
 	FileIDWritten            prometheus.Gauge
-	CompressedBytesWritten   prometheus.Gauge
-	UncompressedBytesWritten prometheus.Gauge
+	CompressedBytesWritten   prometheus.Counter
+	UncompressedBytesWritten prometheus.Counter
 
 	FileIDRead            prometheus.Gauge
-	CompressedBytesRead   prometheus.Gauge
-	UncompressedBytesRead prometheus.Gauge
+	CompressedBytesRead   prometheus.Counter
+	UncompressedBytesRead prometheus.Counter
 
 	// Backwards compatibility metrics
 	SamplesTotal    prometheus.Counter
@@ -101,47 +101,47 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		SerializerInSeries: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "serializer_incoming_signals",
+			Name:      "serializer_incoming_signals_total",
 		}),
 		SerializerNewestInTimeStampSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "serializer_incoming_timestamp_seconds",
 		}),
-		SerializerErrors: prometheus.NewGauge(prometheus.GaugeOpts{
+		SerializerErrors: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "serializer_errors",
+			Name:      "serializer_errors_total",
 		}),
 		FileIDWritten: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "file_id_written",
 		}),
-		UncompressedBytesWritten: prometheus.NewGauge(prometheus.GaugeOpts{
+		UncompressedBytesWritten: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "disk_uncompressed_bytes_written",
+			Name:      "disk_uncompressed_bytes_written_total",
 		}),
-		CompressedBytesWritten: prometheus.NewGauge(prometheus.GaugeOpts{
+		CompressedBytesWritten: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "disk_compressed_bytes_written",
+			Name:      "disk_compressed_bytes_written_total",
 		}),
 		FileIDRead: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "file_id_read",
 		}),
-		UncompressedBytesRead: prometheus.NewGauge(prometheus.GaugeOpts{
+		UncompressedBytesRead: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "disk_uncompressed_bytes_read",
+			Name:      "disk_uncompressed_bytes_read_total",
 		}),
-		CompressedBytesRead: prometheus.NewGauge(prometheus.GaugeOpts{
+		CompressedBytesRead: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "disk_compressed_bytes_read",
+			Name:      "disk_compressed_bytes_read_total",
 		}),
 		NetworkNewestOutTimeStampSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
@@ -164,27 +164,27 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		NetworkSeriesSent: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "network_sent",
+			Name:      "network_sent_total",
 		}),
 		NetworkFailures: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "network_failed",
+			Name:      "network_failed_total",
 		}),
 		NetworkRetries: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "network_retried",
+			Name:      "network_retried_total",
 		}),
 		NetworkRetries429: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "network_retried_429",
+			Name:      "network_retried_429_total",
 		}),
 		NetworkRetries5XX: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "network_retried_5xx",
+			Name:      "network_retried_5xx_total",
 		}),
 		NetworkSentDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Namespace:                   namespace,

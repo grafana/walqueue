@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"math/rand"
 	"runtime"
 	"strings"
@@ -90,6 +93,68 @@ func TestCompressionBenchmark(t *testing.T) {
 		t.Logf("Snappy Summary - Total Uncompressed: %d bytes, Total Compressed: %d bytes",
 			totalUncompressedSize, totalCompressedSize)
 		t.Logf("Snappy Summary - Compression Ratio: %.2f%%, Avg Time per batch: %v",
+			compressionRatio, avgCompressionTime)
+	})
+
+	// 1b. Gzip compression
+	t.Run("Gzip", func(t *testing.T) {
+		var totalUncompressedSize, totalCompressedSize int64
+		compressionTimeNs := int64(0)
+
+		for i := 0; i < commitCount; i++ {
+			start := i * metricsPerCommit
+			end := start + metricsPerCommit
+			if end > totalMetrics {
+				end = totalMetrics
+			}
+
+			// Create WriteRequest with metrics batch
+			writeReq := &prompb.WriteRequest{
+				Timeseries: metrics[start:end],
+			}
+
+			// Marshal to protobuf
+			data, err := writeReq.Marshal()
+			require.NoError(t, err)
+			uncompressedSize := int64(len(data))
+			totalUncompressedSize += uncompressedSize
+
+			// Compress with Gzip
+			compressStart := time.Now()
+			var b bytes.Buffer
+			gzipWriter, err := gzip.NewWriterLevel(&b, gzip.BestSpeed)
+			require.NoError(t, err)
+			_, err = gzipWriter.Write(data)
+			require.NoError(t, err)
+			err = gzipWriter.Close()
+			require.NoError(t, err)
+			compressed := b.Bytes()
+			compressionTime := time.Since(compressStart)
+			compressionTimeNs += compressionTime.Nanoseconds()
+
+			compressedSize := int64(len(compressed))
+			totalCompressedSize += compressedSize
+
+			// Verify decompression works
+			gzipReader, err := gzip.NewReader(bytes.NewReader(compressed))
+			require.NoError(t, err)
+			_, err = io.ReadAll(gzipReader)
+			require.NoError(t, err)
+			err = gzipReader.Close()
+			require.NoError(t, err)
+
+			t.Logf("Batch %d: Gzip - Uncompressed: %d bytes, Compressed: %d bytes, Ratio: %.2f%%, Time: %v",
+				i+1, uncompressedSize, compressedSize,
+				float64(compressedSize)/float64(uncompressedSize)*100,
+				compressionTime)
+		}
+
+		compressionRatio := float64(totalCompressedSize) / float64(totalUncompressedSize) * 100
+		avgCompressionTime := time.Duration(compressionTimeNs / int64(commitCount))
+
+		t.Logf("Gzip Summary - Total Uncompressed: %d bytes, Total Compressed: %d bytes",
+			totalUncompressedSize, totalCompressedSize)
+		t.Logf("Gzip Summary - Compression Ratio: %.2f%%, Avg Time per batch: %v",
 			compressionRatio, avgCompressionTime)
 	})
 
@@ -240,6 +305,17 @@ func TestCompressionBenchmark(t *testing.T) {
 		runtime.ReadMemStats(&m2)
 		snappyMemUsage := m2.HeapAlloc - m1.HeapAlloc
 
+		// 1b. Gzip
+		runtime.GC()
+		runtime.ReadMemStats(&m1)
+		var gzipBuf bytes.Buffer
+		gzipWriter, _ := gzip.NewWriterLevel(&gzipBuf, gzip.BestSpeed)
+		_, _ = gzipWriter.Write(data)
+		_ = gzipWriter.Close()
+		gzipCompressed := gzipBuf.Bytes()
+		runtime.ReadMemStats(&m2)
+		gzipMemUsage := m2.HeapAlloc - m1.HeapAlloc
+
 		// 2. S2
 		runtime.GC()
 		runtime.ReadMemStats(&m1)
@@ -271,6 +347,8 @@ func TestCompressionBenchmark(t *testing.T) {
 		t.Logf("Uncompressed | %11d | %11d | 100.00%%", 0, uncompressedSize)
 		t.Logf("Snappy       | %11d | %11d | %.2f%%", snappyMemUsage, len(snappyCompressed),
 			float64(len(snappyCompressed))/float64(uncompressedSize)*100)
+		t.Logf("Gzip         | %11d | %11d | %.2f%%", gzipMemUsage, len(gzipCompressed),
+			float64(len(gzipCompressed))/float64(uncompressedSize)*100)
 		t.Logf("S2           | %11d | %11d | %.2f%%", s2MemUsage, len(s2Compressed),
 			float64(len(s2Compressed))/float64(uncompressedSize)*100)
 		t.Logf("Zstd-Fastest | %11d | %11d | %.2f%%", zstdFastestMemUsage, len(zstdFastestCompressed),
@@ -301,6 +379,14 @@ func TestCompressionBenchmark(t *testing.T) {
 		// 1. Snappy
 		compressedData["Snappy"] = snappy.Encode(nil, data)
 		compressedSizes["Snappy"] = len(compressedData["Snappy"])
+
+		// 1b. Gzip
+		var gzipBuf bytes.Buffer
+		gzipWriter, _ := gzip.NewWriterLevel(&gzipBuf, gzip.BestSpeed)
+		_, _ = gzipWriter.Write(data)
+		_ = gzipWriter.Close()
+		compressedData["Gzip"] = gzipBuf.Bytes()
+		compressedSizes["Gzip"] = len(compressedData["Gzip"])
 
 		// 2. S2
 		compressedData["S2"] = s2.Encode(nil, data)
@@ -337,6 +423,19 @@ func TestCompressionBenchmark(t *testing.T) {
 			_, err := snappy.Decode(nil, compressedData["Snappy"])
 			require.NoError(t, err)
 			decompressTimes["Snappy"] += time.Since(start).Nanoseconds()
+		}
+
+		// Benchmark Gzip decompression
+		decompressTimes["Gzip"] = 0
+		for i := 0; i < benchmarkRuns; i++ {
+			start := time.Now()
+			gzipReader, err := gzip.NewReader(bytes.NewReader(compressedData["Gzip"]))
+			require.NoError(t, err)
+			_, err = io.ReadAll(gzipReader)
+			require.NoError(t, err)
+			err = gzipReader.Close()
+			require.NoError(t, err)
+			decompressTimes["Gzip"] += time.Since(start).Nanoseconds()
 		}
 
 		// Benchmark S2 decompression

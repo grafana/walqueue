@@ -28,9 +28,10 @@ linters:
               desc: Use github.com/go-kit/log instead of github.com/go-kit/kit/log
             - pkg: golang.org/x/sync/errgroup
               desc: Use github.com/oklog/run instead of golang.org/x/sync/errgroup
-    govet:
-      enable:
-        - fieldalignment
+    # Field alignment is interesting to look at, but not really an important thing to enforce for most structs
+    # govet:
+    #   enable:
+    #     - fieldalignment
     revive:
       rules:
         - name: package-comments

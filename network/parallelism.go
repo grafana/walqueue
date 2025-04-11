@@ -12,22 +12,28 @@ import (
 
 // parallelism drives the behavior on determining what the desired number of connections should be.
 type parallelism struct {
-	ctx                        context.Context
-	l                          log.Logger
-	statshub                   types.StatsHub
-	serializerRelease          types.NotificationRelease
-	out                        *types.Mailbox[uint]
-	stop                       chan struct{}
-	networkRelease             types.NotificationRelease
-	networkErrors              []time.Time
-	networkSuccesses           []time.Time
+	// mut covers all items here
+	mut      sync.RWMutex
+	cfg      types.ParallelismConfig
+	statshub types.StatsHub
+	ctx      context.Context
+	// networkErrors is any 4xx,5xx.
+	// network* holds the time any success or error occurs.
+	// This is used for the lookback so we can drop any that are older than our `cfg.Lookback`.
+	networkErrors    []time.Time
+	networkSuccesses []time.Time
+
+	timestampDriftSeconds int64
+	currentDesired        uint
+	out                   *types.Mailbox[uint]
+	stop                  chan struct{}
+	// previous is the number of previous desired instances. This is to prevent flapping.
 	previous                   []previousDesired
-	cfg                        types.ParallelismConfig
-	timestampDriftSeconds      int64
-	currentDesired             uint
+	networkRelease             types.NotificationRelease
+	serializerRelease          types.NotificationRelease
 	timestampNetworkSeconds    int64
 	timestampSerializerSeconds int64
-	mut                        sync.RWMutex
+	l                          log.Logger
 }
 
 type previousDesired struct {

@@ -1,0 +1,26 @@
+name: Lint
+on:
+  pull_request:
+
+jobs:
+  lint_go:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+        cache: false
+
+    - name: Install dependencies
+      run: go mod vendor
+
+    - name: Lint
+      uses: golangci/golangci-lint-action@1481404843c368bc19ca9406f87d6e0fc97bdcfd #v7
+      with:
+        version: v2.0

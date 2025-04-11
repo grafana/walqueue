@@ -112,7 +112,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 					increaseTimeStamp: 100,
 				},
 				{
-					// Just barely above the threshhold to not trigger the decrease but increase will trigger.
+					// Just barely above the threshold to not trigger the decrease but increase will trigger.
 					failurePercentile: 89,
 					desired:           4,
 					increaseTimeStamp: 100,
@@ -249,7 +249,6 @@ func TestParallelismWithNoChanges(t *testing.T) {
 							Series: types.CategoryStats{FailedSamples: 1},
 						})
 					}
-
 				}
 				// Serializer should always be newer than network.
 				fs.SendSerializerStats(types.SerializerStats{
@@ -287,7 +286,6 @@ func TestParallelismWithNoChanges(t *testing.T) {
 					require.Failf(t, "should have gotten desired ", "%d", st.desired)
 					return
 				}
-
 			}
 		})
 	}

@@ -6,7 +6,6 @@ type Data struct {
 }
 
 type DataHandle struct {
+	Pop  func() (map[string]string, []byte, error)
 	Name string
-	// Pop will get the data and delete the source of the data.
-	Pop func() (map[string]string, []byte, error)
 }

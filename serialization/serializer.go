@@ -21,21 +21,20 @@ var (
 // serializer collects data from multiple appenders in-memory and will periodically flush the data to file.Storage.
 // serializer will flush based on configured time duration OR if it hits a certain number of items.
 type serializer struct {
-	mut                 sync.Mutex
-	ser                 types.PrometheusMarshaller
-	maxItemsBeforeFlush int
-	flushFrequency      time.Duration
-	queue               types.FileStorage
 	lastFlush           time.Time
 	logger              log.Logger
-	// Every 1 second we should check if we need to flush.
-	flushTestTimer *time.Ticker
-	stats          func(stats types.SerializerStats)
-	fileFormat     types.FileFormat
-	needsStop      atomic.Bool
-	newestTS       int64
-	seriesCount    int
-	metadataCount  int
+	ser                 types.PrometheusMarshaller
+	queue               types.FileStorage
+	stats               func(stats types.SerializerStats)
+	flushTestTimer      *time.Ticker
+	fileFormat          types.FileFormat
+	flushFrequency      time.Duration
+	maxItemsBeforeFlush int
+	needsStop           atomic.Bool
+	newestTS            int64
+	seriesCount         int
+	metadataCount       int
+	mut                 sync.Mutex
 }
 
 func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(stats types.SerializerStats), l log.Logger) (types.PrometheusSerializer, error) {
@@ -78,10 +77,8 @@ func (s *serializer) SendMetrics(ctx context.Context, metrics []*types.Prometheu
 				level.Error(s.logger).Log("msg", "unable to append to serializer", "err", err)
 			}
 		}
-
 	}
 	return nil
-
 }
 
 func (s *serializer) SendMetadata(_ context.Context, name string, unit string, help string, pType string) error {

@@ -11,56 +11,56 @@ import (
 func TestProxyConfiguration(t *testing.T) {
 	tests := []struct {
 		name                string
-		proxyURL           string
-		fromEnv            bool
+		proxyURL            string
+		fromEnv             bool
 		proxyConnectHeaders map[string]string
-		expectedProxyURL   string
-		expectHeaders      bool
-		expectError        bool
+		expectedProxyURL    string
+		expectHeaders       bool
+		expectError         bool
 	}{
 		{
-			name:              "no proxy",
-			proxyURL:          "",
-			fromEnv:           false,
-			expectedProxyURL:  "",
-			expectHeaders:     false,
-			expectError:       false,
+			name:             "no proxy",
+			proxyURL:         "",
+			fromEnv:          false,
+			expectedProxyURL: "",
+			expectHeaders:    false,
+			expectError:      false,
 		},
 		{
-			name:              "with proxy url",
-			proxyURL:          "http://proxy.example.com:8080",
-			fromEnv:           false,
-			expectedProxyURL:  "http://proxy.example.com:8080",
-			expectHeaders:     false,
-			expectError:       false,
+			name:             "with proxy url",
+			proxyURL:         "http://proxy.example.com:8080",
+			fromEnv:          false,
+			expectedProxyURL: "http://proxy.example.com:8080",
+			expectHeaders:    false,
+			expectError:      false,
 		},
 		{
-			name:              "with proxy from environment",
-			proxyURL:          "",
-			fromEnv:           true,
-			expectedProxyURL:  "",
-			expectHeaders:     false,
-			expectError:       false,
+			name:             "with proxy from environment",
+			proxyURL:         "",
+			fromEnv:          true,
+			expectedProxyURL: "",
+			expectHeaders:    false,
+			expectError:      false,
 		},
 		{
-			name:              "with proxy url and environment",
-			proxyURL:          "http://proxy.example.com:8080",
-			fromEnv:           true,
-			expectedProxyURL:  "http://proxy.example.com:8080",
-			expectHeaders:     false,
-			expectError:       false,
+			name:             "with proxy url and environment",
+			proxyURL:         "http://proxy.example.com:8080",
+			fromEnv:          true,
+			expectedProxyURL: "http://proxy.example.com:8080",
+			expectHeaders:    false,
+			expectError:      false,
 		},
 		{
-			name:                "with proxy connect headers",
-			proxyURL:            "http://proxy.example.com:8080",
-			fromEnv:             false,
+			name:     "with proxy connect headers",
+			proxyURL: "http://proxy.example.com:8080",
+			fromEnv:  false,
 			proxyConnectHeaders: map[string]string{
 				"Proxy-Authorization": "Basic dXNlcjpwYXNz",
 				"X-Custom-Header":     "value",
 			},
-			expectedProxyURL:    "http://proxy.example.com:8080",
-			expectHeaders:       true,
-			expectError:         false,
+			expectedProxyURL: "http://proxy.example.com:8080",
+			expectHeaders:    true,
+			expectError:      false,
 		},
 		{
 			name:                "with invalid proxy url",
@@ -76,13 +76,13 @@ func TestProxyConfiguration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cc := ConnectionConfig{
-				ProxyURL:            tt.proxyURL,
+				ProxyURL:             tt.proxyURL,
 				ProxyFromEnvironment: tt.fromEnv,
 				ProxyConnectHeaders:  tt.proxyConnectHeaders,
 			}
 
 			cfg, err := cc.ToPrometheusConfig()
-			
+
 			if tt.expectError {
 				require.Error(t, err, "Expected an error for invalid proxy URL")
 				return // No need to check other conditions for error cases
@@ -96,7 +96,7 @@ func TestProxyConfiguration(t *testing.T) {
 			} else {
 				expectedURL, parseErr := url.Parse(tt.expectedProxyURL)
 				require.NoError(t, parseErr)
-				require.Equal(t, expectedURL.String(), cfg.ProxyURL.URL.String())
+				require.Equal(t, expectedURL.String(), cfg.ProxyURL.String())
 			}
 
 			// Check proxy from environment
@@ -106,7 +106,7 @@ func TestProxyConfiguration(t *testing.T) {
 			if tt.expectHeaders {
 				require.NotNil(t, cfg.ProxyConnectHeader)
 				require.Equal(t, len(tt.proxyConnectHeaders), len(cfg.ProxyConnectHeader))
-				
+
 				for key, value := range tt.proxyConnectHeaders {
 					secrets, ok := cfg.ProxyConnectHeader[key]
 					require.True(t, ok)

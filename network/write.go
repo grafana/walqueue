@@ -17,12 +17,13 @@ import (
 
 // write is a fire and forget client.
 type write struct {
-	client *http.Client
-	cfg    types.ConnectionConfig
 	log    log.Logger
+	client *http.Client
 	stats  func(r sendResult)
+	cfg    types.ConnectionConfig
 }
 
+//nolint:unparam // TODO error is always nil, but this should do cfg validation
 func newWrite(cc types.ConnectionConfig, l log.Logger, statsResult func(r sendResult), client *http.Client) (*write, error) {
 	return &write{
 		client: client,
@@ -63,12 +64,12 @@ func (l *write) trySend(buf []byte, ctx context.Context) {
 
 type sendResult struct {
 	err              error
-	successful       bool
-	recoverableError bool
 	retryAfter       time.Duration
 	statusCode       int
-	networkError     bool
 	duration         time.Duration
+	successful       bool
+	recoverableError bool
+	networkError     bool
 }
 
 // send is the main work loop of the loop.
@@ -100,7 +101,7 @@ func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult
 	if l.cfg.BasicAuth != nil {
 		httpReq.SetBasicAuth(l.cfg.BasicAuth.Username, l.cfg.BasicAuth.Password)
 	} else if l.cfg.BearerToken != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+string(l.cfg.BearerToken))
+		httpReq.Header.Set("Authorization", "Bearer "+l.cfg.BearerToken)
 	}
 
 	if retryCount > 0 {

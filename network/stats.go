@@ -10,7 +10,6 @@ import (
 // recordStats determines what values to send to the stats function. This allows for any
 // number of metrics/signals libraries to be used. Prometheus, OTel, and any other.
 func recordStats(seriesCount, histogramCount, metadataCount int, newestTS int64, isMeta bool, stats func(s types.NetworkStats), r sendResult, bytesSent int) {
-
 	switch {
 	case r.networkError:
 		stats(types.NetworkStats{
@@ -92,7 +91,6 @@ func recordStats(seriesCount, histogramCount, metadataCount int, newestTS int64,
 			SendDuration: r.duration,
 		})
 	}
-
 }
 
 func getSeriesCount[T types.Datum](tss []T) int {

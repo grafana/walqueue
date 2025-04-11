@@ -47,12 +47,12 @@ type queue struct {
 	queue                     types.FileStorage
 	logger                    log.Logger
 	serializer                types.PrometheusSerializer
-	ttl                       time.Duration
 	incoming                  *types.Mailbox[types.DataHandle]
 	stats                     *Stats
 	metaStats                 *Stats
 	externalLabels            map[string]string
 	networkRequestMoreSignals chan types.RequestMoreSignals[types.Datum]
+	ttl                       time.Duration
 }
 
 // NewQueue creates and returns a new Queue instance, initializing its components

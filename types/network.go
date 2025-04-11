@@ -20,7 +20,7 @@ type NetworkClient interface {
 // ConnectionConfig holds configuration details for network connections.
 // It includes various options such as authentication, timeouts, retry policies,
 // batching, and connection management settings.
-type ConnectionConfig struct {
+type ConnectionConfig struct { //nolint:govet // fieldalignment
 	// URL is the URL of the Prometheus server.
 	URL string
 	// BasicAuth holds the username and password for basic HTTP authentication.

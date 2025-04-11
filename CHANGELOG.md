@@ -1,5 +1,6 @@
 # walqueue changelog
 
+- [CHORE] Set up linting on the project. (@dehaansa)
 - [BUG] Changed metric naming to better align with prometheus standard, adding `_total` to counters. (@mattdurham)
 - [ENHANCEMENT] Make zstd the default compression layer. (@mattdurham)
 - [ENHANCEMENT] Instead of file queue pushing data, the network writers request it. (@mattdurham)

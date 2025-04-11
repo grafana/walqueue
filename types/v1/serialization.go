@@ -19,14 +19,14 @@ type SeriesGroup struct {
 // but instead use GetTimeSeriesFromPool and PutTimeSeriesSliceIntoPool. This allows us to reuse these objects and avoid
 // allocations.
 type TimeSeriesBinary struct {
+	Histograms Histograms
 	// Labels are not serialized to msgp, instead we store separately a dictionary of strings and use `LabelNames` and `LabelValues` to refer to the dictionary by ID.
 	LabelsNames  []uint32
 	LabelsValues []uint32
-	// TS is unix milliseconds.
-	TS         int64
-	Value      float64
-	Hash       uint64
-	Histograms Histograms
+	// TS is unix milliseconds
+	TS    int64
+	Value float64
+	Hash  uint64
 }
 
 type ByteString []byte
@@ -37,35 +37,35 @@ type Histograms struct {
 }
 
 type Histogram struct {
-	Count                HistogramCount
-	Sum                  float64
-	Schema               int32
-	ZeroThreshold        float64
-	ZeroCount            HistogramZeroCount
+	PositiveBuckets      []int64
 	NegativeSpans        []BucketSpan
 	NegativeBuckets      []int64
 	NegativeCounts       []float64
 	PositiveSpans        []BucketSpan
-	PositiveBuckets      []int64
 	PositiveCounts       []float64
-	ResetHint            int32
+	ZeroCount            HistogramZeroCount
+	Count                HistogramCount
+	Sum                  float64
+	ZeroThreshold        float64
 	TimestampMillisecond int64
+	Schema               int32
+	ResetHint            int32
 }
 
 type FloatHistogram struct {
-	Count                HistogramCount
-	Sum                  float64
-	Schema               int32
-	ZeroThreshold        float64
-	ZeroCount            HistogramZeroCount
+	PositiveDeltas       []int64
 	NegativeSpans        []BucketSpan
 	NegativeDeltas       []int64
 	NegativeCounts       []float64
 	PositiveSpans        []BucketSpan
-	PositiveDeltas       []int64
 	PositiveCounts       []float64
-	ResetHint            int32
+	ZeroCount            HistogramZeroCount
+	Count                HistogramCount
+	Sum                  float64
+	ZeroThreshold        float64
 	TimestampMillisecond int64
+	Schema               int32
+	ResetHint            int32
 }
 
 type HistogramCount struct {

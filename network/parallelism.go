@@ -37,8 +37,8 @@ type parallelism struct {
 }
 
 type previousDesired struct {
-	desired  uint
 	recorded time.Time
+	desired  uint
 }
 
 func newParallelism(cfg types.ParallelismConfig, out *types.Mailbox[uint], statshub types.StatsHub, l log.Logger) *parallelism {
@@ -199,7 +199,6 @@ func (p *parallelism) desiredLoop() {
 		if p.currentDesired-1 >= p.cfg.MinConnections {
 			level.Debug(p.l).Log("msg", "decreasing desired due to drift lowering", "desired", p.currentDesired-1, "drift", p.timestampDriftSeconds)
 			p.calculateDesiredParallelism(p.currentDesired - 1)
-
 		}
 		return
 	}
@@ -257,12 +256,18 @@ func (p *parallelism) calculateDesiredParallelism(desired uint) {
 		if targetValue != p.currentDesired {
 			p.currentDesired = targetValue
 			level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
-			p.out.Send(p.ctx, targetValue)
+			err := p.out.Send(p.ctx, targetValue)
+			if err != nil {
+				level.Error(p.l).Log("msg", "error sending desired", "err", err)
+			}
 		}
 	} else {
 		// Going up is always allowed. Scaling up should be easy, scaling down should be slow.
 		p.currentDesired = desired
 		level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
-		p.out.Send(p.ctx, desired)
+		err := p.out.Send(p.ctx, desired)
+		if err != nil {
+			level.Error(p.l).Log("msg", "error sending desired", "err", err)
+		}
 	}
 }

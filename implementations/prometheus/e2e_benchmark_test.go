@@ -2,12 +2,13 @@ package prometheus
 
 import (
 	"context"
-	"github.com/grafana/walqueue/types"
-	"github.com/prometheus/prometheus/model/labels"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/grafana/walqueue/types"
+	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"

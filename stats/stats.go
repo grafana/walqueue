@@ -13,12 +13,12 @@ var _ types.StatsHub = (*stats)(nil)
 // Whenever a interested party registers they are given a NotificationRelease
 // that cleans up.
 type stats struct {
-	mut             sync.RWMutex
 	seriesNetwork   map[int]func(types.NetworkStats)
 	metadataNetwork map[int]func(types.NetworkStats)
 	serializer      map[int]func(types.SerializerStats)
 	parralelism     map[int]func(types.ParralelismStats)
 	index           int
+	mut             sync.RWMutex
 }
 
 func NewStats() types.StatsHub {

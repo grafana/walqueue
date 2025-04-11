@@ -1,14 +1,15 @@
 package prometheus
 
 import (
-	"sync/atomic"
 	"time"
+
+	"go.uber.org/atomic"
 
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type Stats struct {
+type Stats struct { //nolint:govet // fieldalignment
 	serializerIn       atomic.Int64
 	networkOut         atomic.Int64
 	register           prometheus.Registerer

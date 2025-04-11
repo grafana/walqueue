@@ -15,10 +15,11 @@
 package v2
 
 import (
+	"strings"
+
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/prompb"
-	"strings"
 )
 
 // FromIntHistogram returns remote Histogram from the integer Histogram.

@@ -15,16 +15,15 @@ import (
 // writeBuffer handles buffering the data, keeping track if there is a write request already running and kicking off the
 // write request as needed. All methods need to be called in a thread safe manner.
 type writeBuffer[T types.Datum] struct {
-	mut               sync.RWMutex
-	id                int
+	lastAttemptedSend time.Time
+	log               log.Logger
+	stats             func(stats types.NetworkStats)
 	items             []T
 	wrBuf             []byte
 	snappyBuf         []byte
-	log               log.Logger
 	cfg               types.ConnectionConfig
-	stats             func(stats types.NetworkStats)
-	lastAttemptedSend time.Time
-	requestBuffer     []T
+	id                int
+	mut               sync.RWMutex
 	currentlySending  bool
 }
 

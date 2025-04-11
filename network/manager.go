@@ -17,25 +17,25 @@ import (
 
 // manager manages writeBuffers. Mostly it exists to control their lifecycle and provide data to them via pull model.
 type manager struct {
-	metricBuffers                              []*writeBuffer[types.MetricDatum]
-	metadataBuffer                             *writeBuffer[types.MetadataDatum]
-	logger                                     log.Logger
-	desiredOutbox                              *types.Mailbox[uint]
-	configInbox                                *types.SyncMailbox[types.ConnectionConfig, bool]
-	cfg                                        types.ConnectionConfig
-	statshub                                   types.StatsHub
 	lastFlushTime                              time.Time
+	statshub                                   types.StatsHub
+	ctx                                        context.Context
+	logger                                     log.Logger
 	desiredParallelism                         *parallelism
-	desiredConnections                         uint
+	currentOutgoingConnections                 *atomic.Int32
+	configInbox                                *types.SyncMailbox[types.ConnectionConfig, bool]
+	desiredOutbox                              *types.Mailbox[uint]
+	queuePendingData                           chan struct{}
+	requestForMoreDataPending                  *atomic.Bool
 	requestSignalsFromFileQueue                chan types.RequestMoreSignals[types.Datum]
 	responseFromRequestForSignalsFromFileQueue chan []types.Datum
 	pendingData                                *pending
 	client                                     *http.Client
-	currentOutgoingConnections                 *atomic.Int32
-	ctx                                        context.Context
 	stop                                       chan struct{}
-	requestForMoreDataPending                  *atomic.Bool
-	queuePendingData                           chan struct{}
+	metadataBuffer                             *writeBuffer[types.MetadataDatum]
+	metricBuffers                              []*writeBuffer[types.MetricDatum]
+	cfg                                        types.ConnectionConfig
+	desiredConnections                         uint
 }
 
 var _ types.NetworkClient = (*manager)(nil)

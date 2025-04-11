@@ -3,7 +3,6 @@ package network
 import (
 	"net/http"
 	"net/url"
-	"os"
 	"testing"
 
 	"github.com/go-kit/log"
@@ -35,7 +34,7 @@ func TestProxyCreation(t *testing.T) {
 		// Verify proxy URL is set correctly
 		expectedURL, err := url.Parse("http://proxy.example.com:8080")
 		require.NoError(t, err)
-		require.Equal(t, expectedURL.String(), cfg.ProxyURL.URL.String())
+		require.Equal(t, expectedURL.String(), cfg.ProxyURL.String())
 
 		// Verify ProxyConnectHeader is set correctly
 		require.Len(t, cfg.ProxyConnectHeader, 2)
@@ -145,22 +144,10 @@ func TestInvalidProxyURL(t *testing.T) {
 }
 
 func TestProxyFromEnvironment(t *testing.T) {
-	// Save original environment variables to restore later
-	originalHTTPProxy := os.Getenv("HTTP_PROXY")
-	originalHTTPSProxy := os.Getenv("HTTPS_PROXY")
-	originalNoProxy := os.Getenv("NO_PROXY")
-
-	// Cleanup environment variables after the test
-	defer func() {
-		os.Setenv("HTTP_PROXY", originalHTTPProxy)
-		os.Setenv("HTTPS_PROXY", originalHTTPSProxy)
-		os.Setenv("NO_PROXY", originalNoProxy)
-	}()
-
 	// Set environment variables for the test
-	os.Setenv("HTTP_PROXY", "http://env-proxy.example.com:8080")
-	os.Setenv("HTTPS_PROXY", "http://env-proxy-secure.example.com:8443")
-	os.Setenv("NO_PROXY", "localhost,127.0.0.1")
+	t.Setenv("HTTP_PROXY", "http://env-proxy.example.com:8080")
+	t.Setenv("HTTPS_PROXY", "http://env-proxy-secure.example.com:8443")
+	t.Setenv("NO_PROXY", "localhost,127.0.0.1")
 
 	t.Run("proxy from environment variables", func(t *testing.T) {
 		// Create a connection config with ProxyFromEnvironment enabled

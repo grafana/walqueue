@@ -15,6 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Set up metrics with random seed for reproducibility
+var r = rand.New(rand.NewSource(12345))
+
 // TestCompressionBenchmark benchmarks compression performance and ratio between
 // different compression algorithms using realistic node_exporter metrics
 func TestCompressionBenchmark(t *testing.T) {
@@ -30,9 +33,6 @@ func TestCompressionBenchmark(t *testing.T) {
 		commitCount      = totalMetrics / metricsPerCommit
 		benchmarkRuns    = 5 // Number of times to run decompression benchmarks for more accurate timing
 	)
-
-	// Set up metrics with random seed for reproducibility
-	rand.Seed(12345)
 
 	// Generate node_exporter-like metrics
 	metrics := generateNodeExporterMetrics(totalMetrics)
@@ -454,44 +454,36 @@ func generateNodeExporterMetrics(count int) []prompb.TimeSeries {
 	result := make([]prompb.TimeSeries, 0, count)
 	for i := 0; i < count; i++ {
 		// Select metric type and create appropriate labels
-		metricIdx := rand.Intn(len(metricNames))
+		metricIdx := r.Intn(len(metricNames))
 		metricName := metricNames[metricIdx]
 
 		// Base labels that all metrics have
 		labelSet := []labels.Label{
 			{Name: "__name__", Value: metricName},
-			{Name: "instance", Value: instanceValues[rand.Intn(len(instanceValues))]},
-			{Name: "job", Value: jobValues[rand.Intn(len(jobValues))]},
+			{Name: "instance", Value: instanceValues[r.Intn(len(instanceValues))]},
+			{Name: "job", Value: jobValues[r.Intn(len(jobValues))]},
 		}
 
 		// Add specific labels based on metric type
-		switch {
-		case metricName == "node_cpu_seconds_total":
+		switch metricName {
+		case "node_cpu_seconds_total":
 			labelSet = append(labelSet,
-				labels.Label{Name: "cpu", Value: cpuValues[rand.Intn(len(cpuValues))]},
-				labels.Label{Name: "mode", Value: modeValues[rand.Intn(len(modeValues))]},
+				labels.Label{Name: "cpu", Value: cpuValues[r.Intn(len(cpuValues))]},
+				labels.Label{Name: "mode", Value: modeValues[r.Intn(len(modeValues))]},
 			)
-		case metricName == "node_disk_io_time_seconds_total" ||
-			metricName == "node_disk_read_bytes_total" ||
-			metricName == "node_disk_write_bytes_total" ||
-			metricName == "node_disk_reads_completed_total" ||
-			metricName == "node_disk_writes_completed_total":
+		case "node_disk_io_time_seconds_total", "node_disk_read_bytes_total", "node_disk_write_bytes_total", "node_disk_reads_completed_total", "node_disk_writes_completed_total":
 			labelSet = append(labelSet,
-				labels.Label{Name: "device", Value: diskValues[rand.Intn(len(diskValues))]},
+				labels.Label{Name: "device", Value: diskValues[r.Intn(len(diskValues))]},
 			)
-		case metricName == "node_filesystem_avail_bytes" ||
-			metricName == "node_filesystem_size_bytes":
+		case "node_filesystem_avail_bytes", "node_filesystem_size_bytes":
 			labelSet = append(labelSet,
-				labels.Label{Name: "device", Value: diskValues[rand.Intn(len(diskValues))]},
-				labels.Label{Name: "fstype", Value: fsTypeValues[rand.Intn(len(fsTypeValues))]},
-				labels.Label{Name: "mountpoint", Value: mountpointValues[rand.Intn(len(mountpointValues))]},
+				labels.Label{Name: "device", Value: diskValues[r.Intn(len(diskValues))]},
+				labels.Label{Name: "fstype", Value: fsTypeValues[r.Intn(len(fsTypeValues))]},
+				labels.Label{Name: "mountpoint", Value: mountpointValues[r.Intn(len(mountpointValues))]},
 			)
-		case metricName == "node_network_receive_bytes_total" ||
-			metricName == "node_network_transmit_bytes_total" ||
-			metricName == "node_network_receive_packets_total" ||
-			metricName == "node_network_transmit_packets_total":
+		case "node_network_receive_bytes_total", "node_network_transmit_bytes_total", "node_network_receive_packets_total", "node_network_transmit_packets_total":
 			labelSet = append(labelSet,
-				labels.Label{Name: "device", Value: interfaceValues[rand.Intn(len(interfaceValues))]},
+				labels.Label{Name: "device", Value: interfaceValues[r.Intn(len(interfaceValues))]},
 			)
 		}
 
@@ -507,23 +499,23 @@ func generateNodeExporterMetrics(count int) []prompb.TimeSeries {
 		// Generate a single sample for this series
 		// For counter metrics, generate values that increase over time
 		var value float64
-		timestamp := startTime + int64(rand.Intn(3600))*1000 // Random time within the last hour
+		timestamp := startTime + int64(r.Intn(3600))*1000 // Random time within the last hour
 
 		if strings.Contains(metricName, "total") {
 			// For counters, use larger values that would realistically accumulate
-			value = float64(rand.Intn(1000000) + 10000)
+			value = float64(r.Intn(1000000) + 10000)
 		} else if strings.Contains(metricName, "bytes") {
 			// For byte metrics, use larger values
-			value = float64(rand.Intn(100000000) + 1000000)
+			value = float64(r.Intn(100000000) + 1000000)
 		} else if strings.Contains(metricName, "seconds") {
 			// For time metrics, use smaller values
-			value = rand.Float64() * 100
+			value = r.Float64() * 100
 		} else if strings.HasPrefix(metricName, "node_load") {
 			// For load averages, use realistic values between 0.01 and 10
-			value = rand.Float64() * 10
+			value = r.Float64() * 10
 		} else {
 			// For other metrics, use general purpose random values
-			value = rand.Float64() * 1000
+			value = r.Float64() * 1000
 		}
 
 		// Create the time series

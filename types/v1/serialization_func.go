@@ -255,7 +255,6 @@ func PutTimeSeriesSliceIntoPool(tss []*TimeSeriesBinary) {
 	for i := 0; i < len(tss); i++ {
 		PutTimeSeriesIntoPool(tss[i])
 	}
-
 }
 
 func PutTimeSeriesIntoPool(ts *TimeSeriesBinary) {
@@ -313,7 +312,6 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]types.Datum, error
 			buf:         buf,
 			isHistogram: isHistogram,
 		})
-
 	}
 	for _, series := range sg.Metadata {
 		pmm := prompb.MetricMetadata{}
@@ -343,9 +341,9 @@ func DeserializeToSeriesGroup(sg *SeriesGroup, buf []byte) ([]types.Datum, error
 var _ types.MetricDatum = (*metric)(nil)
 
 type metric struct {
+	buf         []byte
 	hash        uint64
 	ts          int64
-	buf         []byte
 	isHistogram bool
 }
 

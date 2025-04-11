@@ -6,9 +6,10 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.uber.org/atomic"
 
 	"github.com/go-kit/log"
 	"github.com/grafana/walqueue/types"

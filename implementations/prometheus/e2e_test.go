@@ -5,8 +5,6 @@ package prometheus
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/log"
-	"github.com/grafana/walqueue/types"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +14,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/go-kit/log"
+	"github.com/grafana/walqueue/types"
 
 	"github.com/golang/snappy"
 	"github.com/prometheus/client_golang/prometheus"
@@ -355,7 +356,6 @@ func newComponent(t *testing.T, l log.Logger, url string, reg prometheus.Registe
 			AllowedNetworkErrorFraction: 0.05,
 		},
 	}, t.TempDir(), 10, 1*time.Second, 1*time.Hour, reg, "alloy", l)
-
 }
 
 func newSafeSlice[T any]() *safeSlice[T] {

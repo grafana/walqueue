@@ -21,57 +21,26 @@ type NetworkClient interface {
 // It includes various options such as authentication, timeouts, retry policies,
 // batching, and connection management settings.
 type ConnectionConfig struct {
-	// URL is the URL of the Prometheus server.
-	URL string
-	// BasicAuth holds the username and password for basic HTTP authentication.
-	BasicAuth *BasicAuth
-	// BearerToken is the bearer token for the Prometheus server.
-	BearerToken string
-	// UserAgent is the User-Agent header sent to the Prometheus server.
-	UserAgent string
-	// Timeout specifies the duration for which the connection will wait for a response before timing out.
-	Timeout time.Duration
-	// RetryBackoff is the duration between retries when a network request fails.
-	// The next retry will happen after RetryBackoff + (RetryBackoff * attempt number).
-	RetryBackoff time.Duration
-	// MaxRetryAttempts specifies the maximum number of times a request will be retried
-	// if it fails. The next retry will happen after RetryBackoff + (RetryBackoff * attempt number).
-	// If this is set to 0, no retries are attempted.
-	MaxRetryAttempts uint
-	// BatchCount is the number of time series to batch together before sending to the network.
-	BatchCount int
-	// FlushInterval specifies the duration between each flush of the network
-	// buffer. If no data is available, the buffer is not flushed.
-	FlushInterval time.Duration
-	// ExternalLabels specifies the external labels to be added to all samples
-	// sent to the Prometheus server.
-	ExternalLabels map[string]string
-	// Headers specifies the HTTP headers to be added to all requests
-	// sent to the server.
-	Headers map[string]string
-
-	// ProxyURL is the URL of the HTTP proxy to use for requests.
-	// If empty, no proxy is used.
-	ProxyURL string
-	// ProxyFromEnvironment determines whether to read proxy configuration from environment
-	// variables HTTP_PROXY, HTTPS_PROXY and NO_PROXY.
-	// If true, environment proxy settings will be used even if ProxyURL is set.
+	ExternalLabels       map[string]string
+	BasicAuth            *BasicAuth
+	ProxyConnectHeaders  map[string]string
+	Headers              map[string]string
+	TLSKey               string
+	TLSCert              string
+	TLSCACert            string
+	URL                  string
+	BearerToken          string
+	ProxyURL             string
+	UserAgent            string
+	Parallelism          ParallelismConfig
+	Timeout              time.Duration
+	FlushInterval        time.Duration
+	RetryBackoff         time.Duration
+	BatchCount           int
+	MaxRetryAttempts     uint
 	ProxyFromEnvironment bool
-	// ProxyConnectHeaders specify the headers to send to proxies during CONNECT requests.
-	ProxyConnectHeaders map[string]string
-
-	// TLSCert is the PEM-encoded certificate string for TLS client authentication
-	TLSCert string
-	// TLSKey is the PEM-encoded private key string for TLS client authentication
-	TLSKey string
-	// TLSCACert is the PEM-encoded CA certificate string for server verification
-	TLSCACert string
-	// InsecureSkipVerify controls whether the client verifies the server's certificate chain and host name
-	InsecureSkipVerify bool
-	// UseRoundRobin
-	UseRoundRobin bool
-	// ParallelismConfig determines how many concurrent connections to have.
-	Parallelism ParallelismConfig
+	InsecureSkipVerify   bool
+	UseRoundRobin        bool
 }
 type ParallelismConfig struct {
 	// AllowedDrift is the maximum amount of time that is allowed for the Newest Timestamp Serializer - Newest Timestamp Sent via Network before the connections scales up.

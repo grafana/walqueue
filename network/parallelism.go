@@ -12,33 +12,27 @@ import (
 
 // parallelism drives the behavior on determining what the desired number of connections should be.
 type parallelism struct {
-	// mut covers all items here
-	mut      sync.RWMutex
-	cfg      types.ParallelismConfig
-	statshub types.StatsHub
-	ctx      context.Context
-	// networkErrors is any 4xx,5xx.
-	// network* holds the time any success or error occurs.
-	// This is used for the lookback so we can drop any that are older than our `cfg.Lookback`.
-	networkErrors    []time.Time
-	networkSuccesses []time.Time
-
-	timestampDriftSeconds int64
-	currentDesired        uint
-	out                   *types.Mailbox[uint]
-	stop                  chan struct{}
-	// previous is the number of previous desired instances. This is to prevent flapping.
-	previous                   []previousDesired
-	networkRelease             types.NotificationRelease
+	ctx                        context.Context
+	l                          log.Logger
+	statshub                   types.StatsHub
 	serializerRelease          types.NotificationRelease
+	out                        *types.Mailbox[uint]
+	stop                       chan struct{}
+	networkRelease             types.NotificationRelease
+	networkErrors              []time.Time
+	networkSuccesses           []time.Time
+	previous                   []previousDesired
+	cfg                        types.ParallelismConfig
+	timestampDriftSeconds      int64
+	currentDesired             uint
 	timestampNetworkSeconds    int64
 	timestampSerializerSeconds int64
-	l                          log.Logger
+	mut                        sync.RWMutex
 }
 
 type previousDesired struct {
-	desired  uint
 	recorded time.Time
+	desired  uint
 }
 
 func newParallelism(cfg types.ParallelismConfig, out *types.Mailbox[uint], statshub types.StatsHub, l log.Logger) *parallelism {
@@ -199,7 +193,6 @@ func (p *parallelism) desiredLoop() {
 		if p.currentDesired-1 >= p.cfg.MinConnections {
 			level.Debug(p.l).Log("msg", "decreasing desired due to drift lowering", "desired", p.currentDesired-1, "drift", p.timestampDriftSeconds)
 			p.calculateDesiredParallelism(p.currentDesired - 1)
-
 		}
 		return
 	}
@@ -257,12 +250,18 @@ func (p *parallelism) calculateDesiredParallelism(desired uint) {
 		if targetValue != p.currentDesired {
 			p.currentDesired = targetValue
 			level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
-			p.out.Send(p.ctx, targetValue)
+			err := p.out.Send(p.ctx, targetValue)
+			if err != nil {
+				level.Error(p.l).Log("msg", "error sending desired", "err", err)
+			}
 		}
 	} else {
 		// Going up is always allowed. Scaling up should be easy, scaling down should be slow.
 		p.currentDesired = desired
 		level.Debug(p.l).Log("msg", "sending desired", "desired", p.currentDesired)
-		p.out.Send(p.ctx, desired)
+		err := p.out.Send(p.ctx, desired)
+		if err != nil {
+			level.Error(p.l).Log("msg", "error sending desired", "err", err)
+		}
 	}
 }

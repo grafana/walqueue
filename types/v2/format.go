@@ -16,11 +16,11 @@ import (
 // Format describe the v2 data format.
 type Format struct {
 	series      *prompb.TimeSeries
-	seriesBuf   []byte
 	buf         *bytes.Buffer
-	recordCount uint32
 	metric      *Metric
+	seriesBuf   []byte
 	metricBuf   []byte
+	recordCount uint32
 }
 
 const PrometheusMetric = uint8(1)
@@ -181,7 +181,8 @@ func (s *Format) Unmarshal(meta map[string]string, buf []byte) (items []types.Da
 	for i := range datums {
 		recordType := buf[index]
 		index++
-		if recordType == PrometheusMetric {
+		switch recordType {
+		case PrometheusMetric:
 			// These are pooled for performance. Whenever they are no longer needed they are returned to the pool via the Free method.
 			m := metricPool.Get().(*Metric)
 			// The []uint16 allows some backwards compatibility but we dont care about that.
@@ -192,7 +193,7 @@ func (s *Format) Unmarshal(meta map[string]string, buf []byte) (items []types.Da
 			index += size
 
 			datums[i] = m
-		} else if recordType == PrometheusMetadata {
+		case PrometheusMetadata:
 			md := &Metadata{}
 			size, err := md.NestedUnmarshal(0, buf[index:], []uint16{}, 0)
 			if err != nil {
@@ -201,7 +202,6 @@ func (s *Format) Unmarshal(meta map[string]string, buf []byte) (items []types.Da
 			index += size
 			datums[i] = md
 		}
-
 	}
 	return datums, nil
 }

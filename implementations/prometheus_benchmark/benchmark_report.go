@@ -218,7 +218,6 @@ func generateMarkdownTable(summaries []BenchmarkSummary, tests []string) {
 				if i == 0 {
 					// First result is baseline
 					changeStr = "baseline"
-					prevValue = result.SignalsPerSec
 				} else {
 					// Calculate change from previous run
 					change := 100 * (result.SignalsPerSec - prevValue) / prevValue

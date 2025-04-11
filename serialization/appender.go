@@ -23,11 +23,11 @@ var metricPool = sync.Pool{
 
 type appender struct {
 	ctx            context.Context
-	ttl            time.Duration
 	s              types.PrometheusSerializer
 	logger         log.Logger
-	metrics        []*types.PrometheusMetric
 	externalLabels map[string]string
+	metrics        []*types.PrometheusMetric
+	ttl            time.Duration
 }
 
 // NewAppender returns an Appender that writes to a given serializer. NOTE the returned Appender writes

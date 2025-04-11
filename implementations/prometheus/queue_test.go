@@ -2,15 +2,16 @@ package prometheus
 
 import (
 	"context"
-	"github.com/golang/snappy"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/prompb"
-	"go.uber.org/atomic"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/golang/snappy"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/prompb"
+	"go.uber.org/atomic"
 
 	"github.com/go-kit/log"
 	"github.com/grafana/walqueue/types"

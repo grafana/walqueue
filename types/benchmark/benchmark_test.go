@@ -80,7 +80,6 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 			}
 		})
 	}
-
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")

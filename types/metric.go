@@ -20,7 +20,7 @@ const PrometheusMetadataV1 = Type("prometheus.metadata.v1")
 
 // Datum represent one item of data.
 type Datum interface {
-	// Bytes represents the underlying data and should only be used in conjuction with the type.
+	// Bytes represents the underlying data and should only be used in conjunction with the type.
 	Bytes() []byte
 	Type() Type
 	FileFormat() FileFormat
@@ -41,9 +41,9 @@ type MetadataDatum interface {
 }
 
 type PrometheusMetric struct {
+	H  *histogram.Histogram
+	FH *histogram.FloatHistogram
 	L  labels.Labels
 	T  int64
 	V  float64
-	H  *histogram.Histogram
-	FH *histogram.FloatHistogram
 }

@@ -19,16 +19,13 @@ var _ types.FileStorage = (*queue)(nil)
 // queue represents an on-disk queue. This is a list implemented as files ordered by id with a name pattern: <id>.committed
 // Each file contains a byte buffer and an optional metatdata map.
 type queue struct {
-	directory string
-	maxID     int
 	logger    log.Logger
+	stats     types.StatsHub
 	dataQueue *types.Mailbox[types.Data]
-	// Out is where to send data when pulled from queue, it is assumed that it will
-	// block until ready for another record.
-	out func(ctx context.Context, dh types.DataHandle)
-	// files is the list of files found initially.
-	files []string
-	stats types.StatsHub
+	out       func(ctx context.Context, dh types.DataHandle)
+	directory string
+	files     []string
+	maxID     int
 }
 
 // NewQueue returns a implementation of FileStorage.
@@ -120,7 +117,6 @@ func get(logger log.Logger, name string) (map[string]string, []byte, error) {
 
 // run allows most of the queue to be single threaded with work only coming in and going out via mailboxes(channels).
 func (q *queue) run(ctx context.Context) {
-
 	for {
 		select {
 		case <-ctx.Done():

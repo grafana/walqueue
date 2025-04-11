@@ -14,9 +14,10 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.uber.org/atomic"
 
 	"github.com/golang/snappy"
 	"github.com/prometheus/prometheus/prompb"
@@ -66,8 +67,7 @@ func jitterServer(t testing.TB, minDelayMs, maxDelayMs int, requestCounter *atom
 
 // createTempDir creates a temporary directory for the WAL files
 func createTempDir(t testing.TB) string {
-	tempDir, err := os.MkdirTemp("", "filequeue-benchmark-")
-	require.NoError(t, err)
+	tempDir := t.TempDir()
 	t.Cleanup(func() {
 		os.RemoveAll(tempDir)
 	})
@@ -202,9 +202,6 @@ func BenchmarkPrometheusQueueWithJitter(b *testing.B) {
 		b.Run(tt.name, func(b *testing.B) {
 			// Create request counter to track total requests
 			requestCounter := &atomic.Int64{}
-
-			// Set random seed for reproducible jitter
-			rand.Seed(time.Now().UnixNano())
 
 			// Create test server with jitter
 			totalSignals := &atomic.Int64{}

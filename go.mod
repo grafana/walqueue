@@ -1,8 +1,8 @@
 module github.com/grafana/walqueue
 
-go 1.23.0
+go 1.23
 
-toolchain go1.24.1
+toolchain go1.23.1
 
 require (
 	github.com/deneonet/benc v1.1.7

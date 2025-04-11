@@ -392,7 +392,7 @@ func BenchmarkPrometheusQueueWithJitter(b *testing.B) {
 
 			// Log summary
 			b.Logf("Benchmark completed: processed ~%d signals in %v (%.2f signals/sec), %d requests, %.2f signals/request, %.2f appender writes/sec, %d total appender writes",
-				totalSignals.Load(), duration, throughput, reqCount, signalsPerReq, float64(totalAppenderWrites.Load())/durationSec, totalAppenderWrites)
+				totalSignals.Load(), duration, throughput, reqCount, signalsPerReq, float64(totalAppenderWrites.Load())/durationSec, totalAppenderWrites.Load())
 
 			// Create a result record
 			result := benchmarkResults{

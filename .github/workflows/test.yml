@@ -2,7 +2,7 @@ name: Go
 on: [pull_request]
 
 jobs:
-  build:
+  test:
     runs-on: github-hosted-ubuntu-x64-large
     steps:
       - uses: actions/checkout@v4

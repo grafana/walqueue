@@ -9,57 +9,74 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type Stats struct {
-	FileIDRead                         prometheus.Gauge
-	RemoteStorageInTimestamp           prometheus.Gauge
-	RemoteShardsMax                    prometheus.Gauge
-	RemoteShardsMin                    prometheus.Gauge
-	RemoteShardsDesired                prometheus.Gauge
-	ParallelismMin                     prometheus.Gauge
-	ParallelismMax                     prometheus.Gauge
-	ParallelismDesired                 prometheus.Gauge
-	NetworkSeriesSent                  prometheus.Counter
-	NetworkFailures                    prometheus.Counter
-	NetworkRetries                     prometheus.Counter
-	NetworkRetries429                  prometheus.Counter
-	NetworkRetries5XX                  prometheus.Counter
-	NetworkSentDuration                prometheus.Histogram
-	NetworkErrors                      prometheus.Counter
-	NetworkNewestOutTimeStampSeconds   prometheus.Gauge
-	NetworkTTLDrops                    prometheus.Counter
-	TimestampDriftSeconds              prometheus.Gauge
+type Stats struct { //nolint:govet // fieldalignment
+	serializerIn       atomic.Int64
+	networkOut         atomic.Int64
+	register           prometheus.Registerer
+	stats              types.StatsHub
+	isMeta             bool
+	serialRelease      types.NotificationRelease
+	networkRelease     types.NotificationRelease
+	parallelismRelease types.NotificationRelease
+
+	// Parallelism
+	ParallelismMin     prometheus.Gauge
+	ParallelismMax     prometheus.Gauge
+	ParallelismDesired prometheus.Gauge
+
+	// Network Stats
+	NetworkSeriesSent                prometheus.Counter
+	NetworkFailures                  prometheus.Counter
+	NetworkRetries                   prometheus.Counter
+	NetworkRetries429                prometheus.Counter
+	NetworkRetries5XX                prometheus.Counter
+	NetworkSentDuration              prometheus.Histogram
+	NetworkErrors                    prometheus.Counter
+	NetworkNewestOutTimeStampSeconds prometheus.Gauge
+	NetworkTTLDrops                  prometheus.Counter
+
+	// Drift between serializer input and network output
+	TimestampDriftSeconds prometheus.Gauge
+
+	// Serializer Stats
 	SerializerInSeries                 prometheus.Counter
 	SerializerNewestInTimeStampSeconds prometheus.Gauge
 	SerializerErrors                   prometheus.Counter
-	FileIDWritten                      prometheus.Gauge
-	CompressedBytesWritten             prometheus.Counter
-	UncompressedBytesWritten           prometheus.Counter
-	stats                              types.StatsHub
-	register                           prometheus.Registerer
-	UncompressedBytesRead              prometheus.Counter
-	SamplesTotal                       prometheus.Counter
-	HistogramsTotal                    prometheus.Counter
-	MetadataTotal                      prometheus.Counter
-	FailedSamplesTotal                 prometheus.Counter
-	FailedHistogramsTotal              prometheus.Counter
-	FailedMetadataTotal                prometheus.Counter
-	RetriedSamplesTotal                prometheus.Counter
-	RetriedHistogramsTotal             prometheus.Counter
-	RetriedMetadataTotal               prometheus.Counter
-	EnqueueRetriesTotal                prometheus.Counter
-	SentBatchDuration                  prometheus.Histogram
-	HighestSentTimestamp               prometheus.Gauge
-	SentBytesTotal                     prometheus.Counter
-	MetadataBytesTotal                 prometheus.Counter
-	RemoteStorageSentBytesTotal        prometheus.Counter
-	CompressedBytesRead                prometheus.Counter
-	RemoteStorageOutTimestamp          prometheus.Gauge
-	parallelismRelease                 types.NotificationRelease
-	networkRelease                     types.NotificationRelease
-	serialRelease                      types.NotificationRelease
-	serializerIn                       atomic.Int64
-	networkOut                         atomic.Int64
-	isMeta                             bool
+
+	FileIDWritten            prometheus.Gauge
+	CompressedBytesWritten   prometheus.Counter
+	UncompressedBytesWritten prometheus.Counter
+
+	FileIDRead            prometheus.Gauge
+	CompressedBytesRead   prometheus.Counter
+	UncompressedBytesRead prometheus.Counter
+
+	// Backwards compatibility metrics
+	SamplesTotal    prometheus.Counter
+	HistogramsTotal prometheus.Counter
+	MetadataTotal   prometheus.Counter
+
+	FailedSamplesTotal    prometheus.Counter
+	FailedHistogramsTotal prometheus.Counter
+	FailedMetadataTotal   prometheus.Counter
+
+	RetriedSamplesTotal    prometheus.Counter
+	RetriedHistogramsTotal prometheus.Counter
+	RetriedMetadataTotal   prometheus.Counter
+
+	EnqueueRetriesTotal  prometheus.Counter
+	SentBatchDuration    prometheus.Histogram
+	HighestSentTimestamp prometheus.Gauge
+
+	SentBytesTotal              prometheus.Counter
+	MetadataBytesTotal          prometheus.Counter
+	RemoteStorageSentBytesTotal prometheus.Counter
+	RemoteStorageInTimestamp    prometheus.Gauge
+	RemoteStorageOutTimestamp   prometheus.Gauge
+
+	RemoteShardsDesired prometheus.Gauge
+	RemoteShardsMin     prometheus.Gauge
+	RemoteShardsMax     prometheus.Gauge
 }
 
 func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Registerer, sh types.StatsHub) *Stats {

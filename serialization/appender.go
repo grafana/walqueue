@@ -28,6 +28,7 @@ type appender struct {
 	externalLabels map[string]string
 	metrics        map[uint64]*types.PrometheusMetric
 	ttl            time.Duration
+	appendOptions  *storage.AppendOptions
 }
 
 // NewAppender returns an Appender that writes to a given serializer. NOTE the returned Appender writes
@@ -44,7 +45,16 @@ func NewAppender(ctx context.Context, ttl time.Duration, s types.PrometheusSeria
 	return app
 }
 
+func (a *appender) SetOptions(opts *storage.AppendOptions) {
+	a.appendOptions = opts
+}
+
 func (a *appender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64) (storage.SeriesRef, error) {
+	// TODO @mattdurham figure out what to do here later. This mirrors what we do elsewhere.
+	return ref, nil
+}
+
+func (a *appender) AppendHistogramCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
 	// TODO @mattdurham figure out what to do here later. This mirrors what we do elsewhere.
 	return ref, nil
 }

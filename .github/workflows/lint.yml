@@ -2,7 +2,8 @@ name: Lint
 on:
   pull_request:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   lint_go:

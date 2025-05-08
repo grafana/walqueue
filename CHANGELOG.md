@@ -1,5 +1,5 @@
 # walqueue changelog
-
+- [BUG] Added support for exemplars. (@mattdurham)
 - [CHORE] Set up linting on the project. (@dehaansa)
 - [BUG] Changed metric naming to better align with prometheus standard, adding `_total` to counters. (@mattdurham)
 - [ENHANCEMENT] Make zstd the default compression layer. (@mattdurham)

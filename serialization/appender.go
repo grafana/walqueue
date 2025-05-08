@@ -26,7 +26,7 @@ type appender struct {
 	s              types.PrometheusSerializer
 	logger         log.Logger
 	externalLabels map[string]string
-	metrics        []*types.PrometheusMetric
+	metrics        map[uint64]*types.PrometheusMetric
 	ttl            time.Duration
 }
 
@@ -39,7 +39,7 @@ func NewAppender(ctx context.Context, ttl time.Duration, s types.PrometheusSeria
 		logger:         logger,
 		ctx:            ctx,
 		externalLabels: externalLabels,
-		metrics:        make([]*types.PrometheusMetric, 0),
+		metrics:        make(map[uint64]*types.PrometheusMetric),
 	}
 	return app
 }
@@ -59,13 +59,19 @@ func (a *appender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v flo
 	pm.L = l
 	pm.T = t
 	pm.V = v
-	a.metrics = append(a.metrics, pm)
+	a.metrics[l.Hash()] = pm
 	return ref, nil
 }
 
 func (a *appender) Commit() error {
 	defer putMetrics(a.metrics)
-	return a.s.SendMetrics(a.ctx, a.metrics, a.externalLabels)
+	metrics := make([]*types.PrometheusMetric, len(a.metrics))
+	index := 0
+	for _, pm := range a.metrics {
+		metrics[index] = pm
+		index++
+	}
+	return a.s.SendMetrics(a.ctx, metrics, a.externalLabels)
 }
 
 func (a *appender) Rollback() error {
@@ -73,20 +79,26 @@ func (a *appender) Rollback() error {
 	return nil
 }
 
-func putMetrics(metrics []*types.PrometheusMetric) {
+func putMetrics(metrics map[uint64]*types.PrometheusMetric) {
 	for _, m := range metrics {
 		m.FH = nil
 		m.H = nil
 		m.L = nil
 		m.T = 0
 		m.V = 0
+		m.E = exemplar.Exemplar{}
 		metricPool.Put(m)
 	}
 }
 
 // AppendExemplar appends exemplar to cache. The passed in labels is unused, instead use the labels on the exemplar.
-func (a *appender) AppendExemplar(ref storage.SeriesRef, _ labels.Labels, e exemplar.Exemplar) (_ storage.SeriesRef, _ error) {
-	// Exemplars dont really work due to the relabelling issue, they need to be sent with the metric itself.
+func (a *appender) AppendExemplar(ref storage.SeriesRef, l labels.Labels, e exemplar.Exemplar) (_ storage.SeriesRef, _ error) {
+	// The metric/histogram should always be added before this.
+	m, found := a.metrics[l.Hash()]
+	if !found {
+		return 0, fmt.Errorf("exemplar not found in metrics: %v", l.String())
+	}
+	m.E = e
 	return ref, nil
 }
 
@@ -101,7 +113,7 @@ func (a *appender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int
 	pm.T = t
 	pm.H = h
 	pm.FH = fh
-	a.metrics = append(a.metrics, pm)
+	a.metrics[l.Hash()] = pm
 	return ref, nil
 }
 

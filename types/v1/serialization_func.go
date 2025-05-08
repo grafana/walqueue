@@ -2,14 +2,13 @@ package v1
 
 import (
 	"bytes"
-	"github.com/prometheus/prometheus/model/exemplar"
 	"strconv"
 	"sync"
 	"unique"
 	"unsafe"
 
 	"github.com/grafana/walqueue/types"
-
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"

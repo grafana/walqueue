@@ -69,8 +69,9 @@ func TestE2E(t *testing.T) {
 					Labels: labels.FromStrings("trace_id", strconv.Itoa(index)),
 					Value:  float64(index),
 					Ts:     ts,
-					HasTs:  false,
+					HasTs:  true,
 				})
+				require.NoError(t, errApp)
 				return v, lbls
 			},
 			tester: func(samples *safeSlice[prompb.TimeSeries]) {

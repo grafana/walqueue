@@ -2,7 +2,6 @@ package v2
 
 import (
 	"fmt"
-	"github.com/prometheus/prometheus/model/exemplar"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -11,7 +10,7 @@ import (
 	"time"
 
 	"github.com/grafana/walqueue/types"
-
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"

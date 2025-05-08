@@ -2,7 +2,6 @@ package benchmark
 
 import (
 	"fmt"
-	"github.com/prometheus/prometheus/model/exemplar"
 	"math/rand"
 	"testing"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/grafana/walqueue/types"
 	v1 "github.com/grafana/walqueue/types/v1"
 	v2 "github.com/grafana/walqueue/types/v2"
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )

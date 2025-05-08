@@ -64,7 +64,7 @@ func (s *serializer) SendMetrics(ctx context.Context, metrics []*types.Prometheu
 			s.newestTS = m.T
 		}
 
-		err := s.ser.AddPrometheusMetric(m.T, m.V, m.L, m.H, m.FH, externalLabels)
+		err := s.ser.AddPrometheusMetric(m.T, m.V, m.L, m.H, m.FH, m.E, externalLabels)
 		if err != nil {
 			level.Error(s.logger).Log("msg", "error adding metric", "err", err)
 			continue

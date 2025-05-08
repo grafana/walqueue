@@ -2,6 +2,7 @@ package v2
 
 import (
 	"fmt"
+	"github.com/prometheus/prometheus/model/exemplar"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -26,7 +27,7 @@ func TestDeserializeAndSerialize(t *testing.T) {
 		})
 	}
 	for i := 0; i < 100; i++ {
-		aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, nil)
+		aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, nil)
 		require.NoError(t, aErr)
 		aErr = s.AddPrometheusMetadata("name", "unit", "help", "gauge")
 		require.NoError(t, aErr)
@@ -81,7 +82,7 @@ func TestExternalLabels(t *testing.T) {
 		})
 	}
 	for i := 0; i < 100; i++ {
-		aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, externalLabels)
+		aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, externalLabels)
 		require.NoError(t, aErr)
 	}
 	kv := make(map[string]string)

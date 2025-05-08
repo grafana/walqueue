@@ -1,6 +1,7 @@
 package types
 
 import (
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 )
@@ -19,7 +20,7 @@ type PrometheusMarshaller interface {
 	Marshaller
 	// AddPrometheusMetric adds a metric to the list of metrics. External Labels are passed in and added to the raw byte representation.
 	// They are not added to lbls since that array may not be owned by the caller. Metric labels will override external labels.
-	AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error
+	AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, e exemplar.Exemplar, externalLabels map[string]string) error
 	AddPrometheusMetadata(name string, unit string, help string, pType string) error
 }
 

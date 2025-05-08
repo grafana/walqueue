@@ -2,6 +2,7 @@ package benchmark
 
 import (
 	"fmt"
+	"github.com/prometheus/prometheus/model/exemplar"
 	"math/rand"
 	"testing"
 	"time"
@@ -55,7 +56,7 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 				s := tt.m
 
 				for i := 0; i < 10_000; i++ {
-					aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, nil)
+					aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, nil)
 					require.NoError(t, aErr)
 				}
 				kv := make(map[string]string)

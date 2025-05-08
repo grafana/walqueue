@@ -2,6 +2,7 @@ package v1
 
 import (
 	"bytes"
+	"github.com/prometheus/prometheus/model/exemplar"
 	"strconv"
 	"sync"
 	"unique"
@@ -36,7 +37,7 @@ func (s *Serialization) AddPrometheusMetadata(name string, unit string, help str
 	return nil
 }
 
-func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, _ map[string]string) error {
+func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, _ exemplar.Exemplar, _ map[string]string) error {
 	tss := s.createTimeSeries(ts, value, lbls, h, fh)
 	s.sg.Series = append(s.sg.Series, tss)
 	return nil

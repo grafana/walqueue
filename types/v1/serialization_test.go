@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+	"github.com/prometheus/prometheus/model/exemplar"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -30,7 +31,7 @@ func TestLabels(t *testing.T) {
 
 	serializer := GetSerializer()
 	var err error
-	err = serializer.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, nil)
+	err = serializer.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, nil)
 	require.NoError(t, err)
 	var bb []byte
 	err = serializer.Marshal(func(_ map[string]string, bytes []byte) error {

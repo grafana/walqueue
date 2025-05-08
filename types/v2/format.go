@@ -104,11 +104,12 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 		}
 	}
 	if e.Labels.Len() > 0 {
+		// TODO could probably check cap here instead.
 		if len(s.series.Exemplars) == 0 {
 			s.series.Exemplars = make([]prompb.Exemplar, 1)
 		}
 		s.series.Exemplars[0].Value = e.Value
-		s.series.Exemplars[0].Timestamp = ts
+		s.series.Exemplars[0].Timestamp = e.Ts
 		s.series.Exemplars[0].Labels = make([]prompb.Label, 0, len(e.Labels))
 		for _, v := range e.Labels {
 			s.series.Exemplars[0].Labels = append(s.series.Exemplars[0].Labels, prompb.Label{Name: v.Name, Value: v.Value})

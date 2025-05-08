@@ -1,11 +1,16 @@
 name: Go
 on: [pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: github-hosted-ubuntu-x64-large
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Setup Go
         uses: actions/setup-go@v5
         with:

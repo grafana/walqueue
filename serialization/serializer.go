@@ -34,6 +34,7 @@ type serializer struct {
 	newestTS            int64
 	seriesCount         int
 	metadataCount       int
+	exemplarCount       int
 	mut                 sync.Mutex
 }
 
@@ -70,6 +71,9 @@ func (s *serializer) SendMetrics(ctx context.Context, metrics []*types.Prometheu
 			continue
 		}
 		s.seriesCount++
+		if len(m.E.Labels) > 0 {
+			s.exemplarCount++
+		}
 		// If we would go over the max size then send.
 		if (s.seriesCount + s.metadataCount) > s.maxItemsBeforeFlush {
 			err = s.flushToDisk(ctx)
@@ -163,6 +167,7 @@ func (s *serializer) storeStats(err error, uncompressed int, compressed int) {
 	defer func() {
 		s.seriesCount = 0
 		s.metadataCount = 0
+		s.exemplarCount = 0
 	}()
 	hasError := 0
 	if err != nil {
@@ -172,6 +177,7 @@ func (s *serializer) storeStats(err error, uncompressed int, compressed int) {
 	s.stats(types.SerializerStats{
 		SeriesStored:             s.seriesCount,
 		MetadataStored:           s.metadataCount,
+		ExemplarsStored:          s.exemplarCount,
 		Errors:                   hasError,
 		NewestTimestampSeconds:   time.UnixMilli(s.newestTS).Unix(),
 		UncompressedBytesWritten: uncompressed,

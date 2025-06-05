@@ -27,6 +27,7 @@ type ParralelismStats struct {
 
 type SerializerStats struct {
 	SeriesStored             int
+	ExemplarsStored          int
 	MetadataStored           int
 	Errors                   int
 	NewestTimestampSeconds   int64

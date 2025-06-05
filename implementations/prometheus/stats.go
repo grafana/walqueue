@@ -40,6 +40,7 @@ type Stats struct { //nolint:govet // fieldalignment
 
 	// Serializer Stats
 	SerializerInSeries                 prometheus.Counter
+	SerializerInExemplars              prometheus.Counter
 	SerializerNewestInTimeStampSeconds prometheus.Gauge
 	SerializerErrors                   prometheus.Counter
 
@@ -103,6 +104,11 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "serializer_incoming_signals_total",
+		}),
+		SerializerInExemplars: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "serializer_incoming_exemplars_total",
 		}),
 		SerializerNewestInTimeStampSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
@@ -405,6 +411,7 @@ func (s *Stats) UpdateNetwork(stats types.NetworkStats) {
 		s.NetworkNewestOutTimeStampSeconds.Set(float64(stats.NewestTimestampSeconds))
 	}
 
+	// TODO add exemplar support
 	s.SamplesTotal.Add(float64(stats.Series.SeriesSent))
 	s.MetadataTotal.Add(float64(stats.Metadata.SeriesSent))
 	s.HistogramsTotal.Add(float64(stats.Histogram.SeriesSent))
@@ -428,6 +435,7 @@ func (s *Stats) UpdateSerializer(stats types.SerializerStats) {
 		return
 	}
 	s.SerializerInSeries.Add(float64(stats.SeriesStored))
+	s.SerializerInExemplars.Add(float64(stats.ExemplarsStored))
 	s.SerializerErrors.Add(float64(stats.Errors))
 	if stats.NewestTimestampSeconds != 0 {
 		s.serializerIn.Store(stats.NewestTimestampSeconds)

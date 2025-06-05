@@ -1,6 +1,7 @@
 package types
 
 import (
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 )
@@ -44,6 +45,7 @@ type PrometheusMetric struct {
 	H  *histogram.Histogram
 	FH *histogram.FloatHistogram
 	L  labels.Labels
+	E  exemplar.Exemplar
 	T  int64
 	V  float64
 }

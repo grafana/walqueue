@@ -8,6 +8,7 @@ import (
 
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
@@ -41,7 +42,7 @@ func NewFormat() *Format {
 }
 
 // AddPrometheusMetric marshals a prometheus metric to its prombpb.TimeSeries representation and writes it to the buffer.
-func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, externalLabels map[string]string) error {
+func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, e exemplar.Exemplar, externalLabels map[string]string) error {
 	defer func() {
 		s.series.Labels = s.series.Labels[:0]
 		s.series.Samples = s.series.Samples[:0]
@@ -49,6 +50,7 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 		s.series.Histograms = s.series.Histograms[:0]
 		s.seriesBuf = s.seriesBuf[:0]
 		s.metricBuf = s.metricBuf[:0]
+		s.series.Exemplars = s.series.Exemplars[:0]
 	}()
 	// Need to find any similar labels, if there is overlap.
 	totalLabels := len(lbls)
@@ -101,6 +103,19 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 			s.series.Histograms[0] = FromFloatHistogram(ts, fh)
 		}
 	}
+	if e.Labels.Len() > 0 {
+		// TODO could probably check cap here instead.
+		if len(s.series.Exemplars) == 0 {
+			s.series.Exemplars = make([]prompb.Exemplar, 1)
+		}
+		s.series.Exemplars[0].Value = e.Value
+		s.series.Exemplars[0].Timestamp = e.Ts
+		s.series.Exemplars[0].Labels = make([]prompb.Label, 0, len(e.Labels))
+		for _, v := range e.Labels {
+			s.series.Exemplars[0].Labels = append(s.series.Exemplars[0].Labels, prompb.Label{Name: v.Name, Value: v.Value})
+		}
+	}
+
 	// Figure out the size of the series so we can allocate a big enough buffer.
 	seriesSize := s.series.Size()
 	if cap(s.seriesBuf) < seriesSize {

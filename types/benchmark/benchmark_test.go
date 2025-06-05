@@ -10,6 +10,7 @@ import (
 	"github.com/grafana/walqueue/types"
 	v1 "github.com/grafana/walqueue/types/v1"
 	v2 "github.com/grafana/walqueue/types/v2"
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +56,7 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 				s := tt.m
 
 				for i := 0; i < 10_000; i++ {
-					aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, nil)
+					aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, nil)
 					require.NoError(t, aErr)
 				}
 				kv := make(map[string]string)

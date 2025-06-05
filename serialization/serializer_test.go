@@ -15,6 +15,7 @@ import (
 	"github.com/grafana/walqueue/types"
 	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/klauspost/compress/zstd"
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
@@ -31,6 +32,7 @@ func TestRoundTripSerialization(t *testing.T) {
 	}, f, func(stats types.SerializerStats) {
 		totalSeries.Add(int64(stats.SeriesStored))
 		require.True(t, stats.SeriesStored == 10)
+		require.True(t, stats.ExemplarsStored == 1)
 		require.True(t, stats.Errors == 0)
 		require.True(t, stats.MetadataStored == 0)
 		require.True(t, stats.NewestTimestampSeconds > start)
@@ -40,6 +42,7 @@ func TestRoundTripSerialization(t *testing.T) {
 	s.Start(context.TODO())
 	defer s.Stop()
 	for i := 0; i < 10; i++ {
+		ex := exemplar.Exemplar{}
 		lbls := make(labels.Labels, 10)
 		for j := 0; j < 10; j++ {
 			lbls[j] = labels.Label{
@@ -47,11 +50,17 @@ func TestRoundTripSerialization(t *testing.T) {
 				Value: fmt.Sprintf("value_%d_%d", i, j),
 			}
 		}
+		if i == 0 {
+			// Add an exemplar to only the first series
+			ex.Value = rand.Float64()
+			ex.Labels = lbls
+		}
 		sendErr := s.SendMetrics(context.Background(), []*types.PrometheusMetric{
 			{
 				L: lbls,
 				T: time.Now().UnixMilli(),
 				V: rand.Float64(),
+				E: ex,
 			},
 		}, nil)
 		require.NoError(t, sendErr)

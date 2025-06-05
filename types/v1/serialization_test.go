@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/grafana/walqueue/types"
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,7 @@ func TestLabels(t *testing.T) {
 
 	serializer := GetSerializer()
 	var err error
-	err = serializer.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, nil)
+	err = serializer.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, nil)
 	require.NoError(t, err)
 	var bb []byte
 	err = serializer.Marshal(func(_ map[string]string, bytes []byte) error {

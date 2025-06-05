@@ -10,15 +10,15 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/grafana/walqueue/types"
-
 	"github.com/golang/snappy"
+	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
@@ -60,6 +60,42 @@ func TestE2E(t *testing.T) {
 			},
 		},
 		{
+			name: "exemplar",
+			maker: func(index int, app storage.Appender) (float64, labels.Labels) {
+				ts, v, lbls := makeSeries(index)
+				_, errApp := app.Append(0, lbls, ts, v)
+				require.NoError(t, errApp)
+				_, errApp = app.AppendExemplar(0, lbls, exemplar.Exemplar{
+					Labels: labels.FromStrings("trace_id", strconv.Itoa(index)),
+					Value:  float64(index),
+					Ts:     ts,
+					HasTs:  true,
+				})
+				require.NoError(t, errApp)
+				return v, lbls
+			},
+			tester: func(samples *safeSlice[prompb.TimeSeries]) {
+				t.Helper()
+				for i := 0; i < samples.Len(); i++ {
+					s := samples.Get(i)
+					require.True(t, len(s.Samples) == 1)
+					require.True(t, s.Samples[0].Timestamp > 0)
+					require.True(t, s.Samples[0].Value > 0)
+					require.True(t, len(s.Labels) == 1)
+					require.Truef(t, s.Labels[0].Name == fmt.Sprintf("name_%d", int(s.Samples[0].Value)), "%d name %s", int(s.Samples[0].Value), s.Labels[0].Name)
+					require.True(t, s.Labels[0].Value == fmt.Sprintf("value_%d", int(s.Samples[0].Value)))
+
+					require.True(t, len(s.Exemplars) == 1)
+					require.True(t, s.Exemplars[0].Value > 0)
+					require.True(t, s.Exemplars[0].Timestamp > 0)
+					require.True(t, len(s.Exemplars[0].Labels) == 1)
+					require.True(t, s.Exemplars[0].Labels[0].Name == "trace_id")
+					// Value in no way has to be the same as the label trace id but this lets us verify everything is in order.
+					require.True(t, s.Exemplars[0].Labels[0].Value == fmt.Sprintf("%d", int(s.Exemplars[0].Value)))
+				}
+			},
+		},
+		{
 			name: "metadata",
 			maker: func(index int, app storage.Appender) (float64, labels.Labels) {
 				meta, lbls := makeMetadata(index)
@@ -78,7 +114,6 @@ func TestE2E(t *testing.T) {
 				}
 			},
 		},
-
 		{
 			name: "histogram",
 			maker: func(index int, app storage.Appender) (float64, labels.Labels) {

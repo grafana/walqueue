@@ -65,9 +65,10 @@ type Stats struct { //nolint:govet // fieldalignment
 	RetriedHistogramsTotal prometheus.Counter
 	RetriedMetadataTotal   prometheus.Counter
 
-	EnqueueRetriesTotal  prometheus.Counter
-	SentBatchDuration    prometheus.Histogram
-	HighestSentTimestamp prometheus.Gauge
+	// TODO - add these and other missing backwards compatibility metrics
+	// EnqueueRetriesTotal  prometheus.Counter
+	SentBatchDuration prometheus.Histogram
+	// HighestSentTimestamp prometheus.Gauge
 
 	SentBytesTotal              prometheus.Counter
 	MetadataBytesTotal          prometheus.Counter
@@ -304,12 +305,18 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 		s.CompressedBytesWritten,
 		s.TimestampDriftSeconds,
 	)
-	// Metadata doesn't scale, it has one dedicated connection.
+
 	if !isMeta {
+		// Metadata doesn't scale, it has one dedicated connection.
 		registry.MustRegister(
 			s.ParallelismMax,
 			s.ParallelismMin,
 			s.ParallelismDesired)
+
+		// No exemplars for metadata
+		registry.MustRegister(
+			s.SerializerInExemplars,
+		)
 	}
 	return s
 }
@@ -354,9 +361,13 @@ func (s *Stats) Unregister() {
 		s.RemoteShardsMin,
 		s.RemoteShardsMax,
 	}
-	// Meta only has one connection so we dont need these for that.
+
 	if !s.isMeta {
+		// Meta only has one connection so we dont need these for that.
 		unregistered = append(unregistered, s.ParallelismMin, s.ParallelismMax, s.ParallelismDesired)
+
+		// No exemplars for metadata
+		unregistered = append(unregistered, s.SerializerInExemplars)
 	}
 
 	for _, g := range unregistered {

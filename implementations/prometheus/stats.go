@@ -277,6 +277,7 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			NativeHistogramMinResetDuration: 1 * time.Hour,
 		}),
 	}
+
 	if isMeta {
 		s.networkRelease = s.stats.RegisterMetadataNetwork(s.UpdateNetwork)
 	} else {
@@ -318,6 +319,13 @@ func NewStats(namespace, subsystem string, isMeta bool, registry prometheus.Regi
 			s.SerializerInExemplars,
 		)
 	}
+
+	// Set the initial values for the timestamps so they don't appear as 0 and cause unexpected behavior
+	s.RemoteStorageInTimestamp.SetToCurrentTime()
+	s.RemoteStorageOutTimestamp.SetToCurrentTime()
+	s.SerializerNewestInTimeStampSeconds.SetToCurrentTime()
+	s.NetworkNewestOutTimeStampSeconds.SetToCurrentTime()
+
 	return s
 }
 

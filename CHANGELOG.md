@@ -1,4 +1,5 @@
 # walqueue changelog
+- [BUG] Initialize seconds metrics that represent timestamps to current time. (@dehaansa)
 - [BUG] Added support for exemplars. (@mattdurham)
 - [CHORE] Set up linting on the project. (@dehaansa)
 - [BUG] Changed metric naming to better align with prometheus standard, adding `_total` to counters. (@mattdurham)

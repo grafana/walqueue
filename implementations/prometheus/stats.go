@@ -65,6 +65,7 @@ type Stats struct { //nolint:govet // fieldalignment
 	RetriedHistogramsTotal prometheus.Counter
 	RetriedMetadataTotal   prometheus.Counter
 
+	// TODO - add these and other missing backwards compatibility metrics
 	// EnqueueRetriesTotal  prometheus.Counter
 	SentBatchDuration prometheus.Histogram
 	// HighestSentTimestamp prometheus.Gauge

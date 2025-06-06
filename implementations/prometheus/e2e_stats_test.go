@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -1100,6 +1101,10 @@ func runE2eStats(t *testing.T, test statsTest) {
 	}
 	// all other metrics should be zero.
 	for k, v := range metrics {
+		if strings.HasSuffix(k, "timestamp_seconds") || strings.HasSuffix(k, "timestamp_in_seconds") {
+			require.Truef(t, isReasonableTimeStamp(v), "%s has an unexpected timestamp", k)
+			continue
+		}
 		require.Zerof(t, v, "%s should be zero", k)
 	}
 }

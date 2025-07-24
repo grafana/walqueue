@@ -49,7 +49,7 @@ func (l *write) trySend(buf []byte, ctx context.Context) {
 			return
 		}
 		attempts++
-		if attempts > int(l.cfg.MaxRetryAttempts) && l.cfg.MaxRetryAttempts > 0 {
+		if attempts > int(l.cfg.MaxRetryAttempts) {
 			level.Debug(l.log).Log("msg", "max retry attempts reached", "attempts", attempts)
 			return
 		}

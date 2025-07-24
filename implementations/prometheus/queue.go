@@ -83,6 +83,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	meta := NewStats("alloy", "queue_metadata", true, reg, statshub)
 	meta.MetaBackwardsCompatibility(reg)
 	networkRequestMoreSignals := make(chan types.RequestMoreSignals[types.Datum], 1)
+	logger = log.With(logger, "endpoint", name)
 
 	networkClient, err := network.New(cc, logger, statshub, networkRequestMoreSignals)
 	if err != nil {

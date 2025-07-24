@@ -240,11 +240,12 @@ func TestRetry(t *testing.T) {
 	defer cncl()
 
 	cc := types.ConnectionConfig{
-		URL:           svr.URL,
-		Timeout:       1 * time.Second,
-		BatchCount:    1,
-		FlushInterval: 1 * time.Second,
-		RetryBackoff:  100 * time.Millisecond,
+		URL:              svr.URL,
+		Timeout:          1 * time.Second,
+		BatchCount:       1,
+		FlushInterval:    1 * time.Second,
+		RetryBackoff:     100 * time.Millisecond,
+		MaxRetryAttempts: 10, // Allow sufficient retries for the test to pass
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              1,

@@ -240,11 +240,12 @@ func TestRetry(t *testing.T) {
 	defer cncl()
 
 	cc := types.ConnectionConfig{
-		URL:           svr.URL,
-		Timeout:       1 * time.Second,
-		BatchCount:    1,
-		FlushInterval: 1 * time.Second,
-		RetryBackoff:  100 * time.Millisecond,
+		URL:              svr.URL,
+		Timeout:          1 * time.Second,
+		BatchCount:       1,
+		FlushInterval:    1 * time.Second,
+		RetryBackoff:     100 * time.Millisecond,
+		MaxRetryAttempts: 10, // Allow sufficient retries for the test to pass
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              1,
@@ -556,4 +557,186 @@ func (fakestats) RegisterMetadataNetwork(_ func(types.NetworkStats)) (_ types.No
 
 func (fakestats) RegisterSerializer(_ func(types.SerializerStats)) (_ types.NotificationRelease) {
 	return func() {}
+}
+
+func TestRetryBehavior(t *testing.T) {
+	// Test cases validate retry behavior under different configurations.
+	// Each test case configures a mock server that fails a specific number of times
+	// before succeeding (or always failing), then verifies the client retry logic
+	// respects the MaxRetryAttempts setting and records the correct statistics.
+	testCases := []struct {
+		name                   string // Test case name for sub-test identification
+		maxRetryAttempts       int    // Maximum number of retry attempts allowed (0 = no retries, 1 = retry once, etc.)
+		seriesCount            int    // Number of metric series to send in the test
+		recoverableCount       int    // Number of consecutive recoverable failures (HTTP 5xx) before switching
+		nonRecoverableCount    int    // Number of non-recoverable errors (HTTP 4xx) after recoverable failures
+		eventualSuccess        bool   // Whether the operation eventually succeeds after retries
+		expectedRecoverable    int32  // Expected count of recoverable errors (HTTP 5xx) recorded in stats
+		expectedNonRecoverable int32  // Expected count of non-recoverable errors (HTTP 4xx) recorded in stats
+		expectedSuccessful     uint32 // Expected count of successful HTTP requests (HTTP 200)
+	}{
+		{
+			// Scenario: No retries allowed, server always fails with recoverable errors
+			// Expected: Only initial attempts are made, no retries, all requests fail
+			name:                   "no_retries_when_max_retry_attempts_is_zero",
+			maxRetryAttempts:       0,     // Disable retries completely
+			seriesCount:            10,    // Send 10 metric series
+			recoverableCount:       0,     // Server always returns HTTP 500 (never succeeds)
+			nonRecoverableCount:    0,     // No HTTP 4xx errors
+			eventualSuccess:        false, // Operation never succeeds
+			expectedRecoverable:    10,    // 10 initial attempts = 10 recoverable errors
+			expectedNonRecoverable: 0,     // No non-recoverable errors
+			expectedSuccessful:     0,     // No successful requests since server always fails
+		},
+		{
+			// Scenario: Up to 2 retries allowed, server fails twice then succeeds
+			// Expected: Initial attempt fails, 2 retries fail, final retry succeeds
+			name:                   "retry_twice_before_success",
+			maxRetryAttempts:       2,    // Allow up to 2 retry attempts (3 total attempts)
+			seriesCount:            1,    // Send 1 metric series
+			recoverableCount:       2,    // Server fails first 2 attempts, succeeds on 3rd
+			nonRecoverableCount:    0,    // No HTTP 4xx errors
+			eventualSuccess:        true, // Operation eventually succeeds after retries
+			expectedRecoverable:    2,    // 2 failed attempts = 2 recoverable errors
+			expectedNonRecoverable: 0,    // No non-recoverable errors
+			expectedSuccessful:     1,    // 1 successful request on final attempt
+		},
+		{
+			// Scenario: Server always returns non-recoverable errors (HTTP 400)
+			// Expected: No retries attempted, all requests fail immediately
+			name:                   "non_recoverable_errors_no_retries",
+			maxRetryAttempts:       3,     // Retries allowed but shouldn't be used
+			seriesCount:            5,     // Send 5 metric series
+			recoverableCount:       0,     // No recoverable failures first
+			nonRecoverableCount:    5,     // Exactly cover all series with HTTP 400
+			eventualSuccess:        false, // Operation never succeeds
+			expectedRecoverable:    0,     // No recoverable errors
+			expectedNonRecoverable: 5,     // 5 non-recoverable errors (one per series)
+			expectedSuccessful:     0,     // No successful requests
+		},
+		{
+			// Scenario: Server returns recoverable errors, then non-recoverable error
+			// Expected: Retries for HTTP 500, then HTTP 400 stops further retries
+			name:                   "recoverable_then_non_recoverable",
+			maxRetryAttempts:       3,     // Allow up to 3 retry attempts
+			seriesCount:            1,     // Send 1 metric series
+			recoverableCount:       2,     // 2 recoverable failures first (HTTP 500)
+			nonRecoverableCount:    1,     // 1 non-recoverable error after (HTTP 400)
+			eventualSuccess:        false, // Operation never succeeds
+			expectedRecoverable:    2,     // 2 recoverable errors (HTTP 500)
+			expectedNonRecoverable: 1,     // 1 non-recoverable error (HTTP 400)
+			expectedSuccessful:     0,     // No successful requests
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			attemptCount := atomic.Uint32{}
+			successfulRequests := atomic.Uint32{}
+			failedRequests := atomic.Uint32{}
+
+			svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				buf, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				defer r.Body.Close()
+				decoded, err := snappy.Decode(nil, buf)
+				require.NoError(t, err)
+
+				wr := &prompb.WriteRequest{}
+				err = wr.Unmarshal(decoded)
+				require.NoError(t, err)
+
+				currentAttempt := attemptCount.Add(1)
+
+				// Determine response based on attempt number and test configuration:
+				// 1. First recoverableCount attempts: HTTP 500 (Internal Server Error - recoverable)
+				// 2. Next nonRecoverableCount attempts: HTTP 400 (Bad Request - non-recoverable)
+				// 3. Remaining attempts: HTTP 200 (OK) if eventualSuccess, else continue with HTTP 500
+
+				if currentAttempt <= uint32(tc.recoverableCount) {
+					// Recoverable error - can be retried
+					failedRequests.Add(1)
+					w.WriteHeader(http.StatusInternalServerError)
+				} else if currentAttempt <= uint32(tc.recoverableCount+tc.nonRecoverableCount) {
+					// Non-recoverable error - should not be retried
+					failedRequests.Add(1)
+					w.WriteHeader(http.StatusBadRequest)
+				} else if tc.eventualSuccess {
+					// Success after failures
+					successfulRequests.Add(1)
+					w.WriteHeader(http.StatusOK)
+				} else {
+					// Continue failing with recoverable errors
+					failedRequests.Add(1)
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}))
+			defer svr.Close()
+
+			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+
+			cc := types.ConnectionConfig{
+				URL:              svr.URL,
+				Timeout:          1 * time.Second,
+				BatchCount:       1,
+				FlushInterval:    1 * time.Second,
+				RetryBackoff:     100 * time.Millisecond,
+				MaxRetryAttempts: uint(tc.maxRetryAttempts),
+				Parallelism: types.ParallelismConfig{
+					AllowedDrift:                60 * time.Second,
+					MaxConnections:              1,
+					MinConnections:              1,
+					ResetInterval:               5 * time.Minute,
+					Lookback:                    5 * time.Minute,
+					CheckInterval:               10 * time.Second,
+					AllowedNetworkErrorFraction: 0.05,
+				},
+			}
+
+			moreData := make(chan types.RequestMoreSignals[types.Datum], 1)
+			logger := log.NewNopLogger()
+			fs := &fakestats{
+				recoverable:    atomic.NewInt32(0),
+				nonrecoverable: atomic.NewInt32(0),
+			}
+			wr, err := New(cc, logger, fs, moreData)
+			require.NoError(t, err)
+			wr.Start(ctx)
+			defer wr.Stop()
+
+			// Send the specified number of series
+			series := make([]types.Datum, tc.seriesCount)
+			for i := 0; i < tc.seriesCount; i++ {
+				series[i] = createSeries(i, t)
+			}
+			req := <-moreData
+			req.Response <- series
+
+			if tc.eventualSuccess {
+				// Wait for the successful request to complete
+				require.Eventuallyf(t, func() bool {
+					return successfulRequests.Load() == tc.expectedSuccessful
+				}, 10*time.Second, 100*time.Millisecond, "Expected %d successful requests but got %d", tc.expectedSuccessful, successfulRequests.Load())
+			} else {
+				// Wait for all recoverable errors to be recorded
+				require.Eventuallyf(t, func() bool {
+					return fs.recoverable.Load() == tc.expectedRecoverable
+				}, 10*time.Second, 100*time.Millisecond, "Expected %d recoverable errors but got %d", tc.expectedRecoverable, fs.recoverable.Load())
+
+				// Wait a bit longer to ensure no additional retries are attempted
+				time.Sleep(2 * time.Second)
+			}
+
+			// Verify the expected number of recoverable errors
+			require.Equal(t, tc.expectedRecoverable, fs.recoverable.Load(), "Expected exactly %d recoverable errors but got %d", tc.expectedRecoverable, fs.recoverable.Load())
+
+			// Verify the expected number of successful requests
+			require.Equal(t, tc.expectedSuccessful, successfulRequests.Load(), "Expected exactly %d successful requests but got %d", tc.expectedSuccessful, successfulRequests.Load())
+
+			// Verify the expected number of non-recoverable errors
+			require.Equal(t, tc.expectedNonRecoverable, fs.nonrecoverable.Load(), "Expected exactly %d non-recoverable errors but got %d", tc.expectedNonRecoverable, fs.nonrecoverable.Load())
+		})
+	}
 }

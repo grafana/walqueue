@@ -71,7 +71,7 @@ func TestExternalLabels(t *testing.T) {
 	externalLabels := []labels.Label{
 		{Name: "bar", Value: ""},
 		{Name: "foo", Value: "bar"},
-		{Name: "label_1", Value: "skipped"},
+		{Name: "label_0", Value: "skipped"},
 	}
 	s := NewFormat()
 	lbls := make(labels.Labels, 0)
@@ -81,8 +81,10 @@ func TestExternalLabels(t *testing.T) {
 			Value: randString(),
 		})
 	}
-	for range 100 {
-		aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, externalLabels)
+	for i := range 100 {
+		// Only pass in i%10 labels to ensure that when the label size reduces duplicate labels are not added.
+		// This is to confirm a regression that occurred when external labels were not correctly iterated over when reusing label buffers which caused duplicates.
+		aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls[:(10-i%10)], nil, nil, exemplar.Exemplar{}, externalLabels)
 		require.NoError(t, aErr)
 	}
 	kv := make(map[string]string)
@@ -96,22 +98,25 @@ func TestExternalLabels(t *testing.T) {
 	items, err := s.Unmarshal(kv, bb)
 	require.NoError(t, err)
 	require.Len(t, items, 100)
-	for _, item := range items {
+	for i, item := range items {
 		ppb := item.Bytes()
 		if item.Type() == types.PrometheusMetricV1 {
 			met := &prompb.TimeSeries{}
 			unErr := met.Unmarshal(ppb)
 			require.NoError(t, unErr)
 
-			require.Len(t, met.Labels, 12)
-			for j, l := range lbls {
+			// Length should be 2 (external - duplicate) + (10 - i%10)
+			expectLen := 2 + (10 - i%10)
+			require.Len(t, met.Labels, expectLen)
+			t.Log(met.Labels)
+			for j, l := range lbls[:expectLen-2] {
 				require.Equal(t, l.Name, met.Labels[j].Name)
 				require.Equal(t, l.Value, met.Labels[j].Value)
 			}
-			require.Equal(t, met.Labels[10].Name, "bar")
-			require.Equal(t, met.Labels[10].Value, "")
-			require.Equal(t, met.Labels[11].Name, "foo")
-			require.Equal(t, met.Labels[11].Value, "bar")
+			require.Equal(t, met.Labels[expectLen-2].Name, "bar")
+			require.Equal(t, met.Labels[expectLen-2].Value, "")
+			require.Equal(t, met.Labels[expectLen-1].Name, "foo")
+			require.Equal(t, met.Labels[expectLen-1].Value, "bar")
 		}
 	}
 }

@@ -42,7 +42,7 @@ func NewFormat() *Format {
 }
 
 // AddPrometheusMetric marshals a prometheus metric to its prombpb.TimeSeries representation and writes it to the buffer.
-func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, e exemplar.Exemplar, externalLabels map[string]string) error {
+func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, e exemplar.Exemplar, externalLabels labels.Labels) error {
 	defer func() {
 		s.series.Labels = s.series.Labels[:0]
 		s.series.Samples = s.series.Samples[:0]
@@ -54,8 +54,8 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 	}()
 	// Need to find any similar labels, if there is overlap.
 	totalLabels := len(lbls)
-	for k := range externalLabels {
-		if !lbls.Has(k) {
+	for _, lbl := range externalLabels {
+		if !lbls.Has(lbl.Name) {
 			totalLabels += 1
 		}
 	}
@@ -73,12 +73,13 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 	}
 	// Technically external labels do NOT apply to the hash but since the rule is applied evenly it works out.
 	// This works because external labels do not override metric labels, and the actual hash is not sent.
-	for k, v := range externalLabels {
-		if lbls.Has(k) {
+	for _, lbl := range externalLabels {
+		if lbls.Has(lbl.Name) {
 			continue
 		}
-		s.series.Labels[lblIndex].Name = k
-		s.series.Labels[lblIndex].Value = v
+		s.series.Labels[lblIndex].Name = lbl.Name
+		s.series.Labels[lblIndex].Value = lbl.Value
+		lblIndex++
 	}
 
 	// A series can either be a Sample (normal metric) or a Histogram (histogram metric).

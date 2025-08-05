@@ -2,6 +2,8 @@ package prometheus
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"strconv"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/klauspost/compress/zstd"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 )
 
@@ -50,7 +53,7 @@ type queue struct {
 	incoming                  *types.Mailbox[types.DataHandle]
 	stats                     *Stats
 	metaStats                 *Stats
-	externalLabels            map[string]string
+	externalLabels            labels.Labels
 	networkRequestMoreSignals chan types.RequestMoreSignals[types.Datum]
 	ttl                       time.Duration
 }
@@ -89,6 +92,12 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 	if err != nil {
 		return nil, err
 	}
+
+	sortedExternalLabels := make([]labels.Label, 0, len(cc.ExternalLabels))
+	for _, k := range slices.Sorted(maps.Keys(cc.ExternalLabels)) {
+		sortedExternalLabels = append(sortedExternalLabels, labels.Label{Name: k, Value: cc.ExternalLabels[k]})
+	}
+
 	q := &queue{
 		incoming:                  types.NewMailbox[types.DataHandle](),
 		stats:                     seriesStats,
@@ -97,7 +106,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		logger:                    logger,
 		ttl:                       ttl,
 		networkRequestMoreSignals: networkRequestMoreSignals,
-		externalLabels:            cc.ExternalLabels,
+		externalLabels:            sortedExternalLabels,
 	}
 	fq, err := filequeue.NewQueue(directory, func(ctx context.Context, dh types.DataHandle) {
 		sendErr := q.incoming.Send(ctx, dh)

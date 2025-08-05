@@ -36,7 +36,7 @@ func (s *Serialization) AddPrometheusMetadata(name string, unit string, help str
 	return nil
 }
 
-func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, _ exemplar.Exemplar, _ map[string]string) error {
+func (s *Serialization) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram, _ exemplar.Exemplar, _ labels.Labels) error {
 	tss := s.createTimeSeries(ts, value, lbls, h, fh)
 	s.sg.Series = append(s.sg.Series, tss)
 	return nil

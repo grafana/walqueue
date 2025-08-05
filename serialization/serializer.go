@@ -10,6 +10,7 @@ import (
 	"github.com/grafana/walqueue/types"
 	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/klauspost/compress/zstd"
+	"github.com/prometheus/prometheus/model/labels"
 	"go.uber.org/atomic"
 )
 
@@ -56,7 +57,7 @@ func NewSerializer(cfg types.SerializerConfig, q types.FileStorage, stats func(s
 
 // SendMetrics adds a slice metric to the serializer. Note that we need to inject external labels here since once they are written to disk the prompb.TimeSeries bytes should be treated
 // as immutable.
-func (s *serializer) SendMetrics(ctx context.Context, metrics []*types.PrometheusMetric, externalLabels map[string]string) error {
+func (s *serializer) SendMetrics(ctx context.Context, metrics []*types.PrometheusMetric, externalLabels labels.Labels) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 

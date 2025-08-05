@@ -68,19 +68,20 @@ func TestDeserializeAndSerialize(t *testing.T) {
 }
 
 func TestExternalLabels(t *testing.T) {
-	externalLabels := map[string]string{
-		"foo":     "bar",
-		"label_1": "bad_value",
+	externalLabels := []labels.Label{
+		{Name: "bar", Value: ""},
+		{Name: "foo", Value: "bar"},
+		{Name: "label_1", Value: "skipped"},
 	}
 	s := NewFormat()
 	lbls := make(labels.Labels, 0)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		lbls = append(lbls, labels.Label{
 			Name:  fmt.Sprintf("label_%d", i),
 			Value: randString(),
 		})
 	}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, externalLabels)
 		require.NoError(t, aErr)
 	}
@@ -102,13 +103,15 @@ func TestExternalLabels(t *testing.T) {
 			unErr := met.Unmarshal(ppb)
 			require.NoError(t, unErr)
 
-			require.Len(t, met.Labels, 11)
+			require.Len(t, met.Labels, 12)
 			for j, l := range lbls {
 				require.Equal(t, l.Name, met.Labels[j].Name)
 				require.Equal(t, l.Value, met.Labels[j].Value)
 			}
-			require.True(t, met.Labels[10].Name == "foo")
-			require.True(t, met.Labels[10].Value == "bar")
+			require.Equal(t, met.Labels[10].Name, "bar")
+			require.Equal(t, met.Labels[10].Value, "")
+			require.Equal(t, met.Labels[11].Name, "foo")
+			require.Equal(t, met.Labels[11].Value, "bar")
 		}
 	}
 }

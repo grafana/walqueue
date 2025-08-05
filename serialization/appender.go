@@ -25,7 +25,7 @@ type appender struct {
 	ctx            context.Context
 	s              types.PrometheusSerializer
 	logger         log.Logger
-	externalLabels map[string]string
+	externalLabels labels.Labels
 	metrics        map[uint64]*types.PrometheusMetric
 	ttl            time.Duration
 	appendOptions  *storage.AppendOptions
@@ -33,7 +33,7 @@ type appender struct {
 
 // NewAppender returns an Appender that writes to a given serializer. NOTE the returned Appender writes
 // data immediately, discards data older than `ttl` and does not honor commit or rollback.
-func NewAppender(ctx context.Context, ttl time.Duration, s types.PrometheusSerializer, externalLabels map[string]string, logger log.Logger) storage.Appender {
+func NewAppender(ctx context.Context, ttl time.Duration, s types.PrometheusSerializer, externalLabels labels.Labels, logger log.Logger) storage.Appender {
 	app := &appender{
 		ttl:            ttl,
 		s:              s,

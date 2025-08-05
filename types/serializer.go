@@ -3,6 +3,8 @@ package types
 import (
 	"context"
 	"time"
+
+	"github.com/prometheus/prometheus/model/labels"
 )
 
 type SerializerConfig struct {
@@ -21,6 +23,6 @@ type Serializer interface {
 
 type PrometheusSerializer interface {
 	Serializer
-	SendMetrics(ctx context.Context, metrics []*PrometheusMetric, externalLabels map[string]string) error
+	SendMetrics(ctx context.Context, metrics []*PrometheusMetric, externalLabels labels.Labels) error
 	SendMetadata(ctx context.Context, name string, unit string, help string, pType string) error
 }

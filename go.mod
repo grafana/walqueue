@@ -5,7 +5,8 @@ go 1.23.0
 toolchain go1.24.1
 
 require (
-	github.com/deneonet/benc v1.1.8
+	// NOTE: do not upgrade to v1.1.8 it contains a breaking change to the serialization format that causes a nasty time bug
+	github.com/deneonet/benc v1.1.7
 	github.com/go-kit/log v0.2.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v1.0.0

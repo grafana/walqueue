@@ -5,28 +5,29 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"strings"
+	"strconv"
 	"testing"
 	"time"
 
-	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/grafana/walqueue/types"
 )
 
-func TestDeserializeAndSerialize(t *testing.T) {
+func TestDeserializeAndSerialize_Metric(t *testing.T) {
 	s := NewFormat()
-	lbls := make(labels.Labels, 0)
-	for i := 0; i < 10; i++ {
-		lbls = append(lbls, labels.Label{
-			Name:  fmt.Sprintf("label_%d", i),
-			Value: randString(),
-		})
-	}
+	ts := time.Now().UnixMilli()
+	ex := testExemplar()
+	value := testValue()
+	lbls := testLabels()
+	externalLabels := testExternalLabels()
+
 	for i := 0; i < 100; i++ {
-		aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, nil)
+		aErr := s.AddPrometheusMetric(ts, value, lbls, nil, nil, ex, externalLabels)
 		require.NoError(t, aErr)
 		aErr = s.AddPrometheusMetadata("name", "unit", "help", "gauge")
 		require.NoError(t, aErr)
@@ -38,6 +39,11 @@ func TestDeserializeAndSerialize(t *testing.T) {
 		kv = meta
 		return nil
 	})
+
+	expectedLabels := make([]labels.Label, 0, len(lbls)+len(externalLabels))
+	expectedLabels = append(expectedLabels, lbls...)
+	expectedLabels = append(expectedLabels, externalLabels...)
+
 	require.NoError(t, err)
 	items, err := s.Unmarshal(kv, bb)
 	require.NoError(t, err)
@@ -45,15 +51,31 @@ func TestDeserializeAndSerialize(t *testing.T) {
 	for _, item := range items {
 		ppb := item.Bytes()
 		if item.Type() == types.PrometheusMetricV1 {
+			md, ok := item.(types.MetricDatum)
+			require.True(t, ok, "expected item to be of type MetricDatum")
+			require.Equal(t, ts, md.TimeStampMS(), "timestamp should be in the past for persisted data")
+
 			met := &prompb.TimeSeries{}
 			unErr := met.Unmarshal(ppb)
 			require.NoError(t, unErr)
 
-			require.Len(t, met.Labels, 10)
+			require.Len(t, met.Labels, len(expectedLabels))
 			for j, l := range met.Labels {
-				require.Equal(t, l.Name, lbls[j].Name)
-				require.Equal(t, l.Value, lbls[j].Value)
+				assert.Equal(t, l.Name, expectedLabels[j].Name)
+				assert.Equal(t, l.Value, expectedLabels[j].Value)
 			}
+
+			require.Len(t, met.Samples, 1)
+			assert.Equal(t, value, met.Samples[0].Value)
+			assert.Equal(t, ts, met.Samples[0].Timestamp)
+
+			require.Len(t, met.Exemplars, 1)
+			assert.Len(t, met.Exemplars[0].Labels, 1)
+			assert.Equal(t, ex.Labels[0].Name, met.Exemplars[0].Labels[0].Name)
+			assert.Equal(t, ex.Labels[0].Value, met.Exemplars[0].Labels[0].Value)
+			assert.Equal(t, ex.Ts, met.Exemplars[0].Timestamp)
+			assert.Equal(t, ex.Value, met.Exemplars[0].Value)
+
 		}
 		if item.Type() == types.PrometheusMetadataV1 {
 			md := &prompb.MetricMetadata{}
@@ -65,6 +87,14 @@ func TestDeserializeAndSerialize(t *testing.T) {
 			require.True(t, md.MetricFamilyName == "name")
 		}
 	}
+
+	// Uncomment to write the binary file for testing.
+	//f, err := os.Create("testdata/v2_metric.bin")
+	//require.NoError(t, err)
+	//defer f.Close()
+	//n, err := f.Write(bb)
+	//require.NoError(t, err)
+	//require.Equal(t, len(bb), n)
 }
 
 func TestExternalLabels(t *testing.T) {
@@ -121,27 +151,58 @@ func TestExternalLabels(t *testing.T) {
 	}
 }
 
-func TestBackwardsCompatability(t *testing.T) {
-	buf, err := os.ReadFile(filepath.Join("testdata", "v2.bin"))
+func TestBackwardsCompatability_Metric(t *testing.T) {
+	buf, err := os.ReadFile(filepath.Join("testdata", "v2_metric.bin"))
 	require.NoError(t, err)
 	sg := NewFormat()
 	metrics, err := sg.Unmarshal(map[string]string{"record_count": "200"}, buf)
 	require.NoError(t, err)
 	require.Len(t, metrics, 200)
+
+	lbls := testLabels()
+	externalLabels := testExternalLabels()
+	expectedLabels := make([]labels.Label, 0, len(lbls)+len(externalLabels))
+	expectedLabels = append(expectedLabels, lbls...)
+	expectedLabels = append(expectedLabels, externalLabels...)
+	now := time.Now().UnixMilli()
+	ex := testExemplar()
+
 	for _, item := range metrics {
+
 		ppb := item.Bytes()
 		require.True(t, item.FileFormat() == types.AlloyFileVersionV2)
 		if item.Type() == types.PrometheusMetricV1 {
+			md, ok := item.(types.MetricDatum)
+			require.True(t, ok, "expected item to be of type MetricDatum")
+			require.Greater(t, now, md.TimeStampMS(), "timestamp should be in the past for persisted data")
+
 			met := &prompb.TimeSeries{}
 			unErr := met.Unmarshal(ppb)
 			require.NoError(t, unErr)
 
-			require.Len(t, met.Labels, 10)
-			for _, l := range met.Labels {
-				require.True(t, strings.HasPrefix(l.Name, "label"))
+			require.Len(t, met.Labels, len(expectedLabels))
+			for j, l := range met.Labels {
+				assert.Equal(t, l.Name, expectedLabels[j].Name)
+				assert.Equal(t, l.Value, expectedLabels[j].Value)
 			}
+
+			require.Len(t, met.Samples, 1)
+			assert.Equal(t, testValue(), met.Samples[0].Value)
+			assert.GreaterOrEqual(t, now, met.Samples[0].Timestamp, "sample timestamp for persisted data should not be large than now")
+
+			require.Len(t, met.Exemplars, 1)
+			assert.Len(t, met.Exemplars[0].Labels, 1)
+			assert.Equal(t, ex.Labels[0].Name, met.Exemplars[0].Labels[0].Name)
+			assert.Equal(t, ex.Labels[0].Value, met.Exemplars[0].Labels[0].Value)
+			assert.Greater(t, now, met.Exemplars[0].Timestamp, "exemplar timestamp for persisted data should not be larger than now")
+			assert.Equal(t, ex.Value, met.Exemplars[0].Value)
+
 		}
 		if item.Type() == types.PrometheusMetadataV1 {
+			metadataDatum, ok := item.(types.MetadataDatum)
+			require.True(t, ok, "expected item to be of type MetadataDatum")
+			require.True(t, metadataDatum.IsMeta(), "expected item to be a metadata datum marked with IsMeta() true")
+
 			md := &prompb.MetricMetadata{}
 			unErr := md.Unmarshal(ppb)
 			require.NoError(t, unErr)
@@ -161,4 +222,51 @@ func randString() string {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(b)
+}
+
+// It's important for backwards compatibility testing that this value remain consistent. If you change it, you must
+// regenerate the testdata file.
+func testValue() float64 {
+	return 10.0
+}
+
+// It's important for backwards compatibility testing that this value remain consistent. If you change it, you must
+// regenerate the testdata file.
+func testLabels() labels.Labels {
+	lbls := make(labels.Labels, 0, 10)
+
+	for i := range 10 {
+		lbls = append(lbls, labels.Label{
+			Name:  fmt.Sprintf("label_%d", i),
+			Value: strconv.Itoa(i),
+		})
+	}
+
+	return lbls
+}
+
+// It's important for backwards compatibility testing that this value remain consistent. If you change it, you must
+// regenerate the testdata file.
+func testExternalLabels() labels.Labels {
+	lbls := make(labels.Labels, 0, 3)
+
+	for i := range 3 {
+		lbls = append(lbls, labels.Label{
+			Name:  fmt.Sprintf("external_%d", i),
+			Value: strconv.Itoa(i),
+		})
+	}
+
+	return lbls
+}
+
+// It's important for backwards compatibility testing that this value remain consistent. If you change it, you must
+// regenerate the testdata file.
+func testExemplar() exemplar.Exemplar {
+	return exemplar.Exemplar{
+		Labels: labels.FromStrings("name_1", "value_1"),
+		Ts:     time.Now().UnixMilli(),
+		HasTs:  true,
+		Value:  float64(10),
+	}
 }

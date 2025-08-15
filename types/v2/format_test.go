@@ -75,7 +75,6 @@ func TestDeserializeAndSerialize_Metric(t *testing.T) {
 			assert.Equal(t, ex.Labels[0].Value, met.Exemplars[0].Labels[0].Value)
 			assert.Equal(t, ex.Ts, met.Exemplars[0].Timestamp)
 			assert.Equal(t, ex.Value, met.Exemplars[0].Value)
-
 		}
 		if item.Type() == types.PrometheusMetadataV1 {
 			md := &prompb.MetricMetadata{}
@@ -168,7 +167,6 @@ func TestBackwardsCompatability_Metric(t *testing.T) {
 	ex := testExemplar()
 
 	for _, item := range metrics {
-
 		ppb := item.Bytes()
 		require.True(t, item.FileFormat() == types.AlloyFileVersionV2)
 		if item.Type() == types.PrometheusMetricV1 {
@@ -196,7 +194,6 @@ func TestBackwardsCompatability_Metric(t *testing.T) {
 			assert.Equal(t, ex.Labels[0].Value, met.Exemplars[0].Labels[0].Value)
 			assert.Greater(t, now, met.Exemplars[0].Timestamp, "exemplar timestamp for persisted data should not be larger than now")
 			assert.Equal(t, ex.Value, met.Exemplars[0].Value)
-
 		}
 		if item.Type() == types.PrometheusMetadataV1 {
 			metadataDatum, ok := item.(types.MetadataDatum)

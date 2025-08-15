@@ -53,7 +53,7 @@ func TestDeserializeAndSerialize_Metric(t *testing.T) {
 		if item.Type() == types.PrometheusMetricV1 {
 			md, ok := item.(types.MetricDatum)
 			require.True(t, ok, "expected item to be of type MetricDatum")
-			require.Equal(t, ts, md.TimeStampMS(), "timestamp should be in the past for persisted data")
+			require.Equal(t, ts, md.TimeStampMS(), "MetricDataum timestamp should match the original timestamp")
 
 			met := &prompb.TimeSeries{}
 			unErr := met.Unmarshal(ppb)
@@ -77,6 +77,10 @@ func TestDeserializeAndSerialize_Metric(t *testing.T) {
 			assert.Equal(t, ex.Value, met.Exemplars[0].Value)
 		}
 		if item.Type() == types.PrometheusMetadataV1 {
+			metadataDatum, ok := item.(types.MetadataDatum)
+			require.True(t, ok, "expected item to be of type MetadataDatum")
+			require.True(t, metadataDatum.IsMeta(), "expected item to be a metadata datum marked with IsMeta() true")
+
 			md := &prompb.MetricMetadata{}
 			unErr := md.Unmarshal(ppb)
 			require.NoError(t, unErr)
@@ -87,7 +91,7 @@ func TestDeserializeAndSerialize_Metric(t *testing.T) {
 		}
 	}
 
-	// Uncomment to write the binary file for testing.
+	// Uncomment to write the binary file for compatibility testing. This should only be done if the test data changes.
 	//f, err := os.Create("testdata/v2_metric.bin")
 	//require.NoError(t, err)
 	//defer f.Close()

@@ -5,10 +5,8 @@ go 1.23.0
 toolchain go1.24.1
 
 require (
-<<<<<<< HEAD
-=======
 	// NOTE: do not upgrade to v1.1.8 it contains a breaking change to the serialization format that causes a nasty time bug
->>>>>>> 326e01a (Downgrade deneonet/benc to v1.1.7)
+	// This is pinned by a replace further down due to a bug
 	github.com/deneonet/benc v1.1.7
 	github.com/go-kit/log v0.2.1
 	github.com/gogo/protobuf v1.3.2
@@ -53,3 +51,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/client-go v0.31.1 // indirect
 )
+
+// Do not remove this until the bug breaking backwards compatibility is resolved: https://github.com/deneonet/benc/issues/13
+replace github.com/deneonet/benc => github.com/deneonet/benc v1.1.7

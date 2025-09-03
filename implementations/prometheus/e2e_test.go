@@ -495,13 +495,14 @@ func newComponent(t *testing.T, l log.Logger, url string, reg prometheus.Registe
 
 func newComponentV2(t *testing.T, l log.Logger, url string, reg prometheus.Registerer) (Queue, error) {
 	return NewQueue("test", types.ConnectionConfig{
-		URL:              url,
-		Timeout:          30 * time.Second,
-		RetryBackoff:     1 * time.Second,
-		MaxRetryAttempts: 1,
-		BatchCount:       5,
-		FlushInterval:    100 * time.Millisecond,
-		ProtobufMessage:  config.RemoteWriteProtoMsgV2,
+		URL:               url,
+		Timeout:           30 * time.Second,
+		RetryBackoff:      1 * time.Second,
+		MaxRetryAttempts:  1,
+		BatchCount:        5,
+		FlushInterval:     100 * time.Millisecond,
+		ProtobufMessage:   config.RemoteWriteProtoMsgV2,
+		MetadataCacheSize: 100,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              4,

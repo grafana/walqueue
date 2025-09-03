@@ -327,6 +327,7 @@ func runTestV2(t *testing.T, add func(index int, appendable storage.Appender) (f
 		test(samplesV1)
 	} else if metaTest != nil {
 		// TODO: Support testing metadata in v2
+		require.True(t, false, "metadata testing not yet supported for PRWv2")
 	}
 }
 

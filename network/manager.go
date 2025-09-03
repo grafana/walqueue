@@ -46,6 +46,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 	if requestSignalsFromFileQueue == nil || cap(requestSignalsFromFileQueue) != 1 {
 		return nil, fmt.Errorf("requestSignalsFromFileQueue must be 1")
 	}
+
 	desiredOutbox := types.NewMailbox[uint]()
 	p := newParallelism(cc.Parallelism, desiredOutbox, statshub, logger)
 	s := &manager{
@@ -318,7 +319,9 @@ func (s *manager) addPendingItems(items []types.Datum) {
 			s.pendingData.AddMetricDatum(v)
 		case types.MetadataDatum:
 			if usingMetadataCache {
-				s.metadataCache.Set(v)
+				if e := s.metadataCache.Set(v); e != nil {
+					level.Warn(s.logger).Log("msg", "failed to add metadata to cache", "err", e.Error())
+				}
 			} else {
 				s.pendingData.AddMetadataDatum(v)
 			}

@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -20,6 +21,7 @@ import (
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/common/config"
+	promconfig "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"
 )
@@ -49,6 +51,7 @@ func TestTLSConnection(t *testing.T) {
 		contentEncoding := r.Header.Get("Content-Encoding")
 		if contentType != "application/x-protobuf" || contentEncoding != "snappy" {
 			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "unexpected content type or encoding: %s, %s", contentType, contentEncoding)
 			return
 		}
 
@@ -79,14 +82,15 @@ func TestTLSConnection(t *testing.T) {
 		{
 			name: "Valid TLS configuration with CA cert",
 			tlsConfig: types.ConnectionConfig{
-				URL:           server.URL,
-				TLSCert:       string(serverCert),
-				TLSKey:        string(serverKey),
-				TLSCACert:     string(caCert),
-				BatchCount:    10,
-				FlushInterval: time.Second,
-				Timeout:       time.Second,
-				UserAgent:     "test-client",
+				URL:             server.URL,
+				TLSCert:         string(serverCert),
+				TLSKey:          string(serverKey),
+				TLSCACert:       string(caCert),
+				BatchCount:      10,
+				FlushInterval:   time.Second,
+				Timeout:         time.Second,
+				UserAgent:       "test-client",
+				ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
 			},
 			wantErr: false,
 		},
@@ -101,6 +105,7 @@ func TestTLSConnection(t *testing.T) {
 				FlushInterval:      time.Second,
 				Timeout:            time.Second,
 				UserAgent:          "test-client",
+				ProtobufMessage:    promconfig.RemoteWriteProtoMsgV1,
 			},
 			wantErr: false,
 		},
@@ -133,8 +138,8 @@ func TestTLSConnection(t *testing.T) {
 			require.NoError(t, werr)
 			result := l.send(snappyBuf, ctx, 0)
 			if !tt.wantErr {
-				require.True(t, result.successful, "request should be successful")
 				require.NoError(t, result.err, "request should not return error")
+				require.True(t, result.successful, "request should be successful")
 			}
 		})
 	}
@@ -150,11 +155,12 @@ func TestTLSConfigValidation(t *testing.T) {
 		{
 			name: "No TLS config",
 			tlsConfig: types.ConnectionConfig{
-				URL:           "http://example.com",
-				BatchCount:    10,
-				FlushInterval: time.Second,
-				Timeout:       time.Second,
-				UserAgent:     "test-client",
+				URL:             "http://example.com",
+				BatchCount:      10,
+				FlushInterval:   time.Second,
+				Timeout:         time.Second,
+				UserAgent:       "test-client",
+				ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
 			},
 			wantLoop: true,
 		},
@@ -301,6 +307,7 @@ func TestCustomHeaders(t *testing.T) {
 			Headers: map[string]string{
 				"X-Custom-Header": "test-value",
 			},
+			ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
 		}
 
 		// Create HTTP client directly rather than through ToPrometheusConfig
@@ -356,6 +363,7 @@ func TestCustomHeaders(t *testing.T) {
 				"X-Custom-2": "value2",
 				"X-Custom-3": "value3",
 			},
+			ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
 		}
 
 		httpClient := &http.Client{
@@ -403,6 +411,7 @@ func TestCustomHeaders(t *testing.T) {
 				"Content-Type": "text/plain",
 				"User-Agent":   "override-agent",
 			},
+			ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
 		}
 
 		httpClient := &http.Client{

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/config"
+	promconfig "github.com/prometheus/prometheus/config"
 )
 
 type NetworkClient interface {
@@ -29,6 +30,8 @@ type ConnectionConfig struct { //nolint:govet // fieldalignment
 	BearerToken string
 	// UserAgent is the User-Agent header sent to the Prometheus server.
 	UserAgent string
+	// ProtobufMessage is the Prometheus protobuf message to send.
+	ProtobufMessage promconfig.RemoteWriteProtoMsg
 	// Timeout specifies the duration for which the connection will wait for a response before timing out.
 	Timeout time.Duration
 	// RetryBackoff is the duration between retries when a network request fails.
@@ -139,6 +142,7 @@ func (cc ConnectionConfig) ToPrometheusConfig() (config.HTTPClientConfig, error)
 			cfg.ProxyConnectHeader[key] = []config.Secret{config.Secret(value)}
 		}
 	}
+
 	return cfg, nil
 }
 

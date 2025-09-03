@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
+	"github.com/prometheus/prometheus/config"
 )
 
 // write is a fire and forget client.
@@ -22,6 +23,14 @@ type write struct {
 	stats  func(r sendResult)
 	cfg    types.ConnectionConfig
 }
+
+// Taken from prometheus storage/remote package. Including the package just for these
+// constants added a lot of unnecessary imports
+var (
+	RemoteWriteVersionHeader        = "X-Prometheus-Remote-Write-Version"
+	RemoteWriteVersion1HeaderValue  = "0.1.0"
+	RemoteWriteVersion20HeaderValue = "2.0.0"
+)
 
 //nolint:unparam // TODO error is always nil, but this should do cfg validation
 func newWrite(cc types.ConnectionConfig, l log.Logger, statsResult func(r sendResult), client *http.Client) (*write, error) {
@@ -94,9 +103,16 @@ func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult
 
 	// Add/Set required headers, which will override custom headers with the same name
 	httpReq.Header.Add("Content-Encoding", "snappy")
-	httpReq.Header.Set("Content-Type", "application/x-protobuf")
 	httpReq.Header.Set("User-Agent", l.cfg.UserAgent)
-	httpReq.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
+
+	if l.cfg.ProtobufMessage == config.RemoteWriteProtoMsgV1 {
+		// Compatibility mode for 1.0.
+		httpReq.Header.Set(RemoteWriteVersionHeader, RemoteWriteVersion1HeaderValue)
+		httpReq.Header.Set("Content-Type", "application/x-protobuf")
+	} else {
+		httpReq.Header.Set(RemoteWriteVersionHeader, RemoteWriteVersion20HeaderValue)
+		httpReq.Header.Set("Content-Type", "application/x-protobuf;proto=io.prometheus.write.v2.Request")
+	}
 
 	if l.cfg.BasicAuth != nil {
 		httpReq.SetBasicAuth(l.cfg.BasicAuth.Username, l.cfg.BasicAuth.Password)

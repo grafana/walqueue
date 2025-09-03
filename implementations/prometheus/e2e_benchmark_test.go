@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
+	promconfig "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/stretchr/testify/require"
@@ -102,6 +103,7 @@ func newComponentBenchmark(t *testing.B, l log.Logger, url string) (Queue, error
 		MaxRetryAttempts: 1,
 		BatchCount:       2000,
 		FlushInterval:    1 * time.Second,
+		ProtobufMessage:  promconfig.RemoteWriteProtoMsgV1,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              20,

@@ -26,6 +26,7 @@ import (
 	prom_impl "github.com/grafana/walqueue/implementations/prometheus"
 	"github.com/grafana/walqueue/types"
 	prometheusClient "github.com/prometheus/client_golang/prometheus"
+	promconfig "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/stretchr/testify/require"
@@ -222,6 +223,7 @@ func BenchmarkPrometheusQueueWithJitter(b *testing.B) {
 				RetryBackoff:     100 * time.Millisecond,
 				MaxRetryAttempts: 3,
 				FlushInterval:    1 * time.Second,
+				ProtobufMessage:  promconfig.RemoteWriteProtoMsgV1,
 				Parallelism: types.ParallelismConfig{
 					MinConnections:              tt.maxConnections,
 					MaxConnections:              tt.maxConnections,

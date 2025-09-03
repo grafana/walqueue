@@ -72,7 +72,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 	// We track metadata here for shards for PRWv2 so they do not need to be sharded
 	if s.cfg.ProtobufMessage != promconfig.RemoteWriteProtoMsgV1 {
 		var err error
-		s.metadataCache, err = NewMetadataCache(1024, time.Second*10)
+		s.metadataCache, err = NewMetadataCache(cc.MetadataCacheSize)
 		if err != nil {
 			return nil, err
 		}

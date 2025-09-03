@@ -1,42 +1,37 @@
 package network
 
 import (
-	"time"
-
 	"github.com/grafana/walqueue/types"
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/prometheus/prompb"
 )
 
 type cachedMetadata struct {
-	SendAttempted time.Time
+	SendAttempted bool
 	Help          string
 	Type          prompb.MetricMetadata_MetricType
 	Unit          string
 }
 
 type metadataCache struct {
-	items     *lru.Cache[string, cachedMetadata]
-	sendAfter time.Duration
+	items *lru.Cache[string, cachedMetadata]
 }
 
-func NewMetadataCache(size int, sendAfter time.Duration) (*metadataCache, error) {
+func NewMetadataCache(size int) (*metadataCache, error) {
 	cache, err := lru.New[string, cachedMetadata](size)
 	if err != nil {
 		return nil, err
 	}
 	return &metadataCache{
-		items:     cache,
-		sendAfter: sendAfter,
+		items: cache,
 	}, nil
 }
 
 func (c *metadataCache) Get(key string) (cachedMetadata, bool) {
 	value, ok := c.items.Get(key)
 	if ok {
-		if value.SendAttempted.IsZero() ||
-			(c.sendAfter != 0 && value.SendAttempted.Before(time.Now().Add(-c.sendAfter))) {
-			value.SendAttempted = time.Now()
+		if !value.SendAttempted {
+			value.SendAttempted = true
 		} else {
 			return value, false
 		}

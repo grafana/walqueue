@@ -85,9 +85,10 @@ func TestInvalidProxyURL(t *testing.T) {
 
 			// Create a config with the invalid proxy URL
 			config := types.ConnectionConfig{
-				URL:      "https://example.com",
-				Timeout:  30,
-				ProxyURL: tc.proxyURL,
+				URL:               "https://example.com",
+				Timeout:           30,
+				ProxyURL:          tc.proxyURL,
+				MetadataCacheSize: 1000,
 				Parallelism: types.ParallelismConfig{
 					MinConnections: 1,
 					MaxConnections: 1,
@@ -112,9 +113,10 @@ func TestInvalidProxyURL(t *testing.T) {
 		// Test that ToPrometheusConfig returns an error for invalid URL
 		t.Run("ToPrometheusConfig returns error for invalid URL", func(t *testing.T) {
 			config := types.ConnectionConfig{
-				URL:      "https://example.com",
-				Timeout:  30,
-				ProxyURL: "http://proxy.example.com\u0000:8080", // Null character makes this invalid
+				URL:               "https://example.com",
+				Timeout:           30,
+				ProxyURL:          "http://proxy.example.com\u0000:8080", // Null character makes this invalid
+				MetadataCacheSize: 1000,
 				Parallelism: types.ParallelismConfig{
 					MinConnections: 1,
 					MaxConnections: 1,
@@ -127,9 +129,10 @@ func TestInvalidProxyURL(t *testing.T) {
 			require.Contains(t, err.Error(), "invalid proxy URL")
 		})
 		config := types.ConnectionConfig{
-			URL:      "https://example.com",
-			Timeout:  30,
-			ProxyURL: "invalid://proxy:with:too:many:colons",
+			URL:               "https://example.com",
+			Timeout:           30,
+			ProxyURL:          "invalid://proxy:with:too:many:colons",
+			MetadataCacheSize: 1000,
 			Parallelism: types.ParallelismConfig{
 				MinConnections: 1,
 				MaxConnections: 1,
@@ -155,6 +158,7 @@ func TestProxyFromEnvironment(t *testing.T) {
 			URL:                  "https://example.com",
 			Timeout:              30,
 			ProxyFromEnvironment: true,
+			MetadataCacheSize:    1000,
 			Parallelism: types.ParallelismConfig{
 				MinConnections: 1,
 				MaxConnections: 1,
@@ -201,6 +205,7 @@ func TestProxyFromEnvironment(t *testing.T) {
 			Timeout:              30,
 			ProxyURL:             "http://explicit-proxy.example.com:9090",
 			ProxyFromEnvironment: true,
+			MetadataCacheSize:    1000,
 			Parallelism: types.ParallelismConfig{
 				MinConnections: 1,
 				MaxConnections: 1,

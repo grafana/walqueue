@@ -124,7 +124,8 @@ func TestQueue_Appender(t *testing.T) {
 func TestStats(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	end, err := NewQueue("test", types.ConnectionConfig{
-		URL: "example.com",
+		URL:               "example.com",
+		MetadataCacheSize: 1000,
 	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
 	require.NoError(t, err)
 	// This will unregister the metrics

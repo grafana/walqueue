@@ -138,7 +138,8 @@ func TestStats(t *testing.T) {
 
 	// This will trigger a panic if duplicate metrics found.
 	end2, err := NewQueue("test", types.ConnectionConfig{
-		URL: "example.com",
+		URL:               "example.com",
+		MetadataCacheSize: 1000,
 	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
 	require.NoError(t, err)
 

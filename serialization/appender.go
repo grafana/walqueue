@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	md "github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/storage"
+
+	"github.com/grafana/walqueue/types"
 )
 
 var metricPool = sync.Pool{
@@ -23,24 +24,28 @@ var metricPool = sync.Pool{
 
 type appender struct {
 	ctx            context.Context
-	s              types.PrometheusSerializer
+	s              types.Sender
 	logger         log.Logger
 	externalLabels labels.Labels
-	metrics        map[uint64]*types.PrometheusMetric
 	ttl            time.Duration
 	appendOptions  *storage.AppendOptions
+
+	// We keep a hash for fast lookup when adding exemplars to metrics and a slice to ensure append order is respected
+	// which has a positive impact on compression ratios. Since the hash is the label hash it makes the
+	// assumption that we will not get hash collisions in the lifecycle of an appender which is reasonable.
+	metricHashes map[uint64]*types.PrometheusMetric
+	metrics      []*types.PrometheusMetric
 }
 
-// NewAppender returns an Appender that writes to a given serializer. NOTE the returned Appender writes
-// data immediately, discards data older than `ttl` and does not honor commit or rollback.
-func NewAppender(ctx context.Context, ttl time.Duration, s types.PrometheusSerializer, externalLabels labels.Labels, logger log.Logger) storage.Appender {
+// NewAppender returns an Appender that writes to a given types.Sender on Commit.
+func NewAppender(ctx context.Context, ttl time.Duration, s types.Sender, externalLabels labels.Labels, logger log.Logger) storage.Appender {
 	app := &appender{
 		ttl:            ttl,
 		s:              s,
 		logger:         logger,
 		ctx:            ctx,
 		externalLabels: externalLabels,
-		metrics:        make(map[uint64]*types.PrometheusMetric),
+		metricHashes:   make(map[uint64]*types.PrometheusMetric),
 	}
 	return app
 }
@@ -69,19 +74,14 @@ func (a *appender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v flo
 	pm.L = l
 	pm.T = t
 	pm.V = v
-	a.metrics[l.Hash()] = pm
+	a.metricHashes[l.Hash()] = pm
+	a.metrics = append(a.metrics, pm)
 	return ref, nil
 }
 
 func (a *appender) Commit() error {
 	defer putMetrics(a.metrics)
-	metrics := make([]*types.PrometheusMetric, len(a.metrics))
-	index := 0
-	for _, pm := range a.metrics {
-		metrics[index] = pm
-		index++
-	}
-	return a.s.SendMetrics(a.ctx, metrics, a.externalLabels)
+	return a.s.SendMetrics(a.ctx, a.metrics, a.externalLabels)
 }
 
 func (a *appender) Rollback() error {
@@ -89,7 +89,7 @@ func (a *appender) Rollback() error {
 	return nil
 }
 
-func putMetrics(metrics map[uint64]*types.PrometheusMetric) {
+func putMetrics(metrics []*types.PrometheusMetric) {
 	for _, m := range metrics {
 		m.FH = nil
 		m.H = nil
@@ -104,7 +104,7 @@ func putMetrics(metrics map[uint64]*types.PrometheusMetric) {
 // AppendExemplar appends exemplar to cache. The passed in labels is unused, instead use the labels on the exemplar.
 func (a *appender) AppendExemplar(ref storage.SeriesRef, l labels.Labels, e exemplar.Exemplar) (_ storage.SeriesRef, _ error) {
 	// The metric/histogram should always be added before this.
-	m, found := a.metrics[l.Hash()]
+	m, found := a.metricHashes[l.Hash()]
 	if !found {
 		return 0, fmt.Errorf("exemplar not found in metrics: %v", l.String())
 	}
@@ -123,7 +123,8 @@ func (a *appender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int
 	pm.T = t
 	pm.H = h
 	pm.FH = fh
-	a.metrics[l.Hash()] = pm
+	a.metricHashes[l.Hash()] = pm
+	a.metrics = append(a.metrics, pm)
 	return ref, nil
 }
 

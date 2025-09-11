@@ -21,8 +21,12 @@ type Serializer interface {
 	UpdateConfig(ctx context.Context, cfg SerializerConfig) (bool, error)
 }
 
-type PrometheusSerializer interface {
-	Serializer
+type Sender interface {
 	SendMetrics(ctx context.Context, metrics []*PrometheusMetric, externalLabels labels.Labels) error
 	SendMetadata(ctx context.Context, name string, unit string, help string, pType string) error
+}
+
+type PrometheusSerializer interface {
+	Serializer
+	Sender
 }

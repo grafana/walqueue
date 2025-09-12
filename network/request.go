@@ -95,6 +95,12 @@ func generateWriteRequestV2[T types.Datum](symbolTable *writev2.SymbolsTable, se
 	return input, err
 }
 
+var blankMetadata = writev2.Metadata{
+	Type:    writev2.Metadata_METRIC_TYPE_UNSPECIFIED,
+	HelpRef: 0,
+	UnitRef: 0,
+}
+
 // convertTimeSeriesToV2 converts a prompb.TimeSeries to writev2.TimeSeries using the symbol table
 func convertTimeSeriesToV2(ts *prompb.TimeSeries, metadata map[string]writev2.Metadata, metadataCache *metadataCache, symbolTable *writev2.SymbolsTable) writev2.TimeSeries {
 	// Convert labels to label references using the symbol table
@@ -112,11 +118,7 @@ func convertTimeSeriesToV2(ts *prompb.TimeSeries, metadata map[string]writev2.Me
 
 	v2ts := writev2.TimeSeries{
 		LabelsRefs: labelsRefs,
-		Metadata: writev2.Metadata{
-			Type:    writev2.Metadata_METRIC_TYPE_UNSPECIFIED,
-			HelpRef: 0,
-			UnitRef: 0,
-		},
+		Metadata:   blankMetadata, // Default to blank metadata
 	}
 
 	if metricFamilyName != "" {
@@ -188,6 +190,7 @@ func convertHistogramToV2(hist *prompb.Histogram) writev2.Histogram {
 		PositiveCounts: hist.PositiveCounts,
 		ResetHint:      writev2.Histogram_ResetHint(hist.ResetHint),
 		Timestamp:      hist.Timestamp,
+		CustomValues:   hist.CustomValues,
 	}
 
 	if hist.Count != nil {

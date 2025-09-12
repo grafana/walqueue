@@ -312,7 +312,7 @@ func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uin
 }
 
 func (s *manager) addPendingItems(items []types.Datum) {
-	usingMetadataCache := s.metadataCache != nil
+	usingMetadataCache := (s.cfg.ProtobufMessage != promconfig.RemoteWriteProtoMsgV1)
 	for _, d := range items {
 		switch v := d.(type) {
 		case types.MetricDatum:

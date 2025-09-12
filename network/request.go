@@ -18,6 +18,13 @@ var tspbPool = sync.Pool{
 	},
 }
 
+func resetTs(ts *prompb.TimeSeries) {
+	ts.Labels = ts.Labels[:0]
+	ts.Samples = ts.Samples[:0]
+	ts.Histograms = ts.Histograms[:0]
+	ts.Exemplars = ts.Exemplars[:0]
+}
+
 // generateWriteRequest creates a proto prombpb.WriteRequest from manual bytes. Since
 // the data is already serialized and we just need to wrap it in a proto message.
 func generateWriteRequest[T types.Datum](series []T, input []byte) ([]byte, error) {
@@ -66,7 +73,7 @@ func generateWriteRequestV2[T types.Datum](symbolTable *writev2.SymbolsTable, se
 			// Convert prompb.TimeSeries to writev2.TimeSeries
 			v2ts := convertTimeSeriesToV2(tspb, metadata, metadataCache, symbolTable)
 			ts = append(ts, v2ts)
-			tspb.Reset()
+			resetTs(tspb)
 			tspbPool.Put(tspb)
 			continue
 		}
@@ -116,7 +123,7 @@ func convertTimeSeriesToV2(ts *prompb.TimeSeries, metadata map[string]writev2.Me
 		// Check for already symbolized metadata, otherwise symbolize if it is in the payload
 		if translated, exists := metadata[metricFamilyName]; exists {
 			v2ts.Metadata = translated
-		} else if md, exists := metadataCache.Get(metricFamilyName); exists {
+		} else if md, exists := metadataCache.GetIfNotSent(metricFamilyName); exists {
 			v2ts.Metadata = writev2.Metadata{
 				Type:    writev2.Metadata_MetricType(md.Type),
 				HelpRef: symbolTable.Symbolize(md.Help),

@@ -27,7 +27,7 @@ func NewMetadataCache(size int) (*metadataCache, error) {
 	}, nil
 }
 
-func (c *metadataCache) Get(key string) (cachedMetadata, bool) {
+func (c *metadataCache) GetIfNotSent(key string) (cachedMetadata, bool) {
 	value, ok := c.items.Get(key)
 	if ok {
 		if !value.SendAttempted {

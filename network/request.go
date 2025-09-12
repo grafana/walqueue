@@ -105,34 +105,30 @@ var blankMetadata = writev2.Metadata{
 func convertTimeSeriesToV2(ts *prompb.TimeSeries, metadata map[string]writev2.Metadata, metadataCache *metadataCache, symbolTable *writev2.SymbolsTable) writev2.TimeSeries {
 	// Convert labels to label references using the symbol table
 	labelsRefs := make([]uint32, 0, len(ts.Labels)*2)
-	metricFamilyName := ""
+	m := blankMetadata // Default to blank metadata
 	for _, label := range ts.Labels {
 		nameRef := symbolTable.Symbolize(label.Name)
 		valueRef := symbolTable.Symbolize(label.Value)
 		labelsRefs = append(labelsRefs, nameRef, valueRef)
 
 		if label.Name == "__name__" {
-			metricFamilyName = label.Value
+			// Check for already symbolized metadata, otherwise symbolize if it is in the payload
+			if translated, exists := metadata[label.Value]; exists {
+				m = translated
+			} else if md, exists := metadataCache.GetIfNotSent(label.Value); exists {
+				m = writev2.Metadata{
+					Type:    writev2.Metadata_MetricType(md.Type),
+					HelpRef: symbolTable.Symbolize(md.Help),
+					UnitRef: symbolTable.Symbolize(md.Unit),
+				}
+				metadata[label.Value] = m
+			}
 		}
 	}
 
 	v2ts := writev2.TimeSeries{
 		LabelsRefs: labelsRefs,
-		Metadata:   blankMetadata, // Default to blank metadata
-	}
-
-	if metricFamilyName != "" {
-		// Check for already symbolized metadata, otherwise symbolize if it is in the payload
-		if translated, exists := metadata[metricFamilyName]; exists {
-			v2ts.Metadata = translated
-		} else if md, exists := metadataCache.GetIfNotSent(metricFamilyName); exists {
-			v2ts.Metadata = writev2.Metadata{
-				Type:    writev2.Metadata_MetricType(md.Type),
-				HelpRef: symbolTable.Symbolize(md.Help),
-				UnitRef: symbolTable.Symbolize(md.Unit),
-			}
-			metadata[metricFamilyName] = v2ts.Metadata
-		}
+		Metadata:   m,
 	}
 
 	// Convert samples

@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -49,6 +50,7 @@ func TestTLSConnection(t *testing.T) {
 		contentEncoding := r.Header.Get("Content-Encoding")
 		if contentType != "application/x-protobuf" || contentEncoding != "snappy" {
 			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "unexpected content type or encoding: %s, %s", contentType, contentEncoding)
 			return
 		}
 
@@ -133,8 +135,8 @@ func TestTLSConnection(t *testing.T) {
 			require.NoError(t, werr)
 			result := l.send(snappyBuf, ctx, 0)
 			if !tt.wantErr {
-				require.True(t, result.successful, "request should be successful")
 				require.NoError(t, result.err, "request should not return error")
+				require.True(t, result.successful, "request should be successful")
 			}
 		})
 	}

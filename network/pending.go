@@ -18,16 +18,13 @@ func NewPending(shards int, defaultCapacity int) *pending {
 	return p
 }
 
-func (p *pending) AddItems(item []types.Datum) {
-	for _, d := range item {
-		switch v := d.(type) {
-		case types.MetricDatum:
-			shardID := int(v.Hash() % uint64(len(p.items)))
-			p.items[shardID] = append(p.items[shardID], v)
-		case types.MetadataDatum:
-			p.meta = append(p.meta, v)
-		}
-	}
+func (p *pending) AddMetricDatum(item types.MetricDatum) {
+	shardID := int(item.Hash() % uint64(len(p.items)))
+	p.items[shardID] = append(p.items[shardID], item)
+}
+
+func (p *pending) AddMetadataDatum(item types.MetadataDatum) {
+	p.meta = append(p.meta, item)
 }
 
 func (p *pending) PullMetricItems(shardID int, count int) []types.MetricDatum {

@@ -10,8 +10,11 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
+	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
 )
 
+// writeBuffer handles buffering the data, keeping track if there is a write request already running and kicking off the
+// write request as needed. All methods need to be called in a thread safe manner.
 // writeBuffer handles buffering the data, keeping track if there is a write request already running and kicking off the
 // write request as needed. All methods need to be called in a thread safe manner.
 type writeBuffer[T types.Datum] struct {
@@ -19,21 +22,24 @@ type writeBuffer[T types.Datum] struct {
 	log               log.Logger
 	stats             func(stats types.NetworkStats)
 	items             []T
+	symbolTable       *writev2.SymbolsTable
 	wrBuf             []byte
 	snappyBuf         []byte
 	cfg               types.ConnectionConfig
 	id                int
 	mut               sync.RWMutex
 	currentlySending  bool
+	metadataCache     *metadataCache
 }
 
-func newWriteBuffer[T types.Datum](id int, cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), l log.Logger) *writeBuffer[T] {
+func newWriteBuffer[T types.Datum](id int, cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), l log.Logger, metadataCache *metadataCache) *writeBuffer[T] {
 	return &writeBuffer[T]{
-		id:    id,
-		items: make([]T, 0, cfg.BatchCount),
-		cfg:   cfg,
-		stats: stats,
-		log:   l,
+		id:            id,
+		items:         make([]T, 0, cfg.BatchCount),
+		cfg:           cfg,
+		stats:         stats,
+		metadataCache: metadataCache,
+		log:           l,
 	}
 }
 
@@ -94,7 +100,11 @@ func (w *writeBuffer[T]) Send(ctx context.Context, client *http.Client, finish f
 
 	s := newSignalsInfo(w.items)
 	var err error
-	w.snappyBuf, w.wrBuf, err = buildWriteRequest(w.items, w.snappyBuf, w.wrBuf)
+	if w.cfg.RemoteWriteV1() {
+		w.snappyBuf, w.wrBuf, err = buildWriteRequest(w.items, w.snappyBuf, w.wrBuf)
+	} else {
+		w.symbolTable, w.snappyBuf, w.wrBuf, err = buildWriteRequestV2(w.items, w.metadataCache, w.symbolTable, w.snappyBuf, w.wrBuf)
+	}
 	// If the build write request fails then we should still clear out the items. Since this should only trigger if
 	// we get invalid item, and there is no resolution to that.
 
@@ -155,6 +165,32 @@ func buildWriteRequest[T types.Datum](items []T, snappybuf []byte, protobuf []by
 	}
 	snappybuf = snappy.Encode(snappybuf, data)
 	return snappybuf, protobuf, nil
+}
+
+// buildWriteRequestV2 returns the snappy encoded final buffer followed by the protobuf for v2.
+func buildWriteRequestV2[T types.Datum](items []T, metadataCache *metadataCache, symbolTable *writev2.SymbolsTable, snappybuf []byte, protobuf []byte) (*writev2.SymbolsTable, []byte, []byte, error) {
+	defer func() {
+		for _, item := range items {
+			item.Free()
+		}
+		symbolTable.Reset()
+	}()
+	if snappybuf == nil {
+		snappybuf = make([]byte, 0)
+	}
+	if protobuf == nil {
+		protobuf = make([]byte, 0)
+	}
+	if symbolTable == nil {
+		t := writev2.NewSymbolTable()
+		symbolTable = &t
+	}
+	data, err := generateWriteRequestV2(symbolTable, items, metadataCache, protobuf)
+	if err != nil {
+		return symbolTable, snappybuf, protobuf, err
+	}
+	snappybuf = snappy.Encode(snappybuf, data)
+	return symbolTable, snappybuf, protobuf, nil
 }
 
 // signalsInfo allows us to preallocate what type of signals and count, since once they are

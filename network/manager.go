@@ -34,6 +34,7 @@ type manager struct {
 	stop                                       chan struct{}
 	metadataBuffer                             *writeBuffer[types.MetadataDatum]
 	metricBuffers                              []*writeBuffer[types.MetricDatum]
+	metadataCache                              *metadataCache
 	cfg                                        types.ConnectionConfig
 	desiredConnections                         uint
 }
@@ -44,6 +45,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 	if requestSignalsFromFileQueue == nil || cap(requestSignalsFromFileQueue) != 1 {
 		return nil, fmt.Errorf("requestSignalsFromFileQueue must be 1")
 	}
+
 	desiredOutbox := types.NewMailbox[uint]()
 	p := newParallelism(cc.Parallelism, desiredOutbox, statshub, logger)
 	s := &manager{
@@ -67,6 +69,15 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 	s.desiredConnections = (s.cfg.Parallelism.MinConnections + s.cfg.Parallelism.MaxConnections) / 2
 	s.pendingData = NewPending(int(s.desiredConnections), cc.BatchCount)
 
+	// We track metadata here for shards for PRWv2 so they do not need to be sharded
+	if !s.cfg.RemoteWriteV1() {
+		var err error
+		s.metadataCache, err = NewMetadataCache(cc.MetadataCacheSize)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	httpClient, err := s.createClient(cc)
 	if err != nil {
 		return nil, err
@@ -74,11 +85,14 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 	s.client = httpClient
 	// start kicks off a number of concurrent connections.
 	for i := uint(0); i < s.desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](int(i), cc, s.statshub.SendSeriesNetworkStats, logger)
+		l := newWriteBuffer[types.MetricDatum](int(i), cc, s.statshub.SendSeriesNetworkStats, logger, s.metadataCache)
 		s.metricBuffers = append(s.metricBuffers, l)
 	}
 
-	s.metadataBuffer = newWriteBuffer[types.MetadataDatum](0, cc, s.statshub.SendMetadataNetworkStats, logger)
+	// Metadata is only sent on a separate connection for v1
+	if s.cfg.RemoteWriteV1() {
+		s.metadataBuffer = newWriteBuffer[types.MetadataDatum](0, cc, s.statshub.SendMetadataNetworkStats, logger, nil)
+	}
 	return s, nil
 }
 
@@ -167,7 +181,7 @@ func (s *manager) queueCheck() {
 
 // addNewDatumsAndDistribute will distribute the pending items to pending data and then the writeBuffers.
 func (s *manager) addNewDatumsAndDistribute(items []types.Datum) {
-	s.pendingData.AddItems(items)
+	s.addPendingItems(items)
 
 	for _, mb := range s.metricBuffers {
 		// If we are sending or there is no capacity then dont add.
@@ -181,8 +195,11 @@ func (s *manager) addNewDatumsAndDistribute(items []types.Datum) {
 		}
 	}
 
-	if !s.metadataBuffer.IsSending() && s.metadataBuffer.RemainingCapacity() > 0 {
-		s.metadataBuffer.Add(s.pendingData.PullMetadataItems(s.metadataBuffer.RemainingCapacity()))
+	// If using V2 the metadata items are written on the same connections as metrics.
+	if s.cfg.RemoteWriteV1() {
+		if !s.metadataBuffer.IsSending() && s.metadataBuffer.RemainingCapacity() > 0 {
+			s.metadataBuffer.Add(s.pendingData.PullMetadataItems(s.metadataBuffer.RemainingCapacity()))
+		}
 	}
 
 	// Have we queued enough to drop below having a full batch? If so request more, the plus one represents metadata.
@@ -219,19 +236,21 @@ func (s *manager) checkAndSend() {
 		}
 	}
 
-	sendMeta := func(wr *writeBuffer[types.MetadataDatum]) {
-		if s.currentOutgoingConnections.Load() >= int32(s.desiredConnections) {
-			return
+	if s.cfg.RemoteWriteV1() {
+		sendMeta := func(wr *writeBuffer[types.MetadataDatum]) {
+			if s.currentOutgoingConnections.Load() >= int32(s.desiredConnections) {
+				return
+			}
+			s.currentOutgoingConnections.Inc()
+			wr.Send(s.ctx, s.client, s.finishWrite)
 		}
-		s.currentOutgoingConnections.Inc()
-		wr.Send(s.ctx, s.client, s.finishWrite)
-	}
-	// Check to see if we need to send metadata
-	if !s.metadataBuffer.IsSending() {
-		if time.Since(s.metadataBuffer.LastAttemptedSend()) > s.cfg.FlushInterval && s.metadataBuffer.Len() > 0 {
-			sendMeta(s.metadataBuffer)
-		} else if s.metadataBuffer.RemainingCapacity() == 0 {
-			sendMeta(s.metadataBuffer)
+		// Check to see if we need to send metadata
+		if !s.metadataBuffer.IsSending() {
+			if time.Since(s.metadataBuffer.LastAttemptedSend()) > s.cfg.FlushInterval && s.metadataBuffer.Len() > 0 {
+				sendMeta(s.metadataBuffer)
+			} else if s.metadataBuffer.RemainingCapacity() == 0 {
+				sendMeta(s.metadataBuffer)
+			}
 		}
 	}
 }
@@ -251,6 +270,7 @@ func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uin
 		}
 		s.client = httpClient
 	}
+	previousRemoteWriteV1 := s.cfg.RemoteWriteV1()
 	s.cfg = cc
 
 	level.Debug(s.logger).Log("msg", "recreating write buffers due to configuration change.")
@@ -265,21 +285,47 @@ func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uin
 			drainedMetrics = append(drainedMetrics, dm)
 		}
 	}
-	s.pendingData.AddItems(drainedMetrics)
+	s.addPendingItems(drainedMetrics)
 
-	drainedMeta := s.metadataBuffer.Drain()
-	for _, dm := range drainedMeta {
-		s.pendingData.AddItems([]types.Datum{dm})
+	if previousRemoteWriteV1 {
+		drainedMeta := s.metadataBuffer.Drain()
+		for _, dm := range drainedMeta {
+			s.addPendingItems([]types.Datum{dm})
+		}
+	} else {
+		// A reconfigure may point to a new endpoint, so we should resend all metadata
+		s.metadataCache.Clear()
 	}
 
-	s.metadataBuffer = newWriteBuffer[types.MetadataDatum](0, cc, s.statshub.SendMetadataNetworkStats, s.logger)
+	if s.cfg.RemoteWriteV1() {
+		s.metadataBuffer = newWriteBuffer[types.MetadataDatum](0, cc, s.statshub.SendMetadataNetworkStats, s.logger, nil)
+	}
 	s.metricBuffers = make([]*writeBuffer[types.MetricDatum], 0, desiredConnections)
 	for i := uint(0); i < desiredConnections; i++ {
-		l := newWriteBuffer[types.MetricDatum](int(i), cc, s.statshub.SendSeriesNetworkStats, s.logger)
+		l := newWriteBuffer[types.MetricDatum](int(i), cc, s.statshub.SendSeriesNetworkStats, s.logger, s.metadataCache)
 		s.metricBuffers = append(s.metricBuffers, l)
 	}
+
 	s.desiredParallelism.UpdateConfig(cc.Parallelism)
 	return nil
+}
+
+func (s *manager) addPendingItems(items []types.Datum) {
+	usingMetadataCache := !s.cfg.RemoteWriteV1()
+	for _, d := range items {
+		switch v := d.(type) {
+		case types.MetricDatum:
+			s.pendingData.AddMetricDatum(v)
+		case types.MetadataDatum:
+			if usingMetadataCache {
+				if e := s.metadataCache.Set(v); e != nil {
+					level.Warn(s.logger).Log("msg", "failed to add metadata to cache", "err", e.Error())
+				}
+			} else {
+				s.pendingData.AddMetadataDatum(v)
+			}
+		}
+	}
 }
 
 func (s *manager) createClient(cc types.ConnectionConfig) (*http.Client, error) {

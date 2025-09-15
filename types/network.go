@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/config"
+	promconfig "github.com/prometheus/prometheus/config"
 )
 
 type NetworkClient interface {
@@ -29,6 +30,10 @@ type ConnectionConfig struct { //nolint:govet // fieldalignment
 	BearerToken string
 	// UserAgent is the User-Agent header sent to the Prometheus server.
 	UserAgent string
+	// ProtobufMessage is the Prometheus protobuf message to send.
+	ProtobufMessage promconfig.RemoteWriteProtoMsg
+	// MetadataCacheSize is the size of the LRU cache used for tracking Metadata to support sparse metadata sending. Only valid with ProtobufMessage set to V2.
+	MetadataCacheSize int
 	// Timeout specifies the duration for which the connection will wait for a response before timing out.
 	Timeout time.Duration
 	// RetryBackoff is the duration between retries when a network request fails.
@@ -139,10 +144,20 @@ func (cc ConnectionConfig) ToPrometheusConfig() (config.HTTPClientConfig, error)
 			cfg.ProxyConnectHeader[key] = []config.Secret{config.Secret(value)}
 		}
 	}
+
 	return cfg, nil
 }
 
 type BasicAuth struct {
 	Username string
 	Password string
+}
+
+// Default to using V1 if not set
+func (cc ConnectionConfig) RemoteWriteV1() bool {
+	return cc.ProtobufMessage == "" || cc.ProtobufMessage == promconfig.RemoteWriteProtoMsgV1
+}
+
+func (cc ConnectionConfig) RemoteWriteV2() bool {
+	return cc.ProtobufMessage == promconfig.RemoteWriteProtoMsgV2
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/common/config"
-	promconfig "github.com/prometheus/prometheus/config"
 )
 
 // manager manages writeBuffers. Mostly it exists to control their lifecycle and provide data to them via pull model.
@@ -71,7 +70,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 	s.pendingData = NewPending(int(s.desiredConnections), cc.BatchCount)
 
 	// We track metadata here for shards for PRWv2 so they do not need to be sharded
-	if s.cfg.ProtobufMessage != promconfig.RemoteWriteProtoMsgV1 {
+	if !s.cfg.RemoteWriteV1() {
 		var err error
 		s.metadataCache, err = NewMetadataCache(cc.MetadataCacheSize)
 		if err != nil {
@@ -91,7 +90,7 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 	}
 
 	// Metadata is only sent on a separate connection for v1
-	if s.cfg.ProtobufMessage == promconfig.RemoteWriteProtoMsgV1 {
+	if s.cfg.RemoteWriteV1() {
 		s.metadataBuffer = newWriteBuffer[types.MetadataDatum](0, cc, s.statshub.SendMetadataNetworkStats, logger, nil)
 	}
 	return s, nil
@@ -197,7 +196,7 @@ func (s *manager) addNewDatumsAndDistribute(items []types.Datum) {
 	}
 
 	// If using V2 the metadata items are written on the same connections as metrics.
-	if s.cfg.ProtobufMessage == promconfig.RemoteWriteProtoMsgV1 {
+	if s.cfg.RemoteWriteV1() {
 		if !s.metadataBuffer.IsSending() && s.metadataBuffer.RemainingCapacity() > 0 {
 			s.metadataBuffer.Add(s.pendingData.PullMetadataItems(s.metadataBuffer.RemainingCapacity()))
 		}
@@ -237,7 +236,7 @@ func (s *manager) checkAndSend() {
 		}
 	}
 
-	if s.cfg.ProtobufMessage == promconfig.RemoteWriteProtoMsgV1 {
+	if s.cfg.RemoteWriteV1() {
 		sendMeta := func(wr *writeBuffer[types.MetadataDatum]) {
 			if s.currentOutgoingConnections.Load() >= int32(s.desiredConnections) {
 				return
@@ -271,7 +270,7 @@ func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uin
 		}
 		s.client = httpClient
 	}
-	previousProtobufMessage := s.cfg.ProtobufMessage
+	previousRemoteWriteV1 := s.cfg.RemoteWriteV1()
 	s.cfg = cc
 
 	level.Debug(s.logger).Log("msg", "recreating write buffers due to configuration change.")
@@ -288,7 +287,7 @@ func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uin
 	}
 	s.addPendingItems(drainedMetrics)
 
-	if previousProtobufMessage == promconfig.RemoteWriteProtoMsgV1 {
+	if previousRemoteWriteV1 {
 		drainedMeta := s.metadataBuffer.Drain()
 		for _, dm := range drainedMeta {
 			s.addPendingItems([]types.Datum{dm})
@@ -298,7 +297,7 @@ func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uin
 		s.metadataCache.Clear()
 	}
 
-	if s.cfg.ProtobufMessage == promconfig.RemoteWriteProtoMsgV1 {
+	if s.cfg.RemoteWriteV1() {
 		s.metadataBuffer = newWriteBuffer[types.MetadataDatum](0, cc, s.statshub.SendMetadataNetworkStats, s.logger, nil)
 	}
 	s.metricBuffers = make([]*writeBuffer[types.MetricDatum], 0, desiredConnections)
@@ -312,7 +311,7 @@ func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uin
 }
 
 func (s *manager) addPendingItems(items []types.Datum) {
-	usingMetadataCache := (s.cfg.ProtobufMessage != promconfig.RemoteWriteProtoMsgV1)
+	usingMetadataCache := !s.cfg.RemoteWriteV1()
 	for _, d := range items {
 		switch v := d.(type) {
 		case types.MetricDatum:

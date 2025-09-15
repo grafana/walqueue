@@ -13,7 +13,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
-	promconfig "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -42,11 +41,10 @@ func TestSending(t *testing.T) {
 	defer cncl()
 
 	cc := types.ConnectionConfig{
-		URL:             svr.URL,
-		Timeout:         1 * time.Second,
-		BatchCount:      10,
-		FlushInterval:   1 * time.Second,
-		ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
+		URL:           svr.URL,
+		Timeout:       1 * time.Second,
+		BatchCount:    10,
+		FlushInterval: 1 * time.Second,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              4,
@@ -81,11 +79,10 @@ func TestSending(t *testing.T) {
 
 func TestUpdatingConfig(t *testing.T) {
 	cc := types.ConnectionConfig{
-		URL:             "http://localhost",
-		Timeout:         1 * time.Second,
-		BatchCount:      10,
-		FlushInterval:   5 * time.Second,
-		ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
+		URL:           "http://localhost",
+		Timeout:       1 * time.Second,
+		BatchCount:    10,
+		FlushInterval: 5 * time.Second,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              1,
@@ -109,11 +106,10 @@ func TestUpdatingConfig(t *testing.T) {
 	defer wr.Stop()
 
 	cc2 := types.ConnectionConfig{
-		URL:             "http://localhost",
-		Timeout:         1 * time.Second,
-		BatchCount:      20,
-		FlushInterval:   5 * time.Second,
-		ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
+		URL:           "http://localhost",
+		Timeout:       1 * time.Second,
+		BatchCount:    20,
+		FlushInterval: 5 * time.Second,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              1,
@@ -164,7 +160,6 @@ func TestDrain(t *testing.T) {
 		FlushInterval:    5 * time.Second,
 		MaxRetryAttempts: 100,
 		RetryBackoff:     10 * time.Second,
-		ProtobufMessage:  promconfig.RemoteWriteProtoMsgV1,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              1,
@@ -208,7 +203,6 @@ func TestDrain(t *testing.T) {
 		FlushInterval:    5 * time.Second,
 		MaxRetryAttempts: 100,
 		RetryBackoff:     10 * time.Second,
-		ProtobufMessage:  promconfig.RemoteWriteProtoMsgV1,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              4,
@@ -252,7 +246,6 @@ func TestRetry(t *testing.T) {
 		FlushInterval:    1 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 10, // Allow sufficient retries for the test to pass
-		ProtobufMessage:  promconfig.RemoteWriteProtoMsgV1,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              1,
@@ -301,7 +294,6 @@ func TestRetryBounded(t *testing.T) {
 		FlushInterval:    1 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		ProtobufMessage:  promconfig.RemoteWriteProtoMsgV1,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              1,
@@ -350,7 +342,6 @@ func TestRecoverable(t *testing.T) {
 		FlushInterval:    10 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		ProtobufMessage:  promconfig.RemoteWriteProtoMsgV1,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              10,
@@ -403,7 +394,6 @@ func TestNonRecoverable(t *testing.T) {
 		FlushInterval:    1 * time.Second,
 		RetryBackoff:     100 * time.Millisecond,
 		MaxRetryAttempts: 1,
-		ProtobufMessage:  promconfig.RemoteWriteProtoMsgV1,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              1,
@@ -694,7 +684,6 @@ func TestRetryBehavior(t *testing.T) {
 				FlushInterval:    1 * time.Second,
 				RetryBackoff:     100 * time.Millisecond,
 				MaxRetryAttempts: uint(tc.maxRetryAttempts),
-				ProtobufMessage:  promconfig.RemoteWriteProtoMsgV1,
 				Parallelism: types.ParallelismConfig{
 					AllowedDrift:                60 * time.Second,
 					MaxConnections:              1,

@@ -21,7 +21,6 @@ import (
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/common/config"
-	promconfig "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"
 )
@@ -82,15 +81,14 @@ func TestTLSConnection(t *testing.T) {
 		{
 			name: "Valid TLS configuration with CA cert",
 			tlsConfig: types.ConnectionConfig{
-				URL:             server.URL,
-				TLSCert:         string(serverCert),
-				TLSKey:          string(serverKey),
-				TLSCACert:       string(caCert),
-				BatchCount:      10,
-				FlushInterval:   time.Second,
-				Timeout:         time.Second,
-				UserAgent:       "test-client",
-				ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
+				URL:           server.URL,
+				TLSCert:       string(serverCert),
+				TLSKey:        string(serverKey),
+				TLSCACert:     string(caCert),
+				BatchCount:    10,
+				FlushInterval: time.Second,
+				Timeout:       time.Second,
+				UserAgent:     "test-client",
 			},
 			wantErr: false,
 		},
@@ -105,7 +103,6 @@ func TestTLSConnection(t *testing.T) {
 				FlushInterval:      time.Second,
 				Timeout:            time.Second,
 				UserAgent:          "test-client",
-				ProtobufMessage:    promconfig.RemoteWriteProtoMsgV1,
 			},
 			wantErr: false,
 		},
@@ -155,12 +152,11 @@ func TestTLSConfigValidation(t *testing.T) {
 		{
 			name: "No TLS config",
 			tlsConfig: types.ConnectionConfig{
-				URL:             "http://example.com",
-				BatchCount:      10,
-				FlushInterval:   time.Second,
-				Timeout:         time.Second,
-				UserAgent:       "test-client",
-				ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
+				URL:           "http://example.com",
+				BatchCount:    10,
+				FlushInterval: time.Second,
+				Timeout:       time.Second,
+				UserAgent:     "test-client",
 			},
 			wantLoop: true,
 		},
@@ -307,7 +303,6 @@ func TestCustomHeaders(t *testing.T) {
 			Headers: map[string]string{
 				"X-Custom-Header": "test-value",
 			},
-			ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
 		}
 
 		// Create HTTP client directly rather than through ToPrometheusConfig
@@ -363,7 +358,6 @@ func TestCustomHeaders(t *testing.T) {
 				"X-Custom-2": "value2",
 				"X-Custom-3": "value3",
 			},
-			ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
 		}
 
 		httpClient := &http.Client{
@@ -411,7 +405,6 @@ func TestCustomHeaders(t *testing.T) {
 				"Content-Type": "text/plain",
 				"User-Agent":   "override-agent",
 			},
-			ProtobufMessage: promconfig.RemoteWriteProtoMsgV1,
 		}
 
 		httpClient := &http.Client{

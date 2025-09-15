@@ -481,7 +481,6 @@ func newComponent(t *testing.T, l log.Logger, url string, reg prometheus.Registe
 		MaxRetryAttempts: 1,
 		BatchCount:       5,
 		FlushInterval:    100 * time.Millisecond,
-		ProtobufMessage:  config.RemoteWriteProtoMsgV1,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,
 			MaxConnections:              4,

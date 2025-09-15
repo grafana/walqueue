@@ -32,7 +32,7 @@ type ConnectionConfig struct { //nolint:govet // fieldalignment
 	UserAgent string
 	// ProtobufMessage is the Prometheus protobuf message to send.
 	ProtobufMessage promconfig.RemoteWriteProtoMsg
-	// MetadataCacheSize is the size of the LRU cache used for tracking Metadata to support sparse metadata sending
+	// MetadataCacheSize is the size of the LRU cache used for tracking Metadata to support sparse metadata sending. Only valid with ProtobufMessage set to V2.
 	MetadataCacheSize int
 	// Timeout specifies the duration for which the connection will wait for a response before timing out.
 	Timeout time.Duration
@@ -151,4 +151,13 @@ func (cc ConnectionConfig) ToPrometheusConfig() (config.HTTPClientConfig, error)
 type BasicAuth struct {
 	Username string
 	Password string
+}
+
+// Default to using V1 if not set
+func (cc ConnectionConfig) RemoteWriteV1() bool {
+	return cc.ProtobufMessage == "" || cc.ProtobufMessage == promconfig.RemoteWriteProtoMsgV1
+}
+
+func (cc ConnectionConfig) RemoteWriteV2() bool {
+	return cc.ProtobufMessage == promconfig.RemoteWriteProtoMsgV2
 }

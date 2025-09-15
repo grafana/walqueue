@@ -13,7 +13,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/walqueue/types"
-	"github.com/prometheus/prometheus/config"
 )
 
 // write is a fire and forget client.
@@ -105,7 +104,7 @@ func (l *write) send(buf []byte, ctx context.Context, retryCount int) sendResult
 	httpReq.Header.Add("Content-Encoding", "snappy")
 	httpReq.Header.Set("User-Agent", l.cfg.UserAgent)
 
-	if l.cfg.ProtobufMessage == config.RemoteWriteProtoMsgV1 {
+	if l.cfg.RemoteWriteV1() {
 		// Compatibility mode for 1.0.
 		httpReq.Header.Set(RemoteWriteVersionHeader, RemoteWriteVersion1HeaderValue)
 		httpReq.Header.Set("Content-Type", "application/x-protobuf")

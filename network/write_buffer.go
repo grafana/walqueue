@@ -10,7 +10,6 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
-	promconfig "github.com/prometheus/prometheus/config"
 	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
 )
 
@@ -101,7 +100,7 @@ func (w *writeBuffer[T]) Send(ctx context.Context, client *http.Client, finish f
 
 	s := newSignalsInfo(w.items)
 	var err error
-	if w.cfg.ProtobufMessage == promconfig.RemoteWriteProtoMsgV1 {
+	if w.cfg.RemoteWriteV1() {
 		w.snappyBuf, w.wrBuf, err = buildWriteRequest(w.items, w.snappyBuf, w.wrBuf)
 	} else {
 		w.symbolTable, w.snappyBuf, w.wrBuf, err = buildWriteRequestV2(w.items, w.metadataCache, w.symbolTable, w.snappyBuf, w.wrBuf)

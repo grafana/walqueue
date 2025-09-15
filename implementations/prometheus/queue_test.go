@@ -15,7 +15,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/grafana/walqueue/types"
-	promconfig "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/stretchr/testify/require"
@@ -86,7 +85,6 @@ func TestQueue_Appender(t *testing.T) {
 					FlushInterval:    1 * time.Second,
 					RetryBackoff:     100 * time.Millisecond,
 					MaxRetryAttempts: 1,
-					ProtobufMessage:  promconfig.RemoteWriteProtoMsgV1,
 					Parallelism: types.ParallelismConfig{
 						AllowedDrift:                60 * time.Second,
 						MaxConnections:              1,

@@ -67,6 +67,8 @@ func generateWriteRequestV2[T types.Datum](symbolTable *writev2.SymbolsTable, se
 		if valid {
 			tspb := tspbPool.Get().(*prompb.TimeSeries)
 			if err := tspb.Unmarshal(mm.Bytes()); err != nil {
+				resetTs(tspb)
+				tspbPool.Put(tspb)
 				return nil, fmt.Errorf("failed to unmarshal timeseries: %w", err)
 			}
 

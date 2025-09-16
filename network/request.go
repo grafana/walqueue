@@ -6,9 +6,10 @@ import (
 	"sync"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/prometheus/prompb"
 	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
+
+	"github.com/grafana/walqueue/types"
 )
 
 // Used to deserialize the data from the WAL so we can construct the v2 request
@@ -89,11 +90,12 @@ func generateWriteRequestV2[T types.Datum](symbolTable *writev2.SymbolsTable, se
 		Timeseries: ts,
 	}
 
-	if len(input) < req.Size() {
-		input = make([]byte, req.Size())
+	reqSize := req.Size()
+	if len(input) < reqSize {
+		input = make([]byte, reqSize)
 	}
 
-	_, err := req.MarshalTo(input)
+	_, err := req.MarshalToSizedBuffer(input[:reqSize])
 	return input, err
 }
 

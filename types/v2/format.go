@@ -6,12 +6,13 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
+
+	"github.com/grafana/walqueue/types"
 )
 
 // Format describe the v2 data format.
@@ -124,7 +125,7 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 	} else {
 		s.seriesBuf = s.seriesBuf[:seriesSize]
 	}
-	_, err := s.series.MarshalTo(s.seriesBuf)
+	_, err := s.series.MarshalToSizedBuffer(s.seriesBuf[:seriesSize])
 	if err != nil {
 		return err
 	}

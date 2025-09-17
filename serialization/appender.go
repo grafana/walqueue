@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/grafana/walqueue/types"
+	"github.com/grafana/walqueue/util"
 )
 
 var metricPool = sync.Pool{
@@ -74,7 +75,7 @@ func (a *appender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v flo
 	pm.L = l
 	pm.T = t
 	pm.V = v
-	a.metricHashes[l.Hash()] = pm
+	a.metricHashes[util.HashForSharding(l)] = pm
 	a.metrics = append(a.metrics, pm)
 	return ref, nil
 }
@@ -104,7 +105,7 @@ func putMetrics(metrics []*types.PrometheusMetric) {
 // AppendExemplar appends exemplar to cache. The passed in labels is unused, instead use the labels on the exemplar.
 func (a *appender) AppendExemplar(ref storage.SeriesRef, l labels.Labels, e exemplar.Exemplar) (_ storage.SeriesRef, _ error) {
 	// The metric/histogram should always be added before this.
-	m, found := a.metricHashes[l.Hash()]
+	m, found := a.metricHashes[util.HashForSharding(l)]
 	if !found {
 		return 0, fmt.Errorf("exemplar not found in metrics: %v", l.String())
 	}
@@ -123,7 +124,7 @@ func (a *appender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int
 	pm.T = t
 	pm.H = h
 	pm.FH = fh
-	a.metricHashes[l.Hash()] = pm
+	a.metricHashes[util.HashForSharding(l)] = pm
 	a.metrics = append(a.metrics, pm)
 	return ref, nil
 }

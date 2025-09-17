@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 
 	"github.com/grafana/walqueue/types"
+	"github.com/grafana/walqueue/util"
 )
 
 // Format describe the v2 data format.
@@ -131,7 +132,7 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 	}
 
 	// Finally fill in our working metric datum.
-	s.metric.Hashvalue = lbls.Hash()
+	s.metric.Hashvalue = util.HashForSharding(lbls)
 	s.metric.IsHistogramvalue = isHistogram
 	s.metric.Timestampmsvalue = ts
 	s.metric.Buf = s.seriesBuf

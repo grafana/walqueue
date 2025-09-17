@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/grafana/walqueue/types"
+	"github.com/grafana/walqueue/util"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -75,7 +76,7 @@ func (s *Serialization) createTimeSeries(t int64, value float64, lbls labels.Lab
 	ts.LabelsValues = setSliceLength(ts.LabelsValues, len(lbls))
 	ts.TS = t
 	ts.Value = value
-	ts.Hash = lbls.Hash()
+	ts.Hash = util.HashForSharding(lbls)
 	if h != nil {
 		ts.FromHistogram(t, h)
 	}

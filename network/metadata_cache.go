@@ -1,11 +1,18 @@
 package network
 
 import (
-	"github.com/maypok86/otter/v2"
+	"github.com/cespare/xxhash/v2"
+	lru "github.com/elastic/go-freelru"
 	"github.com/prometheus/prometheus/prompb"
 
 	"github.com/grafana/walqueue/types"
 )
+
+type MetadataCache interface {
+	GetIfNotSent(key string) (*cachedMetadata, bool)
+	Set(value types.MetadataDatum) error
+	Clear()
+}
 
 type cachedMetadata struct {
 	SendAttempted bool
@@ -15,11 +22,15 @@ type cachedMetadata struct {
 }
 
 type metadataCache struct {
-	items *otter.Cache[string, cachedMetadata]
+	items *lru.ShardedLRU[string, *cachedMetadata]
 }
 
-func NewMetadataCache(size int) (*metadataCache, error) {
-	cache, err := otter.New[string, cachedMetadata](&otter.Options[string, cachedMetadata]{MaximumSize: size})
+func hashStringXXHASH(s string) uint32 {
+	return uint32(xxhash.Sum64String(s))
+}
+
+func NewMetadataCache(size int) (MetadataCache, error) {
+	cache, err := lru.NewSharded[string, *cachedMetadata](uint32(size), hashStringXXHASH)
 	if err != nil {
 		return nil, err
 	}
@@ -28,14 +39,13 @@ func NewMetadataCache(size int) (*metadataCache, error) {
 	}, nil
 }
 
-func (c *metadataCache) GetIfNotSent(key string) (cachedMetadata, bool) {
-	value, ok := c.items.GetIfPresent(key)
+func (c *metadataCache) GetIfNotSent(key string) (*cachedMetadata, bool) {
+	value, ok := c.items.Get(key)
 	if ok {
-		if !value.SendAttempted {
-			value.SendAttempted = true
-		} else {
-			return value, false
+		if value.SendAttempted {
+			return nil, false
 		}
+		value.SendAttempted = true
 	}
 	return value, ok
 }
@@ -48,7 +58,7 @@ func (c *metadataCache) Set(value types.MetadataDatum) error {
 	}
 
 	// This should probably be set or have some logic to update it if needed.
-	c.items.SetIfAbsent(mdpb.MetricFamilyName, cachedMetadata{
+	c.items.Add(mdpb.MetricFamilyName, &cachedMetadata{
 		Help: mdpb.Help,
 		Type: mdpb.Type,
 		Unit: mdpb.Unit,
@@ -57,5 +67,23 @@ func (c *metadataCache) Set(value types.MetadataDatum) error {
 }
 
 func (c *metadataCache) Clear() {
-	c.items.InvalidateAll()
+	c.items.Purge()
+}
+
+type noopMetadataCache struct{}
+
+func (n noopMetadataCache) GetIfNotSent(_ string) (*cachedMetadata, bool) {
+	return nil, false
+}
+
+func (n noopMetadataCache) Set(_ types.MetadataDatum) error {
+	return nil
+}
+
+func (n noopMetadataCache) Clear() {
+
+}
+
+func NewNoopMetadataCache() MetadataCache {
+	return &noopMetadataCache{}
 }

@@ -1,8 +1,8 @@
 module github.com/grafana/walqueue
 
-go 1.23.0
+go 1.24
 
-toolchain go1.24.1
+toolchain go1.24.5
 
 require (
 	// This is pinned by a replace further down due to a bug
@@ -21,7 +21,7 @@ require (
 	golang.design/x/chann v0.1.2
 )
 
-require github.com/elastic/go-freelru v0.16.0
+require github.com/maypok86/otter/v2 v2.2.1
 
 require (
 	cloud.google.com/go/auth v0.16.0 // indirect
@@ -67,7 +67,7 @@ require (
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	google.golang.org/api v0.230.0 // indirect

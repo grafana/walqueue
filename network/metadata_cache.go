@@ -1,10 +1,10 @@
 package network
 
 import (
-	"github.com/cespare/xxhash/v2"
-	lru "github.com/elastic/go-freelru"
-	"github.com/grafana/walqueue/types"
+	"github.com/maypok86/otter/v2"
 	"github.com/prometheus/prometheus/prompb"
+
+	"github.com/grafana/walqueue/types"
 )
 
 type cachedMetadata struct {
@@ -15,15 +15,11 @@ type cachedMetadata struct {
 }
 
 type metadataCache struct {
-	items *lru.ShardedLRU[string, *cachedMetadata]
-}
-
-func hashStringXXHASH(s string) uint32 {
-	return uint32(xxhash.Sum64String(s))
+	items *otter.Cache[string, cachedMetadata]
 }
 
 func NewMetadataCache(size int) (*metadataCache, error) {
-	cache, err := lru.NewSharded[string, *cachedMetadata](uint32(size), hashStringXXHASH)
+	cache, err := otter.New[string, cachedMetadata](&otter.Options[string, cachedMetadata]{MaximumSize: size})
 	if err != nil {
 		return nil, err
 	}
@@ -32,13 +28,14 @@ func NewMetadataCache(size int) (*metadataCache, error) {
 	}, nil
 }
 
-func (c *metadataCache) GetIfNotSent(key string) (*cachedMetadata, bool) {
-	value, ok := c.items.Get(key)
+func (c *metadataCache) GetIfNotSent(key string) (cachedMetadata, bool) {
+	value, ok := c.items.GetIfPresent(key)
 	if ok {
-		if value.SendAttempted {
-			return nil, false
+		if !value.SendAttempted {
+			value.SendAttempted = true
+		} else {
+			return value, false
 		}
-		value.SendAttempted = true
 	}
 	return value, ok
 }
@@ -50,7 +47,8 @@ func (c *metadataCache) Set(value types.MetadataDatum) error {
 		return err
 	}
 
-	c.items.Add(mdpb.MetricFamilyName, &cachedMetadata{
+	// This should probably be set or have some logic to update it if needed.
+	c.items.SetIfAbsent(mdpb.MetricFamilyName, cachedMetadata{
 		Help: mdpb.Help,
 		Type: mdpb.Type,
 		Unit: mdpb.Unit,
@@ -59,5 +57,5 @@ func (c *metadataCache) Set(value types.MetadataDatum) error {
 }
 
 func (c *metadataCache) Clear() {
-	c.items.Purge()
+	c.items.InvalidateAll()
 }

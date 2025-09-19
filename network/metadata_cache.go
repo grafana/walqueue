@@ -39,7 +39,6 @@ func (c *metadataCache) GetIfNotSent(key []string) map[string]cachedMetadata {
 		if ok {
 			if !value.SendAttempted {
 				value.SendAttempted = true
-			} else {
 				results[k] = value
 			}
 		}

@@ -32,6 +32,8 @@ type ConnectionConfig struct { //nolint:govet // fieldalignment
 	UserAgent string
 	// ProtobufMessage is the Prometheus protobuf message to send.
 	ProtobufMessage promconfig.RemoteWriteProtoMsg
+	// EnableMetadataCache enables an LRU cache for tracking Metadata to support sparse metadata sending. Only valid with ProtobufMessage set to V2.
+	EnableMetadataCache bool
 	// MetadataCacheSize is the size of the LRU cache used for tracking Metadata to support sparse metadata sending. Only valid with ProtobufMessage set to V2.
 	MetadataCacheSize int
 	// Timeout specifies the duration for which the connection will wait for a response before timing out.

@@ -1,4 +1,6 @@
 # walqueue changelog
+- [ENHANCEMENT] Allow disabling of metadata cache for v2. (@dehaansa)
+- [ENHANCEMENT] Support Prometheus Remote Write v2. (@dehaansa)
 - [BUG] Initialize seconds metrics that represent timestamps to current time. (@dehaansa)
 - [BUG] Added support for exemplars. (@mattdurham)
 - [CHORE] Set up linting on the project. (@dehaansa)

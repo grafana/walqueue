@@ -10,7 +10,6 @@ require (
 	github.com/go-kit/log v0.2.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v1.0.0
-	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/klauspost/compress v1.18.0
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/client_model v0.6.2
@@ -21,6 +20,8 @@ require (
 	go.uber.org/atomic v1.11.0
 	golang.design/x/chann v0.1.2
 )
+
+require github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 
 require (
 	cloud.google.com/go/auth v0.16.0 // indirect

@@ -69,13 +69,10 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 	s.desiredConnections = (s.cfg.Parallelism.MinConnections + s.cfg.Parallelism.MaxConnections) / 2
 	s.pendingData = NewPending(int(s.desiredConnections), cc.BatchCount)
 
-	// We track metadata here for shards for PRWv2 so they do not need to be sharded
-	if !s.cfg.RemoteWriteV1() {
-		var err error
-		s.metadataCache, err = NewMetadataCache(cc.MetadataCacheSize)
-		if err != nil {
-			return nil, err
-		}
+	var err error
+	s.metadataCache, err = NewMetadataCache(cc.MetadataCacheSize)
+	if err != nil {
+		return nil, err
 	}
 
 	httpClient, err := s.createClient(cc)
@@ -312,20 +309,20 @@ func (s *manager) updateConfig(cc types.ConnectionConfig, desiredConnections uin
 
 func (s *manager) addPendingItems(items []types.Datum) {
 	usingMetadataCache := !s.cfg.RemoteWriteV1()
+	metadata := make([]types.MetadataDatum, 0, len(items))
 	for _, d := range items {
 		switch v := d.(type) {
 		case types.MetricDatum:
 			s.pendingData.AddMetricDatum(v)
 		case types.MetadataDatum:
 			if usingMetadataCache {
-				if e := s.metadataCache.Set(v); e != nil {
-					level.Warn(s.logger).Log("msg", "failed to add metadata to cache", "err", e.Error())
-				}
+				metadata = append(metadata, v)
 			} else {
 				s.pendingData.AddMetadataDatum(v)
 			}
 		}
 	}
+	s.metadataCache.Set(metadata)
 }
 
 func (s *manager) createClient(cc types.ConnectionConfig) (*http.Client, error) {

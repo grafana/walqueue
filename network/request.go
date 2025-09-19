@@ -105,6 +105,31 @@ var blankMetadata = writev2.Metadata{
 	UnitRef: 0,
 }
 
+func extractMetadata(ts []*prompb.TimeSeries, metmetadataCache *metadataCache, metadata map[string]writev2.Metadata, symbolTable *writev2.SymbolsTable) {
+	dataToGet := make([]string, 0, len(ts))
+	for _, t := range ts {
+		for _, label := range t.Labels {
+			if label.Name == "__name__" {
+				// Check for already symbolized metadata, otherwise symbolize if it is in the payload
+				if translated, exists := metadata[label.Value]; exists {
+					metadata[label.Value] = translated
+				} else {
+					dataToGet = append(dataToGet, label.Value)
+				}
+				break
+			}
+		}
+	}
+	results := metmetadataCache.GetIfNotSent(dataToGet)
+	for k, v := range results {
+		metadata[k] = writev2.Metadata{
+			Type:    writev2.Metadata_MetricType(v.Type),
+			HelpRef: symbolTable.Symbolize(v.Help),
+			UnitRef: symbolTable.Symbolize(v.Unit),
+		}
+	}
+}
+
 // convertTimeSeriesToV2 converts a prompb.TimeSeries to writev2.TimeSeries using the symbol table
 func convertTimeSeriesToV2(ts *prompb.TimeSeries, metadata map[string]writev2.Metadata, metadataCache *metadataCache, symbolTable *writev2.SymbolsTable) writev2.TimeSeries {
 	// Convert labels to label references using the symbol table
@@ -114,18 +139,10 @@ func convertTimeSeriesToV2(ts *prompb.TimeSeries, metadata map[string]writev2.Me
 		nameRef := symbolTable.Symbolize(label.Name)
 		valueRef := symbolTable.Symbolize(label.Value)
 		labelsRefs = append(labelsRefs, nameRef, valueRef)
-
 		if label.Name == "__name__" {
-			// Check for already symbolized metadata, otherwise symbolize if it is in the payload
-			if translated, exists := metadata[label.Value]; exists {
-				m = translated
-			} else if md, exists := metadataCache.GetIfNotSent(label.Value); exists {
-				m = writev2.Metadata{
-					Type:    writev2.Metadata_MetricType(md.Type),
-					HelpRef: symbolTable.Symbolize(md.Help),
-					UnitRef: symbolTable.Symbolize(md.Unit),
-				}
-				metadata[label.Value] = m
+			md, ok := metadata[ts.Labels[0].Value]
+			if ok {
+				m = md
 			}
 		}
 	}

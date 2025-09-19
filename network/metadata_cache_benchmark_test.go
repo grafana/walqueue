@@ -7,11 +7,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/grafana/walqueue/types"
-	v2 "github.com/grafana/walqueue/types/v2"
 	"github.com/prometheus/prometheus/prompb"
 	"go.uber.org/atomic"
+
+	"github.com/grafana/walqueue/types"
+	v2 "github.com/grafana/walqueue/types/v2"
 )
+
+// BenchmarkMetadataCacheConcurrency benchmarks the cache when there are only many concurrent readers
+func BenchmarkMetadataCacheReadOnly(b *testing.B) {
+	concurrencyLevels := []int{1, 10, 50, 100, 500, 1000}
+
+	for _, concurrency := range concurrencyLevels {
+		b.Run(fmt.Sprintf("goroutines_%d", concurrency), func(b *testing.B) {
+			benchmarkMetadataCacheConcurrency(b, concurrency, false)
+		})
+	}
+}
 
 // BenchmarkMetadataCacheConcurrency benchmarks cache under high concurrency
 func BenchmarkMetadataCacheConcurrency(b *testing.B) {
@@ -19,42 +31,38 @@ func BenchmarkMetadataCacheConcurrency(b *testing.B) {
 
 	for _, concurrency := range concurrencyLevels {
 		b.Run(fmt.Sprintf("goroutines_%d", concurrency), func(b *testing.B) {
-			benchmarkMetadataCacheConcurrency(b, concurrency)
+			benchmarkMetadataCacheConcurrency(b, concurrency, true)
 		})
 	}
 }
 
-func benchmarkMetadataCacheConcurrency(b *testing.B, goroutines int) {
-	metricNames := make([]string, 10000)
-	for i := range metricNames {
-		metricNames[i] = fmt.Sprintf("metric_%d", i)
-	}
-	testMetadata := make([]types.MetadataDatum, 10000)
-	for i := range testMetadata {
-		testMetadata[i] = createTestMetadata(metricNames[i])
-	}
-
+func benchmarkMetadataCacheConcurrency(b *testing.B, goroutines int, withWriting bool) {
 	cache, err := NewMetadataCache(1000)
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	// Pre-populate cache
-	for i := range 1000 {
-		cache.Set(testMetadata[i])
+	metricsToTestWith := 10000
+	testMetadata, metricNames := createTestMetadatums(metricsToTestWith)
+	var wg sync.WaitGroup
+	doneWriting := atomic.NewBool(false)
+
+	if withWriting {
+		// Pre-populate cache
+		for i := range 1000 {
+			cache.Set(testMetadata[i])
+		}
+
+		// One goroutine should be adding metadata continuously
+		go func() {
+			r := rand.New(rand.NewSource(time.Now().UnixMilli()))
+			for doneWriting.Load() == false {
+				cache.Set(testMetadata[r.Intn(metricsToTestWith)])
+			}
+		}()
 	}
 
 	b.ResetTimer()
-
-	var wg sync.WaitGroup
-	doneWriting := atomic.NewBool(false)
-	// One goroutine should be adding metadata continuously
-	go func() {
-		r := rand.New(rand.NewSource(time.Now().UnixMilli()))
-		for doneWriting.Load() == false {
-			cache.Set(testMetadata[r.Intn(10000)])
-		}
-	}()
 
 	// N worker goroutines performing read operations
 	for i := range goroutines {
@@ -74,6 +82,19 @@ func benchmarkMetadataCacheConcurrency(b *testing.B, goroutines int) {
 	doneWriting.Store(true)
 }
 
+func createTestMetadatums(count int) ([]types.MetadataDatum, []string) {
+	metricNames := make([]string, count)
+	for i := range metricNames {
+		metricNames[i] = fmt.Sprintf("metric_%d", i)
+	}
+	testMetadata := make([]types.MetadataDatum, count)
+	for i := range testMetadata {
+		testMetadata[i] = createTestMetadata(metricNames[i])
+	}
+
+	return testMetadata, metricNames
+}
+
 // Helper functions
 func createTestMetadata(metricName string) types.MetadataDatum {
 	metadata := &prompb.MetricMetadata{
@@ -88,5 +109,3 @@ func createTestMetadata(metricName string) types.MetadataDatum {
 		Buf: data,
 	}
 }
-
-//BenchmarkMetadataCacheConcurrency/goroutines_1000-12      	    7998	    126622 ns/op	     767 B/op	       2 allocs/op

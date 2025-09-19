@@ -11,8 +11,9 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/grafana/walqueue/types"
 	"github.com/prometheus/common/config"
+
+	"github.com/grafana/walqueue/types"
 )
 
 // manager manages writeBuffers. Mostly it exists to control their lifecycle and provide data to them via pull model.
@@ -34,7 +35,7 @@ type manager struct {
 	stop                                       chan struct{}
 	metadataBuffer                             *writeBuffer[types.MetadataDatum]
 	metricBuffers                              []*writeBuffer[types.MetricDatum]
-	metadataCache                              *metadataCache
+	metadataCache                              MetadataCache
 	cfg                                        types.ConnectionConfig
 	desiredConnections                         uint
 }
@@ -70,9 +71,13 @@ func New(cc types.ConnectionConfig, logger log.Logger, statshub types.StatsHub, 
 	s.pendingData = NewPending(int(s.desiredConnections), cc.BatchCount)
 
 	// We track metadata here for shards for PRWv2 so they do not need to be sharded
-	if !s.cfg.RemoteWriteV1() {
+	if s.cfg.RemoteWriteV2() {
 		var err error
-		s.metadataCache, err = NewMetadataCache(cc.MetadataCacheSize)
+		if s.cfg.EnableMetadataCache {
+			s.metadataCache, err = NewMetadataCache(cc.MetadataCacheSize)
+		} else {
+			s.metadataCache = NewNoopMetadataCache()
+		}
 		if err != nil {
 			return nil, err
 		}

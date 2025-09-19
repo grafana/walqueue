@@ -9,8 +9,9 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/golang/snappy"
-	"github.com/grafana/walqueue/types"
 	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
+
+	"github.com/grafana/walqueue/types"
 )
 
 // writeBuffer handles buffering the data, keeping track if there is a write request already running and kicking off the
@@ -29,10 +30,10 @@ type writeBuffer[T types.Datum] struct {
 	id                int
 	mut               sync.RWMutex
 	currentlySending  bool
-	metadataCache     *metadataCache
+	metadataCache     MetadataCache
 }
 
-func newWriteBuffer[T types.Datum](id int, cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), l log.Logger, metadataCache *metadataCache) *writeBuffer[T] {
+func newWriteBuffer[T types.Datum](id int, cfg types.ConnectionConfig, stats func(networkStats types.NetworkStats), l log.Logger, metadataCache MetadataCache) *writeBuffer[T] {
 	return &writeBuffer[T]{
 		id:            id,
 		items:         make([]T, 0, cfg.BatchCount),
@@ -168,7 +169,7 @@ func buildWriteRequest[T types.Datum](items []T, snappybuf []byte, protobuf []by
 }
 
 // buildWriteRequestV2 returns the snappy encoded final buffer followed by the protobuf for v2.
-func buildWriteRequestV2[T types.Datum](items []T, metadataCache *metadataCache, symbolTable *writev2.SymbolsTable, snappybuf []byte, protobuf []byte) (*writev2.SymbolsTable, []byte, []byte, error) {
+func buildWriteRequestV2[T types.Datum](items []T, metadataCache MetadataCache, symbolTable *writev2.SymbolsTable, snappybuf []byte, protobuf []byte) (*writev2.SymbolsTable, []byte, []byte, error) {
 	defer func() {
 		for _, item := range items {
 			item.Free()

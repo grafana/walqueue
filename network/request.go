@@ -58,7 +58,7 @@ func generateWriteRequest[T types.Datum](series []T, input []byte) ([]byte, erro
 	return bb.Bytes(), nil
 }
 
-func generateWriteRequestV2[T types.Datum](symbolTable *writev2.SymbolsTable, series []T, metadataCache *metadataCache, input []byte) ([]byte, error) {
+func generateWriteRequestV2[T types.Datum](symbolTable *writev2.SymbolsTable, series []T, metadataCache MetadataCache, input []byte) ([]byte, error) {
 	ts := make([]writev2.TimeSeries, 0, len(series))
 
 	metadata := make(map[string]writev2.Metadata)
@@ -106,7 +106,7 @@ var blankMetadata = writev2.Metadata{
 }
 
 // convertTimeSeriesToV2 converts a prompb.TimeSeries to writev2.TimeSeries using the symbol table
-func convertTimeSeriesToV2(ts *prompb.TimeSeries, metadata map[string]writev2.Metadata, metadataCache *metadataCache, symbolTable *writev2.SymbolsTable) writev2.TimeSeries {
+func convertTimeSeriesToV2(ts *prompb.TimeSeries, metadata map[string]writev2.Metadata, metadataCache MetadataCache, symbolTable *writev2.SymbolsTable) writev2.TimeSeries {
 	// Convert labels to label references using the symbol table
 	labelsRefs := make([]uint32, 0, len(ts.Labels)*2)
 	m := blankMetadata // Default to blank metadata

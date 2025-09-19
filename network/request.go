@@ -62,6 +62,14 @@ func generateWriteRequestV2[T types.Datum](symbolTable *writev2.SymbolsTable, se
 	ts := make([]writev2.TimeSeries, 0, len(series))
 
 	metadata := make(map[string]writev2.Metadata)
+	tss := make([]*prompb.TimeSeries, 0, len(series))
+
+	defer func() {
+		for _, tspb := range tss {
+			resetTs(tspb)
+			tspbPool.Put(tspb)
+		}
+	}()
 
 	for _, t := range series {
 		mm, valid := any(t).(types.MetricDatum)
@@ -72,17 +80,19 @@ func generateWriteRequestV2[T types.Datum](symbolTable *writev2.SymbolsTable, se
 				tspbPool.Put(tspb)
 				return nil, fmt.Errorf("failed to unmarshal timeseries: %w", err)
 			}
-
-			// Convert prompb.TimeSeries to writev2.TimeSeries
-			v2ts := convertTimeSeriesToV2(tspb, metadata, metadataCache, symbolTable)
-			ts = append(ts, v2ts)
-			resetTs(tspb)
-			tspbPool.Put(tspb)
+			tss = append(tss, tspb)
 			continue
 		}
 
 		// We do not expect to see metadata datums, as they should be loaded into the cache before they reach the shard writing PRWv2
 		return nil, fmt.Errorf("unknown data type %T", t)
+	}
+
+	extractMetadata(tss, metadataCache, metadata, symbolTable)
+	// TODO combine these two for loops into one
+	for _, t := range tss {
+		v2ts := convertTimeSeriesToV2(t, metadata, metadataCache, symbolTable)
+		ts = append(ts, v2ts)
 	}
 
 	req := &writev2.Request{
@@ -131,7 +141,7 @@ func extractMetadata(ts []*prompb.TimeSeries, metmetadataCache *metadataCache, m
 }
 
 // convertTimeSeriesToV2 converts a prompb.TimeSeries to writev2.TimeSeries using the symbol table
-func convertTimeSeriesToV2(ts *prompb.TimeSeries, metadata map[string]writev2.Metadata, metadataCache *metadataCache, symbolTable *writev2.SymbolsTable) writev2.TimeSeries {
+func convertTimeSeriesToV2(ts *prompb.TimeSeries, metadata map[string]writev2.Metadata, _ *metadataCache, symbolTable *writev2.SymbolsTable) writev2.TimeSeries {
 	// Convert labels to label references using the symbol table
 	labelsRefs := make([]uint32, 0, len(ts.Labels)*2)
 	m := blankMetadata // Default to blank metadata

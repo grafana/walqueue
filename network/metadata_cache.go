@@ -1,8 +1,9 @@
 package network
 
 import (
+	"github.com/cespare/xxhash/v2"
+	lru "github.com/elastic/go-freelru"
 	"github.com/grafana/walqueue/types"
-	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/prometheus/prompb"
 )
 
@@ -14,11 +15,15 @@ type cachedMetadata struct {
 }
 
 type metadataCache struct {
-	items *lru.Cache[string, cachedMetadata]
+	items *lru.ShardedLRU[string, *cachedMetadata]
+}
+
+func hashStringXXHASH(s string) uint32 {
+	return uint32(xxhash.Sum64String(s))
 }
 
 func NewMetadataCache(size int) (*metadataCache, error) {
-	cache, err := lru.New[string, cachedMetadata](size)
+	cache, err := lru.NewSharded[string, *cachedMetadata](uint32(size), hashStringXXHASH)
 	if err != nil {
 		return nil, err
 	}
@@ -27,14 +32,13 @@ func NewMetadataCache(size int) (*metadataCache, error) {
 	}, nil
 }
 
-func (c *metadataCache) GetIfNotSent(key string) (cachedMetadata, bool) {
+func (c *metadataCache) GetIfNotSent(key string) (*cachedMetadata, bool) {
 	value, ok := c.items.Get(key)
 	if ok {
-		if !value.SendAttempted {
-			value.SendAttempted = true
-		} else {
-			return value, false
+		if value.SendAttempted {
+			return nil, false
 		}
+		value.SendAttempted = true
 	}
 	return value, ok
 }
@@ -46,7 +50,7 @@ func (c *metadataCache) Set(value types.MetadataDatum) error {
 		return err
 	}
 
-	c.items.ContainsOrAdd(mdpb.MetricFamilyName, cachedMetadata{
+	c.items.Add(mdpb.MetricFamilyName, &cachedMetadata{
 		Help: mdpb.Help,
 		Type: mdpb.Type,
 		Unit: mdpb.Unit,

@@ -43,13 +43,14 @@ func TestRoundTripSerialization(t *testing.T) {
 	defer s.Stop()
 	for i := 0; i < 10; i++ {
 		ex := exemplar.Exemplar{}
-		lbls := make(labels.Labels, 10)
+		builder := labels.NewScratchBuilder(20)
 		for j := 0; j < 10; j++ {
-			lbls[j] = labels.Label{
-				Name:  fmt.Sprintf("name_%d_%d", i, j),
-				Value: fmt.Sprintf("value_%d_%d", i, j),
-			}
+			builder.Add(fmt.Sprintf("name_%d_%d", i, j), fmt.Sprintf("value_%d_%d", i, j))
 		}
+
+		builder.Sort()
+		lbls := builder.Labels()
+
 		if i == 0 {
 			// Add an exemplar to only the first series
 			ex.Value = rand.Float64()
@@ -62,7 +63,7 @@ func TestRoundTripSerialization(t *testing.T) {
 				V: rand.Float64(),
 				E: ex,
 			},
-		}, nil)
+		}, labels.EmptyLabels())
 		require.NoError(t, sendErr)
 	}
 	require.Eventually(t, func() bool {

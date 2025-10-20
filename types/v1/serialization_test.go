@@ -31,7 +31,7 @@ func TestLabels(t *testing.T) {
 
 	serializer := GetSerializer()
 	var err error
-	err = serializer.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, nil)
+	err = serializer.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, labels.EmptyLabels())
 	require.NoError(t, err)
 	var bb []byte
 	err = serializer.Marshal(func(_ map[string]string, bytes []byte) error {
@@ -47,11 +47,15 @@ func TestLabels(t *testing.T) {
 	err = pm.Unmarshal(items[0].Bytes())
 	require.NoError(t, err)
 
-	require.Len(t, lbls, len(pm.Labels))
+	require.Equal(t, lbls.Len(), len(pm.Labels))
 	// Ensure we were able to convert back and forth properly.
+	lblsSlice := make([]labels.Label, 0, lbls.Len())
+	lbls.Range(func(l labels.Label) {
+		lblsSlice = append(lblsSlice, l)
+	})
 	for i, lbl := range pm.Labels {
-		require.Equal(t, lbl.Name, lbls[i].Name)
-		require.Equal(t, lbl.Value, lbls[i].Value)
+		require.Equal(t, lbl.Name, lblsSlice[i].Name)
+		require.Equal(t, lbl.Value, lblsSlice[i].Value)
 	}
 }
 

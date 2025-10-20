@@ -34,7 +34,7 @@ func (ts *testSender) SendMetadata(ctx context.Context, name string, unit string
 
 func TestAppenderMaintainsAppendedOrder(t *testing.T) {
 	sender := &testSender{}
-	app := serialization.NewAppender(t.Context(), time.Hour, sender, nil, log.NewNopLogger())
+	app := serialization.NewAppender(t.Context(), time.Hour, sender, labels.EmptyLabels(), log.NewNopLogger())
 
 	for i := range 10 {
 		_, err := app.Append(storage.SeriesRef(i), labels.FromStrings(strconv.Itoa(i), "bar"), time.Now().UnixMilli(), float64(i))
@@ -45,6 +45,10 @@ func TestAppenderMaintainsAppendedOrder(t *testing.T) {
 	require.Len(t, sender.sent, 10)
 
 	for i := range 10 {
-		assert.Equal(t, strconv.Itoa(i), sender.sent[i].L[0].Name)
+		// We cannot access sender.sent[i].L labels directly using the stringlabels API
+		// instead, we can iterate over the single element and assign l.Name to the name variable
+		var name string
+		sender.sent[i].L.Range(func(l labels.Label) { name = l.Name })
+		assert.Equal(t, strconv.Itoa(i), name)
 	}
 }

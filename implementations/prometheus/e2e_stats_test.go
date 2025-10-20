@@ -13,6 +13,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1051,7 +1052,7 @@ func runE2eStats(t *testing.T, test statsTest) {
 				require.NoError(t, errApp)
 			case Exemplar:
 				ex := makeExemplar(index)
-				_, errApp := app.AppendExemplar(0, nil, ex)
+				_, errApp := app.AppendExemplar(0, labels.EmptyLabels(), ex)
 				require.NoError(t, errApp)
 			case Metadata:
 				md, lbls := makeMetadata(index)

@@ -22,13 +22,14 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 		BenchmarkDeserializeAndSerialize/v1-20       100         273894233 ns/op              8491 compressed_KB            106723 uncompressed_KB      455318762 B/op   1904711 allocs/op
 		BenchmarkDeserializeAndSerialize/v2-20       798           7529099 ns/op               228 compressed_KB              2949 uncompressed_KB        9792104 B/op        14 allocs/op
 	*/
-	lbls := make(labels.Labels, 0)
+	builder := labels.NewScratchBuilder(20)
 	for i := 0; i < 10; i++ {
-		lbls = append(lbls, labels.Label{
-			Name:  fmt.Sprintf("label_%d", i),
-			Value: randString(),
-		})
+		builder.Add(fmt.Sprintf("label_%d", i), randString())
 	}
+
+	builder.Sort()
+	lbls := builder.Labels()
+
 	b.ResetTimer()
 	type test struct {
 		m    types.PrometheusMarshaller
@@ -56,7 +57,7 @@ func BenchmarkDeserializeAndSerialize(b *testing.B) {
 				s := tt.m
 
 				for i := 0; i < 10_000; i++ {
-					aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, nil)
+					aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls, nil, nil, exemplar.Exemplar{}, labels.EmptyLabels())
 					require.NoError(t, aErr)
 				}
 				kv := make(map[string]string)

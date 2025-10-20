@@ -72,7 +72,7 @@ func (s *serializer) SendMetrics(ctx context.Context, metrics []*types.Prometheu
 			continue
 		}
 		s.seriesCount++
-		if len(m.E.Labels) > 0 {
+		if m.E.Labels.Len() > 0 {
 			s.exemplarCount++
 		}
 		// If we would go over the max size then send.

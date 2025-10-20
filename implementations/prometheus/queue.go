@@ -2,8 +2,6 @@ package prometheus
 
 import (
 	"context"
-	"maps"
-	"slices"
 	"strconv"
 	"time"
 
@@ -93,10 +91,7 @@ func NewQueue(name string, cc types.ConnectionConfig, directory string, maxSigna
 		return nil, err
 	}
 
-	sortedExternalLabels := make([]labels.Label, 0, len(cc.ExternalLabels))
-	for _, k := range slices.Sorted(maps.Keys(cc.ExternalLabels)) {
-		sortedExternalLabels = append(sortedExternalLabels, labels.Label{Name: k, Value: cc.ExternalLabels[k]})
-	}
+	sortedExternalLabels := labels.FromMap(cc.ExternalLabels)
 
 	q := &queue{
 		incoming:                  types.NewMailbox[types.DataHandle](),

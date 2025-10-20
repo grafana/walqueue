@@ -54,12 +54,12 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 		s.series.Exemplars = s.series.Exemplars[:0]
 	}()
 	// Need to find any similar labels, if there is overlap.
-	totalLabels := len(lbls)
-	for _, lbl := range externalLabels {
+	totalLabels := lbls.Len()
+	externalLabels.Range(func(lbl labels.Label) {
 		if !lbls.Has(lbl.Name) {
 			totalLabels += 1
 		}
-	}
+	})
 
 	if cap(s.series.Labels) < totalLabels {
 		s.series.Labels = make([]prompb.Label, totalLabels)
@@ -67,21 +67,21 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 		s.series.Labels = s.series.Labels[:totalLabels]
 	}
 	lblIndex := 0
-	for _, l := range lbls {
+	lbls.Range(func(l labels.Label) {
 		s.series.Labels[lblIndex].Name = l.Name
 		s.series.Labels[lblIndex].Value = l.Value
 		lblIndex++
-	}
+	})
 	// Technically external labels do NOT apply to the hash but since the rule is applied evenly it works out.
 	// This works because external labels do not override metric labels, and the actual hash is not sent.
-	for _, lbl := range externalLabels {
+	externalLabels.Range(func(lbl labels.Label) {
 		if lbls.Has(lbl.Name) {
-			continue
+			return
 		}
 		s.series.Labels[lblIndex].Name = lbl.Name
 		s.series.Labels[lblIndex].Value = lbl.Value
 		lblIndex++
-	}
+	})
 
 	// A series can either be a Sample (normal metric) or a Histogram (histogram metric).
 	if h == nil && fh == nil {
@@ -112,10 +112,10 @@ func (s *Format) AddPrometheusMetric(ts int64, value float64, lbls labels.Labels
 		}
 		s.series.Exemplars[0].Value = e.Value
 		s.series.Exemplars[0].Timestamp = e.Ts
-		s.series.Exemplars[0].Labels = make([]prompb.Label, 0, len(e.Labels))
-		for _, v := range e.Labels {
+		s.series.Exemplars[0].Labels = make([]prompb.Label, 0, e.Labels.Len())
+		e.Labels.Range(func(v labels.Label) {
 			s.series.Exemplars[0].Labels = append(s.series.Exemplars[0].Labels, prompb.Label{Name: v.Name, Value: v.Value})
-		}
+		})
 	}
 
 	// Figure out the size of the series so we can allocate a big enough buffer.

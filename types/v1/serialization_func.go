@@ -71,8 +71,8 @@ func (s *Serialization) Marshal(handle func(map[string]string, []byte) error) er
 // LabelValues while filling in the string map, that is later converted to []string.
 func (s *Serialization) createTimeSeries(t int64, value float64, lbls labels.Labels, h *histogram.Histogram, fh *histogram.FloatHistogram) *TimeSeriesBinary {
 	ts := GetTimeSeriesFromPool()
-	ts.LabelsNames = setSliceLength(ts.LabelsNames, len(lbls))
-	ts.LabelsValues = setSliceLength(ts.LabelsValues, len(lbls))
+	ts.LabelsNames = setSliceLength(ts.LabelsNames, lbls.Len())
+	ts.LabelsValues = setSliceLength(ts.LabelsValues, lbls.Len())
 	ts.TS = t
 	ts.Value = value
 	ts.Hash = lbls.Hash()
@@ -85,7 +85,8 @@ func (s *Serialization) createTimeSeries(t int64, value float64, lbls labels.Lab
 
 	// This is where we deduplicate the ts.Labels into uint32 values
 	// that map to a string in the strings slice via the index.
-	for i, v := range lbls {
+	i := 0
+	lbls.Range(func(v labels.Label) {
 		val, found := s.strMap[v.Name]
 		if !found {
 			val = uint32(len(s.strMap))
@@ -99,7 +100,8 @@ func (s *Serialization) createTimeSeries(t int64, value float64, lbls labels.Lab
 			s.strMap[v.Value] = val
 		}
 		ts.LabelsValues[i] = val
-	}
+		i++
+	})
 	return ts
 }
 

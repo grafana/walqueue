@@ -236,16 +236,20 @@ func runTest(t *testing.T, add func(index int, appendable storage.Appender) (flo
 		if len(s.Histograms) == 1 {
 			lbls, ok := results.Get(s.Histograms[0].Sum)
 			require.True(t, ok)
+			expected := make([]labels.Label, 0, lbls.Len())
+			lbls.Range(func(l labels.Label) { expected = append(expected, l) })
 			for i, sLbl := range s.Labels {
-				require.True(t, lbls[i].Name == sLbl.Name)
-				require.True(t, lbls[i].Value == sLbl.Value)
+				require.True(t, expected[i].Name == sLbl.Name)
+				require.True(t, expected[i].Value == sLbl.Value)
 			}
 		} else {
 			lbls, ok := results.Get(s.Samples[0].Value)
 			require.True(t, ok)
+			expected := make([]labels.Label, 0, lbls.Len())
+			lbls.Range(func(l labels.Label) { expected = append(expected, l) })
 			for i, sLbl := range s.Labels {
-				require.True(t, lbls[i].Name == sLbl.Name)
-				require.True(t, lbls[i].Value == sLbl.Value)
+				require.True(t, expected[i].Name == sLbl.Name)
+				require.True(t, expected[i].Value == sLbl.Value)
 			}
 		}
 	}

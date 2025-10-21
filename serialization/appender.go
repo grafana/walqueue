@@ -93,7 +93,7 @@ func putMetrics(metrics []*types.PrometheusMetric) {
 	for _, m := range metrics {
 		m.FH = nil
 		m.H = nil
-		m.L = nil
+		m.L = labels.EmptyLabels()
 		m.T = 0
 		m.V = 0
 		m.E = exemplar.Exemplar{}

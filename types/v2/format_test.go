@@ -40,9 +40,13 @@ func TestDeserializeAndSerialize_Metric(t *testing.T) {
 		return nil
 	})
 
-	expectedLabels := make([]labels.Label, 0, len(lbls)+len(externalLabels))
-	expectedLabels = append(expectedLabels, lbls...)
-	expectedLabels = append(expectedLabels, externalLabels...)
+	expectedLabels := make([]labels.Label, 0, lbls.Len()+externalLabels.Len())
+	lbls.Range(func(l labels.Label) {
+		expectedLabels = append(expectedLabels, l)
+	})
+	externalLabels.Range(func(l labels.Label) {
+		expectedLabels = append(expectedLabels, l)
+	})
 
 	require.NoError(t, err)
 	items, err := s.Unmarshal(kv, bb)
@@ -71,8 +75,13 @@ func TestDeserializeAndSerialize_Metric(t *testing.T) {
 
 			require.Len(t, met.Exemplars, 1)
 			assert.Len(t, met.Exemplars[0].Labels, 1)
-			assert.Equal(t, ex.Labels[0].Name, met.Exemplars[0].Labels[0].Name)
-			assert.Equal(t, ex.Labels[0].Value, met.Exemplars[0].Labels[0].Value)
+			var lname, lvalue string
+			ex.Labels.Range(func(l labels.Label) {
+				lname = l.Name
+				lvalue = l.Value
+			})
+			assert.Equal(t, lname, met.Exemplars[0].Labels[0].Name)
+			assert.Equal(t, lvalue, met.Exemplars[0].Labels[0].Value)
 			assert.Equal(t, ex.Ts, met.Exemplars[0].Timestamp)
 			assert.Equal(t, ex.Value, met.Exemplars[0].Value)
 		}
@@ -101,23 +110,35 @@ func TestDeserializeAndSerialize_Metric(t *testing.T) {
 }
 
 func TestExternalLabels(t *testing.T) {
-	externalLabels := []labels.Label{
-		{Name: "bar", Value: ""},
-		{Name: "foo", Value: "bar"},
-		{Name: "label_0", Value: "skipped"},
-	}
+	externalLabels := labels.FromStrings(
+		"bar", "",
+		"foo", "bar",
+		"label_0", "skipped",
+	)
 	s := NewFormat()
-	lbls := make(labels.Labels, 0)
+	labelBuilder := labels.NewScratchBuilder(0)
+
 	for i := range 10 {
-		lbls = append(lbls, labels.Label{
-			Name:  fmt.Sprintf("label_%d", i),
-			Value: randString(),
-		})
+		labelBuilder.Add(fmt.Sprintf("label_%d", i), randString())
 	}
+
+	labelBuilder.Sort()
+	lbls := labelBuilder.Labels()
 	for i := range 100 {
 		// Only pass in i%10 labels to ensure that when the label size reduces duplicate labels are not added.
 		// This is to confirm a regression that occurred when external labels were not correctly iterated over when reusing label buffers which caused duplicates.
-		aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lbls[:(10-i%10)], nil, nil, exemplar.Exemplar{}, externalLabels)
+
+		// create a new labels instance containing lbls[:(10-i%10)]
+		builder := labels.NewScratchBuilder(10 - i%10)
+		count := 0
+		lbls.Range(func(l labels.Label) {
+			if count < (10 - i%10) {
+				builder.Add(l.Name, l.Value)
+				count++
+			}
+		})
+		lblsSubset := builder.Labels()
+		aErr := s.AddPrometheusMetric(time.Now().UnixMilli(), rand.Float64(), lblsSubset, nil, nil, exemplar.Exemplar{}, externalLabels)
 		require.NoError(t, aErr)
 	}
 	kv := make(map[string]string)
@@ -142,7 +163,25 @@ func TestExternalLabels(t *testing.T) {
 			expectLen := 2 + (10 - i%10)
 			require.Len(t, met.Labels, expectLen)
 			t.Log(met.Labels)
-			for j, l := range lbls[:expectLen-2] {
+
+			count := 0
+			lbls.Range(func(l labels.Label) {
+				if count < expectLen-2 {
+					require.Equal(t, l.Name, met.Labels[count].Name)
+					require.Equal(t, l.Value, met.Labels[count].Value)
+					count++
+				}
+			})
+
+			expectedSubset := make([]labels.Label, 0, expectLen-2)
+			count = 0
+			lbls.Range(func(l labels.Label) {
+				if count < expectLen-2 {
+					expectedSubset = append(expectedSubset, l)
+					count++
+				}
+			})
+			for j, l := range expectedSubset {
 				require.Equal(t, l.Name, met.Labels[j].Name)
 				require.Equal(t, l.Value, met.Labels[j].Value)
 			}
@@ -164,9 +203,9 @@ func TestBackwardsCompatability_Metric(t *testing.T) {
 
 	lbls := testLabels()
 	externalLabels := testExternalLabels()
-	expectedLabels := make([]labels.Label, 0, len(lbls)+len(externalLabels))
-	expectedLabels = append(expectedLabels, lbls...)
-	expectedLabels = append(expectedLabels, externalLabels...)
+	expectedLabels := make([]labels.Label, 0, lbls.Len()+externalLabels.Len())
+	lbls.Range(func(l labels.Label) { expectedLabels = append(expectedLabels, l) })
+	externalLabels.Range(func(l labels.Label) { expectedLabels = append(expectedLabels, l) })
 	now := time.Now().UnixMilli()
 	ex := testExemplar()
 
@@ -194,8 +233,10 @@ func TestBackwardsCompatability_Metric(t *testing.T) {
 
 			require.Len(t, met.Exemplars, 1)
 			assert.Len(t, met.Exemplars[0].Labels, 1)
-			assert.Equal(t, ex.Labels[0].Name, met.Exemplars[0].Labels[0].Name)
-			assert.Equal(t, ex.Labels[0].Value, met.Exemplars[0].Labels[0].Value)
+			var lname, lvalue string
+			ex.Labels.Range(func(l labels.Label) { lname = l.Name; lvalue = l.Value })
+			assert.Equal(t, lname, met.Exemplars[0].Labels[0].Name)
+			assert.Equal(t, lvalue, met.Exemplars[0].Labels[0].Value)
 			assert.Greater(t, now, met.Exemplars[0].Timestamp, "exemplar timestamp for persisted data should not be larger than now")
 			assert.Equal(t, ex.Value, met.Exemplars[0].Value)
 		}
@@ -234,31 +275,24 @@ func testValue() float64 {
 // It's important for backwards compatibility testing that this value remain consistent. If you change it, you must
 // regenerate the testdata file.
 func testLabels() labels.Labels {
-	lbls := make(labels.Labels, 0, 10)
-
+	builder := labels.NewScratchBuilder(10)
 	for i := range 10 {
-		lbls = append(lbls, labels.Label{
-			Name:  fmt.Sprintf("label_%d", i),
-			Value: strconv.Itoa(i),
-		})
+		builder.Add(fmt.Sprintf("label_%d", i), strconv.Itoa(i))
 	}
-
-	return lbls
+	builder.Sort()
+	return builder.Labels()
 }
 
 // It's important for backwards compatibility testing that this value remain consistent. If you change it, you must
 // regenerate the testdata file.
 func testExternalLabels() labels.Labels {
-	lbls := make(labels.Labels, 0, 3)
-
+	builder := labels.NewScratchBuilder(3)
 	for i := range 3 {
-		lbls = append(lbls, labels.Label{
-			Name:  fmt.Sprintf("external_%d", i),
-			Value: strconv.Itoa(i),
-		})
+		builder.Add(fmt.Sprintf("external_%d", i), strconv.Itoa(i))
 	}
 
-	return lbls
+	builder.Sort()
+	return builder.Labels()
 }
 
 // It's important for backwards compatibility testing that this value remain consistent. If you change it, you must

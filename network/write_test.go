@@ -1,7 +1,6 @@
 package network
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -130,7 +129,7 @@ func TestTLSConnection(t *testing.T) {
 			pending := []types.MetricDatum{createSeries(1, t)}
 
 			// Test connection by sending a request
-			ctx := context.Background()
+			ctx := t.Context()
 			snappyBuf, _, werr := buildWriteRequest[types.MetricDatum](pending, nil, nil)
 			require.NoError(t, werr)
 			result := l.send(snappyBuf, ctx, 0)
@@ -319,7 +318,7 @@ func TestCustomHeaders(t *testing.T) {
 		pending := []types.MetricDatum{createSeries(1, t)}
 
 		// Send the request
-		ctx := context.Background()
+		ctx := t.Context()
 		snappyBuf, _, werr := buildWriteRequest[types.MetricDatum](pending, nil, nil)
 		require.NoError(t, werr)
 		result := l.send(snappyBuf, ctx, 0)
@@ -369,7 +368,7 @@ func TestCustomHeaders(t *testing.T) {
 		require.NotNil(t, l)
 
 		// Create and send a minimal request - for this test we just care about headers
-		ctx := context.Background()
+		ctx := t.Context()
 		pending := []types.MetricDatum{createSeries(1, t)}
 		snappyBuf, _, werr := buildWriteRequest[types.MetricDatum](pending, nil, nil)
 		require.NoError(t, werr)
@@ -414,7 +413,7 @@ func TestCustomHeaders(t *testing.T) {
 		l, err := newWrite(config, logger, func(r sendResult) {}, httpClient)
 		require.NoError(t, err)
 
-		ctx := context.Background()
+		ctx := t.Context()
 		pending := []types.MetricDatum{createSeries(1, t)}
 		snappyBuf, _, werr := buildWriteRequest[types.MetricDatum](pending, nil, nil)
 		require.NoError(t, werr)

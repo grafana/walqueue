@@ -36,7 +36,7 @@ func TestSending(t *testing.T) {
 	}))
 
 	defer svr.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
@@ -101,7 +101,7 @@ func TestUpdatingConfig(t *testing.T) {
 		nonrecoverable: atomic.NewInt32(0),
 	}, moreData)
 	require.NoError(t, err)
-	ctx := context.Background()
+	ctx := t.Context()
 	wr.Start(ctx)
 	defer wr.Stop()
 
@@ -178,7 +178,7 @@ func TestDrain(t *testing.T) {
 		nonrecoverable: atomic.NewInt32(0),
 	}, moreData)
 	require.NoError(t, err)
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	wr.Start(ctx)
@@ -235,7 +235,7 @@ func TestRetry(t *testing.T) {
 		}
 	}))
 	defer svr.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
@@ -283,7 +283,7 @@ func TestRetryBounded(t *testing.T) {
 	}))
 
 	defer svr.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
@@ -333,7 +333,7 @@ func TestRecoverable(t *testing.T) {
 	svr := httptest.NewServer(handler(t, http.StatusInternalServerError, func(wr *prompb.WriteRequest) {
 	}))
 	defer svr.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	cc := types.ConnectionConfig{
 		URL:              svr.URL,
@@ -383,7 +383,7 @@ func TestNonRecoverable(t *testing.T) {
 	}))
 
 	defer svr.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
@@ -673,7 +673,7 @@ func TestRetryBehavior(t *testing.T) {
 			}))
 			defer svr.Close()
 
-			ctx := context.Background()
+			ctx := t.Context()
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 

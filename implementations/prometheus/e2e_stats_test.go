@@ -1030,7 +1030,7 @@ func runE2eStats(t *testing.T, test statsTest) {
 	reg := prometheus.NewRegistry()
 	c, err := newComponent(t, l, srv.URL, reg)
 	require.NoError(t, err)
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	c.Start(ctx)
 	defer c.Stop()

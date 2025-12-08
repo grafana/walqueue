@@ -73,7 +73,7 @@ func runBenchmark(t *testing.B, add func(b *testing.B, appendable storage.Append
 	}))
 	c, err := newComponentBenchmark(t, l, srv.URL)
 	require.NoError(t, err)
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	c.Start(ctx)
 	defer c.Stop()

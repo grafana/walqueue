@@ -104,7 +104,7 @@ func TestQueue_Appender(t *testing.T) {
 				logger,
 			)
 			require.NoError(t, err)
-			ctx, cncl := context.WithCancel(context.Background())
+			ctx, cncl := context.WithCancel(t.Context())
 			defer cncl()
 			q.Start(ctx)
 			defer q.Stop()
@@ -127,7 +127,7 @@ func TestStats(t *testing.T) {
 	}, t.TempDir(), 1, 1*time.Minute, 5*time.Second, reg, "test", log.NewNopLogger())
 	require.NoError(t, err)
 	// This will unregister the metrics
-	ctx, cncl := context.WithCancel(context.Background())
+	ctx, cncl := context.WithCancel(t.Context())
 	defer cncl()
 	end.Start(ctx)
 	// This sleep is to give the goroutines time to spin up.

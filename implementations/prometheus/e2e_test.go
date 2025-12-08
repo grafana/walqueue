@@ -195,7 +195,7 @@ func runTest(t *testing.T, add func(index int, appendable storage.Appender) (flo
 	}))
 	c, err := newComponent(t, l, srv.URL, prometheus.NewRegistry())
 	require.NoError(t, err)
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 
 	err = c.Start(ctx)
@@ -291,7 +291,7 @@ func runTestV2(t *testing.T, add func(index int, appendable storage.Appender) (f
 	}))
 	c, err := newComponentV2(t, l, srv.URL, prometheus.NewRegistry())
 	require.NoError(t, err)
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 
 	err = c.Start(ctx)

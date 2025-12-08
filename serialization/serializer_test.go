@@ -39,7 +39,7 @@ func TestRoundTripSerialization(t *testing.T) {
 	}, l)
 	require.NoError(t, err)
 
-	s.Start(context.TODO())
+	s.Start(t.Context())
 	defer s.Stop()
 	for i := 0; i < 10; i++ {
 		ex := exemplar.Exemplar{}
@@ -56,7 +56,7 @@ func TestRoundTripSerialization(t *testing.T) {
 			ex.Value = rand.Float64()
 			ex.Labels = lbls
 		}
-		sendErr := s.SendMetrics(context.Background(), []*types.PrometheusMetric{
+		sendErr := s.SendMetrics(t.Context(), []*types.PrometheusMetric{
 			{
 				L: lbls,
 				T: time.Now().UnixMilli(),
@@ -81,9 +81,9 @@ func TestUpdateConfig(t *testing.T) {
 		FlushFrequency:    5 * time.Second,
 	}, f, func(stats types.SerializerStats) {}, l)
 	require.NoError(t, err)
-	s.Start(context.TODO())
+	s.Start(t.Context())
 	defer s.Stop()
-	success, err := s.UpdateConfig(context.Background(), types.SerializerConfig{
+	success, err := s.UpdateConfig(t.Context(), types.SerializerConfig{
 		MaxSignalsInBatch: 1,
 		FlushFrequency:    1 * time.Second,
 	})

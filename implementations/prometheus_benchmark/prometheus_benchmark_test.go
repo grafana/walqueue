@@ -249,7 +249,7 @@ func BenchmarkPrometheusQueueWithJitter(b *testing.B) {
 			require.NoError(b, err)
 
 			// Create context with cancel
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(b.Context())
 			defer cancel()
 
 			// Start the queue

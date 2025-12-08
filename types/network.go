@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/prometheus/client_golang/exp/api/remote"
 	"github.com/prometheus/common/config"
-	promconfig "github.com/prometheus/prometheus/config"
 )
 
 type NetworkClient interface {
@@ -31,7 +31,7 @@ type ConnectionConfig struct { //nolint:govet // fieldalignment
 	// UserAgent is the User-Agent header sent to the Prometheus server.
 	UserAgent string
 	// ProtobufMessage is the Prometheus protobuf message to send.
-	ProtobufMessage promconfig.RemoteWriteProtoMsg
+	ProtobufMessage remote.WriteMessageType
 	// EnableMetadataCache enables an LRU cache for tracking Metadata to support sparse metadata sending. Only valid with ProtobufMessage set to V2.
 	EnableMetadataCache bool
 	// MetadataCacheSize is the size of the LRU cache used for tracking Metadata to support sparse metadata sending. Only valid with ProtobufMessage set to V2.
@@ -157,9 +157,9 @@ type BasicAuth struct {
 
 // Default to using V1 if not set
 func (cc ConnectionConfig) RemoteWriteV1() bool {
-	return cc.ProtobufMessage == "" || cc.ProtobufMessage == promconfig.RemoteWriteProtoMsgV1
+	return cc.ProtobufMessage == "" || cc.ProtobufMessage == remote.WriteV1MessageType
 }
 
 func (cc ConnectionConfig) RemoteWriteV2() bool {
-	return cc.ProtobufMessage == promconfig.RemoteWriteProtoMsgV2
+	return cc.ProtobufMessage == remote.WriteV2MessageType
 }

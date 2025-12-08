@@ -213,7 +213,7 @@ func TestParallelismWithNoChanges(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			out := types.NewMailbox[uint]()
-			ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cncl := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cncl()
 			cfg := types.ParallelismConfig{
 				AllowedDrift:                max(tc.cfg.AllowedDrift, 1*time.Second),

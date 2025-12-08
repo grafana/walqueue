@@ -21,11 +21,11 @@ func TestFileQueue(t *testing.T) {
 		_ = mbx.Send(ctx, dh)
 	}, &fakestats{}, log)
 	require.NoError(t, err)
-	ctx, cncl := context.WithCancel(context.Background())
+	ctx, cncl := context.WithCancel(t.Context())
 	defer cncl()
 	q.Start(ctx)
 	defer q.Stop()
-	err = q.Store(context.Background(), nil, []byte("test"))
+	err = q.Store(t.Context(), nil, []byte("test"))
 
 	require.NoError(t, err)
 
@@ -53,12 +53,12 @@ func TestMetaFileQueue(t *testing.T) {
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, &fakestats{}, log)
-	ctx, cncl := context.WithCancel(context.Background())
+	ctx, cncl := context.WithCancel(t.Context())
 	defer cncl()
 	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
-	err = q.Store(context.Background(), map[string]string{"name": "bob"}, []byte("test"))
+	err = q.Store(t.Context(), map[string]string{"name": "bob"}, []byte("test"))
 	require.NoError(t, err)
 
 	meta, buf, err := getHandle(t, mbx)
@@ -76,15 +76,15 @@ func TestCorruption(t *testing.T) {
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, &fakestats{}, log)
-	ctx, cncl := context.WithCancel(context.Background())
+	ctx, cncl := context.WithCancel(t.Context())
 	defer cncl()
 	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
 
-	err = q.Store(context.Background(), map[string]string{"name": "bob"}, []byte("first"))
+	err = q.Store(t.Context(), map[string]string{"name": "bob"}, []byte("first"))
 	require.NoError(t, err)
-	err = q.Store(context.Background(), map[string]string{"name": "bob"}, []byte("second"))
+	err = q.Store(t.Context(), map[string]string{"name": "bob"}, []byte("second"))
 
 	require.NoError(t, err)
 
@@ -118,7 +118,7 @@ func TestFileDeleted(t *testing.T) {
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, &fakestats{}, log)
-	ctx, cncl := context.WithCancel(context.Background())
+	ctx, cncl := context.WithCancel(t.Context())
 	defer cncl()
 	q.Start(ctx)
 	defer q.Stop()
@@ -126,7 +126,7 @@ func TestFileDeleted(t *testing.T) {
 
 	evenHandles := make([]string, 0)
 	for i := 0; i < 10; i++ {
-		err = q.Store(context.Background(), map[string]string{"name": "bob"}, []byte(strconv.Itoa(i)))
+		err = q.Store(t.Context(), map[string]string{"name": "bob"}, []byte(strconv.Itoa(i)))
 
 		require.NoError(t, err)
 		if i%2 == 0 {
@@ -163,13 +163,13 @@ func TestOtherFiles(t *testing.T) {
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, &fakestats{}, log)
-	ctx, cncl := context.WithCancel(context.Background())
+	ctx, cncl := context.WithCancel(t.Context())
 	defer cncl()
 	q.Start(ctx)
 	defer q.Stop()
 	require.NoError(t, err)
 
-	err = q.Store(context.Background(), nil, []byte("first"))
+	err = q.Store(t.Context(), nil, []byte("first"))
 	require.NoError(t, err)
 	os.Create(filepath.Join(dir, "otherfile"))
 	_, buf, err := getHandle(t, mbx)
@@ -185,16 +185,16 @@ func TestResuming(t *testing.T) {
 	q, err := NewQueue(dir, func(ctx context.Context, dh types.DataHandle) {
 		_ = mbx.Send(ctx, dh)
 	}, &fakestats{}, log)
-	ctx, cncl := context.WithCancel(context.Background())
+	ctx, cncl := context.WithCancel(t.Context())
 	defer cncl()
 	q.Start(ctx)
 	require.NoError(t, err)
 
-	err = q.Store(context.Background(), nil, []byte("first"))
+	err = q.Store(t.Context(), nil, []byte("first"))
 
 	require.NoError(t, err)
 
-	err = q.Store(context.Background(), nil, []byte("second"))
+	err = q.Store(t.Context(), nil, []byte("second"))
 
 	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
@@ -209,7 +209,7 @@ func TestResuming(t *testing.T) {
 
 	q2.Start(ctx)
 	defer q2.Stop()
-	err = q2.Store(context.Background(), nil, []byte("third"))
+	err = q2.Store(t.Context(), nil, []byte("third"))
 
 	require.NoError(t, err)
 	_, buf, err := getHandle(t, mbx2)

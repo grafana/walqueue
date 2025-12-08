@@ -1,7 +1,6 @@
 package types
 
 import (
-	gocontext "context"
 	"sync"
 	"testing"
 
@@ -28,7 +27,7 @@ func Test_SyncMailbox_Basic(t *testing.T) {
 	}()
 
 	// Test sending multiple messages
-	ctx := gocontext.Background()
+	ctx := t.Context()
 	_, err := m.Send(ctx, "hello")
 	assert.NoError(t, err)
 	_, err = m.Send(ctx, "world")
@@ -73,7 +72,7 @@ func Test_SyncMailbox_Concurrent(t *testing.T) {
 			defer sendWg.Done()
 			for j := 0; j < messagesPerSender; j++ {
 				value := senderID*messagesPerSender + j
-				ret, err := m.Send(gocontext.Background(), value)
+				ret, err := m.Send(t.Context(), value)
 				assert.NoError(t, err)
 				assert.Equal(t, ret, value)
 			}

@@ -19,8 +19,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/golang/snappy"
 	"github.com/grafana/walqueue/types"
+	"github.com/prometheus/client_golang/exp/api/remote"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -505,7 +505,7 @@ func newComponentV2(t *testing.T, l log.Logger, url string, reg prometheus.Regis
 		MaxRetryAttempts:  1,
 		BatchCount:        5,
 		FlushInterval:     100 * time.Millisecond,
-		ProtobufMessage:   config.RemoteWriteProtoMsgV2,
+		ProtobufMessage:   remote.WriteV2MessageType,
 		MetadataCacheSize: 100,
 		Parallelism: types.ParallelismConfig{
 			AllowedDrift:                60 * time.Second,

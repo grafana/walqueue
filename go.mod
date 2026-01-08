@@ -2,7 +2,7 @@ module github.com/grafana/walqueue
 
 go 1.24.0
 
-toolchain go1.24.1
+toolchain go1.25.5
 
 require (
 	// This is pinned by a replace further down due to a bug

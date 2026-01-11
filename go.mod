@@ -24,7 +24,7 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/elastic/go-freelru v0.16.0
-	github.com/prometheus/client_golang/exp v0.0.0-20251212205219-7ba246a648ca
+	github.com/prometheus/client_golang/exp v0.0.0-20260108101519-fb0838f53562
 )
 
 require (
@@ -49,7 +49,7 @@ require (
 	golang.org/x/oauth2 v0.32.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

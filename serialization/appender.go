@@ -59,7 +59,17 @@ func (a *appender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t,
 	return ref, nil
 }
 
+func (a *appender) AppendSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64) (storage.SeriesRef, error) {
+	// TODO @mattdurham figure out what to do here later. This mirrors what we do elsewhere.
+	return ref, nil
+}
+
 func (a *appender) AppendHistogramCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
+	// TODO @mattdurham figure out what to do here later. This mirrors what we do elsewhere.
+	return ref, nil
+}
+
+func (a *appender) AppendHistogramSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
 	// TODO @mattdurham figure out what to do here later. This mirrors what we do elsewhere.
 	return ref, nil
 }

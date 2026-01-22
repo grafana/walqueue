@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/common v0.67.4
 	github.com/prometheus/prometheus v0.309.1
 	github.com/stretchr/testify v1.11.1
-	github.com/tinylib/msgp v1.3.0
+	github.com/tinylib/msgp v1.6.3
 	go.uber.org/atomic v1.11.0
 	golang.design/x/chann v0.1.2
 )

@@ -24,7 +24,7 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/elastic/go-freelru v0.16.0
-	github.com/prometheus/client_golang/exp v0.0.0-20251212205219-7ba246a648ca
+	github.com/prometheus/client_golang/exp v0.0.0-20260108101519-fb0838f53562
 )
 
 require (

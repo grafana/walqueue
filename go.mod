@@ -6,7 +6,7 @@ toolchain go1.24.12
 
 require (
 	// This is pinned by a replace further down due to a bug
-	github.com/deneonet/benc v1.1.7
+	github.com/deneonet/benc v1.1.8
 	github.com/go-kit/log v0.2.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v1.0.0
@@ -54,4 +54,4 @@ require (
 )
 
 // Do not remove this until the bug breaking backwards compatibility is resolved: https://github.com/deneonet/benc/issues/13
-replace github.com/deneonet/benc => github.com/deneonet/benc v1.1.7
+replace github.com/deneonet/benc => github.com/deneonet/benc v1.1.8

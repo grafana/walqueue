@@ -1,8 +1,6 @@
 module github.com/grafana/walqueue
 
-go 1.24.9
-
-toolchain go1.24.12
+go 1.24.13
 
 require (
 	// This is pinned by a replace further down due to a bug

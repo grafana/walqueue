@@ -471,7 +471,7 @@ func (s *Stats) UpdateSerializer(stats types.SerializerStats) {
 	s.UncompressedBytesWritten.Add(float64(stats.UncompressedBytesWritten))
 	s.CompressedBytesWritten.Add(float64(stats.CompressedBytesWritten))
 	s.UncompressedBytesRead.Add(float64(stats.UncompressedBytesRead))
-	s.CompressedBytesRead.Add(float64(stats.UncompressedBytesRead))
+	s.CompressedBytesRead.Add(float64(stats.CompressedBytesRead))
 }
 
 func (s *Stats) UpdateParralelism(stats types.ParralelismStats) {

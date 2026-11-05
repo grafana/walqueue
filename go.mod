@@ -18,7 +18,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tinylib/msgp v1.3.0
 	go.uber.org/atomic v1.11.0
-	golang.design/x/chann v0.1.2
+	golang.design/x/chann v0.2.1
 )
 
 require (

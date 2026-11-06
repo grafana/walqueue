@@ -1,8 +1,6 @@
 module github.com/grafana/walqueue
 
-go 1.24.9
-
-toolchain go1.24.12
+go 1.25
 
 require (
 	// This is pinned by a replace further down due to a bug
@@ -10,7 +8,7 @@ require (
 	github.com/go-kit/log v0.2.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v1.0.0
-	github.com/klauspost/compress v1.18.2
+	github.com/klauspost/compress v1.20.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.67.4
